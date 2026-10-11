@@ -28,26 +28,33 @@ bun run houndsman setup
 
 Isso cria:
 
-| Caminho | O que é |
-|---|---|
-| `houndsman.config.ts` | Configuração — um objeto de dados (sem imports do pacote) |
-| `.houndsman/types.ts` | Snapshot dos tipos + helpers locais (tipagem sem install) |
-| `.houndsman/reviewers/example.ts` + `index.ts` | Comece com **1 revisor de exemplo** |
-| `.houndsman/exclusions.ts` | Arquivos que nunca entram na revisão |
-| `.houndsman/doc-mappings.ts` | path → documentação de contexto |
-| `.houndsman/skill/*.md` | Cópia local da documentação do skill |
-| `.houndsman/.gitignore` | Ignora `.runs/` (artefatos de revisão) |
-| `.agents/skills/houndsman/SKILL.md` etc. | Ponteiros de skill dos harnesses |
+A camada separa o que é **auto-gerado** do que é **do usuário**:
+
+| Caminho | Dono | O que é |
+|---|---|---|
+| `houndsman.config.ts` | usuário | Configuração — um objeto de dados (sem imports do pacote) |
+| `.houndsman/reviewers/example.ts` + `index.ts` | usuário | Comece com **1 revisor de exemplo** |
+| `.houndsman/exclusions.ts` | usuário | Arquivos que nunca entram na revisão |
+| `.houndsman/doc-mappings.ts` | usuário | path → documentação de contexto |
+| `.houndsman/core/types.ts` | **auto** | Snapshot dos tipos + helpers (tipagem sem install) |
+| `.houndsman/core/skill/*.md` | **auto** | Documentação do skill |
+| `.houndsman/.runs/.gitignore` | **auto** | Ignora os artefatos (mantém só o `.gitignore`) |
+| `.agents/skills/houndsman/SKILL.md` etc. | **auto** | Ponteiros de skill dos harnesses |
 
 Além disso, adiciona o script `"houndsman": "houndsman"` ao `package.json` — assim
 `bun run houndsman [...]` funciona na raiz do projeto. Os artefatos ficam em
-`.houndsman/.runs/<branch-slug>/` (ignorados pelo `.gitignore` interno).
+`.houndsman/.runs/<branch-slug>/` (auto-ignorados).
 
-Flags: `--name <projeto>` · `--harness agents,claude|both|none` · `--force` (sobrescreve).
-É **idempotente** — arquivos existentes são mantidos (use `--force` para recriar).
+Flags: `--name <projeto>` · `--harness agents,claude|both|none` · `--force` (sobrescreve só os
+arquivos do usuário). É **idempotente** — arquivos do usuário existentes são mantidos.
 
-> `.houndsman/types.ts` é um **snapshot gerado** do contrato público. Se a lib evoluir e você
-> quiser os tipos atualizados, rode `bun run houndsman setup --force`.
+## Atualizar (auto-gerados)
+
+Depois de atualizar a lib, sincronize os arquivos auto-gerados **sem tocar** nas suas regras:
+
+```bash
+bun run houndsman update      # reescreve .houndsman/core/** e .runs/.gitignore
+```
 
 ## Verificar
 
@@ -59,12 +66,12 @@ bun run houndsman --base main    # prepara briefs do diff atual
 
 ## Contrato do motor (`ReviewConfig`)
 
-Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/types.ts` (gerado):
+Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.ts` (gerado):
 
 | Campo | Descrição |
 |---|---|
 | `projectName` | Nome legível (prompts/docs). |
-| `artifactDir` | Onde gravar os artefatos (default `.houndsman/.runs`). |
+| `artifactDir` | **Opcional** — onde gravar os artefatos (default `.houndsman/.runs`). |
 | `outputFormatPath` | Caminho do schema de output citado nos briefs. **Opcional** — default é o asset do pacote. |
 | `reviewers` | Definições dos revisores (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |

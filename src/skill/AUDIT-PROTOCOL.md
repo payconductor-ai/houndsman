@@ -9,7 +9,7 @@ aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas reba
 ## Entradas
 
 1. `.houndsman/reviewers/<id>.ts` — `REVIEWER_DEFINITIONS[<id>]` é a fonte única de verdade:
-   `description`, `scope`, `criticalRules`, `antiPatterns`, `classify`, `contextFiles`,
+   `description`, `scope`, `rules` (severidade + texto), `classify`, `contextFiles`,
    `reviewFocus`, `exclude`.
 2. `src/core/brief.ts` (no motor) — `PROCEDURE` (passos de revisão compartilhados).
 3. Ground truth (padrões reais do projeto):
@@ -48,9 +48,9 @@ Gravar `.houndsman-audit/<reviewer-id>.md`:
 
 ## Veredito por regra
 
-| # | Tipo | Severidade atual | Regra | Veredito | Evidência | Ação proposta |
-|---|---|---|---|---|---|---|
-| 1 | critical | blocking | <texto da regra> | UTOPIAN | 0 matches em `src/...` | Remover |
+| # | Severidade atual | Regra | Veredito | Evidência | Ação proposta |
+|---|---|---|---|---|---|
+| 1 | blocking | <texto da regra> | UTOPIAN | 0 matches em `src/...` | Remover |
 | ... |
 
 ## Correções de metadados
@@ -78,7 +78,7 @@ Gravar `.houndsman-audit/<reviewer-id>.md`:
 - Prompt mínimo:
 
   > Você é um auditor do skill `houndsman` do {{projectName}}. Leia e siga
-  > `.houndsman/skill/AUDIT-PROTOCOL.md`. Revisor alvo: `<reviewer-id>`. Audite CADA regra de
+  > `.houndsman/core/skill/AUDIT-PROTOCOL.md`. Revisor alvo: `<reviewer-id>`. Audite CADA regra de
   > `REVIEWER_DEFINITIONS["<reviewer-id>"]` contra o código/docs reais, provando cada veredito.
   > Grave `.houndsman-audit/<reviewer-id>.md`. Retorne: contagem por veredito,
   > regras a REMOVER e a CORRIGIR. Não altere outros arquivos.

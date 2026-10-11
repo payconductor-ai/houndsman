@@ -12,6 +12,7 @@
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
  *   setup                Cria a configuração inicial do projeto (config + skills)
+ *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
  *   doctor               Valida a configuração e o ambiente (anti-drift)
  *   test                 Roda a suíte de testes da lib
  *   reviewer <id>        Contexto de um revisor (`--rules`, `--json`)
@@ -25,7 +26,8 @@ import { parseReviewArgs } from "../core/commands/review";
 import { renderReviewerContext } from "../core/commands/reviewer";
 import { runSetupCommand } from "../core/commands/setup";
 import { runLibTests } from "../core/commands/test";
-import type { ReviewConfig } from "../core/config";
+import { runUpdateCommand } from "../core/commands/update";
+import { type ReviewConfig, resolveArtifactDir } from "../core/config";
 import { loadConfig } from "../core/config-loader";
 import { finalize, prepare, resolveBranch } from "../core/orchestrator";
 import { relFromRoot } from "../core/paths";
@@ -38,6 +40,7 @@ Comandos:
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
   setup               Cria a configuração inicial do projeto (config + skills)
+  update              Sincroniza os arquivos auto-gerados (.houndsman/core)
   doctor              Valida a configuração e o ambiente (anti-drift)
   test                Roda a suíte de testes da lib
   reviewer <id>       Contexto de um revisor (--rules, --json)
@@ -131,7 +134,7 @@ function runReviewer(config: ReviewConfig, args: string[]): void {
 
 /** Passo 1/3 — preparar ou finalizar. */
 async function runReview(config: ReviewConfig, args: string[]): Promise<void> {
-	const opts = parseReviewArgs(args, config.artifactDir);
+	const opts = parseReviewArgs(args, resolveArtifactDir(config));
 	const branch = resolveBranch(opts);
 
 	if (opts.finalize) {
@@ -157,6 +160,10 @@ export async function main(): Promise<void> {
 	}
 	if (command === "setup") {
 		await runSetupCommand({ cwd: process.cwd(), args: rest });
+		return;
+	}
+	if (command === "update") {
+		await runUpdateCommand({ cwd: process.cwd(), args: rest });
 		return;
 	}
 

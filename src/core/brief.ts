@@ -1,26 +1,19 @@
 /**
  * Renderização do brief de um revisor (biblioteca) — `defaultRenderBrief`.
  *
- * Importa de `./types` **apenas tipos**. O procedimento (`PROCEDURE`) é
- * compartilhado por todos os revisores; o que era protocolo específico vive nas
- * regras do revisor (`criticalRules`/`antiPatterns`).
+ * O procedimento (`PROCEDURE`) é compartilhado por todos os revisores; o que era
+ * protocolo específico vive nas regras do revisor (`rules`).
  */
 
-import type {
-	ReviewerDefinition,
-	ReviewerRenderArgs,
-	ReviewerRenderCandidate,
-	ReviewerRenderContext,
-	Rule,
-	Severity,
+import {
+	type ReviewerDefinition,
+	type ReviewerRenderArgs,
+	type ReviewerRenderCandidate,
+	type ReviewerRenderContext,
+	type Rule,
+	SEVERITY_EMOJI,
+	severityRank,
 } from "./types";
-
-/** Emoji por severidade (duplicado local p/ evitar dependência de runtime do registry). */
-const SEVERITY_EMOJI: Record<Severity, string> = {
-	blocking: "❌",
-	attention: "⚠️",
-	suggestion: "💡",
-};
 
 /**
  * Procedimento de revisão — compartilhado por todos os revisores.
@@ -75,8 +68,8 @@ function codeItem(value: string): string {
 }
 
 /** Linha de regra com emoji de severidade. */
-function ruleItem([severity, rule]: Rule): string {
-	return `- ${SEVERITY_EMOJI[severity]} **${severity}** — ${rule}`;
+function ruleItem(rule: Rule): string {
+	return `- ${SEVERITY_EMOJI[rule.severity]} **${rule.severity}** — ${rule.text}`;
 }
 
 /** Seção opcional (`## <título>` + itens) — vazia se não houver itens. */
@@ -128,15 +121,11 @@ export function defaultRenderBrief(
 
 	lines.push(...optionalList("Prioridade de leitura", def.reviewFocus));
 	lines.push(
-		"## Regras críticas (o que verificar)",
+		"## Regras (por severidade)",
 		"",
-		...def.criticalRules.map(ruleItem),
-		"",
-	);
-	lines.push(
-		"## Anti-padrões (bloquear/alertar)",
-		"",
-		...def.antiPatterns.map(ruleItem),
+		...[...def.rules]
+			.sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
+			.map(ruleItem),
 		"",
 	);
 	lines.push(

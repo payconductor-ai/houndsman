@@ -2,8 +2,8 @@
  * Deriva perguntas Jev (tipadas) a partir das regras do `REVIEWER_DEFINITIONS`.
  *
  * Fonte única de verdade: o registry. Uma regra só gera pergunta se tiver a
- * spec Jev (terceiro elemento da tupla `Rule`). Assim não há lista paralela
- * para sincronizar — alterar a regra no registry altera a pergunta.
+ * spec Jev (campo opcional `jev` de `Rule`). Assim não há lista paralela para
+ * sincronizar — alterar a regra no registry altera a pergunta.
  */
 
 import type { ReviewerMeta, Rule, Severity } from "../types";
@@ -59,32 +59,25 @@ export class JevQuestionFactory {
 		return { type: "score", instructions, criteria: spec.criteria };
 	}
 
-	/** Perguntas derivadas das regras de um revisor (criticalRules + antiPatterns). */
+	/** Perguntas derivadas das regras de um revisor (`rules`). */
 	derive(reviewerId: string): DerivedQuestion[] {
 		const meta = this.registry[reviewerId];
 		if (!meta) return [];
-		const buckets: [string, readonly Rule[]][] = [
-			["crit", meta.criticalRules],
-			["anti", meta.antiPatterns],
-		];
 
 		const out: DerivedQuestion[] = [];
-		for (const [bucket, rules] of buckets) {
-			rules.forEach((rule, index) => {
-				const spec = this.specOf(rule);
-				if (!spec) return;
-				const [severity, description] = rule;
-				const question = this.fromSpec(description, spec);
-				if (!question) return;
-				out.push({
-					key: `${reviewerId}::${bucket}-${index}`,
-					reviewerId,
-					severity,
-					rule: description,
-					question,
-				});
+		meta.rules.forEach((rule, index) => {
+			const spec = this.specOf(rule);
+			if (!spec) return;
+			const question = this.fromSpec(rule.text, spec);
+			if (!question) return;
+			out.push({
+				key: `${reviewerId}::rule-${index}`,
+				reviewerId,
+				severity: rule.severity,
+				rule: rule.text,
+				question,
 			});
-		}
+		});
 		return out;
 	}
 
@@ -94,14 +87,10 @@ export class JevQuestionFactory {
 	}
 
 	/**
-	 * Acesso tipado à spec Jev (terceiro elemento opcional da tupla `Rule`).
-	 *
-	 * A anotação explícita da largura (`Rule` é `readonly [Severity, string, JevRuleSpec?]`)
-	 * torna o acesso independente da aridade inferida da tupla no consumidor.
+	 * Acesso tipado à spec Jev da regra (campo opcional `jev`).
 	 */
 	specOf(rule: Rule): JevRuleSpec | undefined {
-		const tuple: readonly [Severity, string, JevRuleSpec?] = rule;
-		return tuple[2];
+		return rule.jev;
 	}
 
 	/** Instrução padrão para specs `true` (regras redigidas como violação). */

@@ -46,7 +46,7 @@ O caminho exato é informado no brief do revisor (gerado por `houndsman`):
 | `skipped` | string[] | ✅ | Arquivos do domínio que NÃO foram lidos + motivo |
 | `findings` | object[] | ✅ | Achados (vazio se nada encontrado) |
 | `findings[].rule` | string | ✅ | Regra violada (conforme o brief do revisor) |
-| `findings[].severity` | `"blocking" \| "attention" \| "suggestion"` | ✅ | Severidade |
+| `findings[].severity` | `"blocking" \| "attention" \| "suggestion" \| "nit"` | ✅ | Severidade |
 | `findings[].file` | string | ✅ | Caminho relativo à raiz |
 | `findings[].line` | number | — | Linha do achado |
 | `findings[].message` | string | ✅ | O que está errado (curto, específico) |
@@ -60,6 +60,7 @@ O caminho exato é informado no brief do revisor (gerado por `houndsman`):
 | `blocking` | ❌ | Sim |
 | `attention` | ⚠️ | Não (requer atenção) |
 | `suggestion` | 💡 | Não |
+| `nit` | 🔎 | Não (detalhe/observação) |
 
 ## Regras
 

@@ -58,7 +58,7 @@ describe("config", () => {
 			const def = fakeReviewConfig.reviewers[id];
 			expect(def.name.length).toBeGreaterThan(0);
 			expect(def.scope.length).toBeGreaterThan(0);
-			expect(def.criticalRules.length).toBeGreaterThan(0);
+			expect(def.rules.length).toBeGreaterThan(0);
 			expect(def.classify?.length ?? 0).toBeGreaterThan(0);
 		}
 	});
@@ -72,7 +72,7 @@ describe("config", () => {
 		const ctx = getReviewerContext(fakeReviewConfig, "beta");
 		expect(ctx.id).toBe("beta");
 		expect(ctx.contextFiles).toContain("README.md");
-		expect("criticalRules" in ctx).toBe(false);
+		expect("rules" in ctx).toBe(false);
 	});
 });
 
@@ -164,8 +164,7 @@ describe("matchReviewers", () => {
 			description: "Revisor por conteúdo.",
 			scope: "qualquer arquivo",
 			classify: [{ type: "content", value: "NEEDLE" }],
-			criticalRules: [],
-			antiPatterns: [],
+			rules: [],
 			contextFiles: [],
 		});
 		const reviewers = { probe };
@@ -798,7 +797,7 @@ describe("renderReviewerContext", () => {
 		});
 		const parsed = JSON.parse(json ?? "{}");
 		expect(parsed.id).toBe("alpha");
-		expect(parsed.criticalRules).toBeDefined();
+		expect(parsed.rules).toBeDefined();
 	});
 
 	test("id inexistente devolve null", () => {

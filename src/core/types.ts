@@ -9,13 +9,14 @@
 import type { JevRuleSpec } from "./jev/jev-types";
 
 /** Severidade de um achado. `blocking` bloqueia o merge. */
-export type Severity = "blocking" | "attention" | "suggestion";
+export type Severity = "blocking" | "attention" | "suggestion" | "nit";
 
 /** Ordem canônica de severidade (mais grave primeiro). */
 export const SEVERITY_ORDER: readonly Severity[] = [
 	"blocking",
 	"attention",
 	"suggestion",
+	"nit",
 ];
 
 /** Emoji associado a cada severidade. */
@@ -23,16 +24,21 @@ export const SEVERITY_EMOJI: Record<Severity, string> = {
 	blocking: "❌",
 	attention: "⚠️",
 	suggestion: "💡",
+	nit: "🔎",
 };
 
 /**
- * Regra anotada com severidade padrão: `[severidade, descrição]`.
+ * Regra do revisor: severidade + texto. O que "verificar" ou "evitar" é
+ * implícito no texto da regra.
  *
- * O terceiro elemento (opcional) é a spec Jev: quando presente, a regra vira
- * uma pergunta tipada enviada ao modelo no passo de pré-análise (Passo 1.5).
- * A tupla tem aridade variável — o elemento 2 é sempre opcional.
+ * `jev` (opcional) é a spec de pré-análise: quando presente, a regra vira uma
+ * pergunta tipada enviada ao modelo no Passo 1.5.
  */
-export type Rule = readonly [severity: Severity, description: string, jev?: JevRuleSpec];
+export type Rule = {
+	severity: Severity;
+	text: string;
+	jev?: JevRuleSpec;
+};
 
 /**
  * Entrada de classificação: como o revisor casa um arquivo alterado.
@@ -54,10 +60,8 @@ export type ReviewerMeta = {
 	scope: string;
 	/** Arquivos que este revisor cobre (classificação). */
 	classify?: readonly ClassifyRule[];
-	/** Regras críticas — violações destas regras bloqueiam (ou alertam) o PR */
-	criticalRules: readonly Rule[];
-	/** Anti-padrões a detectar */
-	antiPatterns: readonly Rule[];
+	/** Regras do revisor (verificar/evitar — implícito no texto). */
+	rules: readonly Rule[];
 	/** Arquivos de documentação de contexto (caminhos relativos à raiz) */
 	contextFiles: string[];
 };

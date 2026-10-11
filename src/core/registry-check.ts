@@ -8,7 +8,7 @@
 import type { ReviewConfig } from "./config";
 import { JevQuestionFactory } from "./jev";
 import { renderReport, sanitizeBranch } from "./report-builder";
-import type { ReviewerMeta, Rule } from "./types";
+import type { ReviewerMeta } from "./types";
 
 /** `id` da definição bate com a chave; `description` não vazio. */
 function checkDefinitions(config: ReviewConfig, problems: string[]): void {
@@ -81,31 +81,25 @@ function checkJevSpecs(config: ReviewConfig, problems: string[]): number {
 	for (const id of config.reviewerIds) {
 		const def = config.reviewers[id];
 		if (!def) continue;
-		const buckets: [string, readonly Rule[]][] = [
-			["crit", def.criticalRules],
-			["anti", def.antiPatterns],
-		];
-		for (const [bucket, rules] of buckets) {
-			rules.forEach((rule, index) => {
-				const description = rule[1];
-				const spec = factory.specOf(rule);
-				if (!spec) return;
-				const question = factory.fromSpec(description, spec);
-				if (!question) {
-					problems.push(
-						`Spec Jev inválida em ${id} (${bucket}-${index}): ${description}`,
-					);
-					return;
-				}
-				generated++;
-				const key = `${id}::${bucket}-${index}`;
-				if (keys.has(key)) problems.push(`Chave Jev duplicada: ${key}`);
-				keys.add(key);
-				if (!question.instructions.trim()) {
-					problems.push(`Pergunta Jev sem instrução: ${key}`);
-				}
-			});
-		}
+		def.rules.forEach((rule, index) => {
+			const key = `${id}::rule-${index}`;
+			if (!rule.text.trim()) {
+				problems.push(`Regra sem texto em ${id} (rule-${index})`);
+			}
+			const spec = factory.specOf(rule);
+			if (!spec) return;
+			const question = factory.fromSpec(rule.text, spec);
+			if (!question) {
+				problems.push(`Spec Jev inválida em ${id} (rule-${index}): ${rule.text}`);
+				return;
+			}
+			generated++;
+			if (keys.has(key)) problems.push(`Chave Jev duplicada: ${key}`);
+			keys.add(key);
+			if (!question.instructions.trim()) {
+				problems.push(`Pergunta Jev sem instrução: ${key}`);
+			}
+		});
 	}
 
 	// Jev é opcional (falha-aberto): não ter perguntas não é erro de configuração.

@@ -24,7 +24,7 @@ export type ReviewConfig<TId extends string = string> = {
 	/** Nome legível do projeto (usado em prompts e docs). */
 	projectName: string;
 	/** Diretório dos artefatos (default: `DEFAULT_ARTIFACT_DIR`). */
-	artifactDir: string;
+	artifactDir?: string;
 	/**
 	 * Caminho do schema de output referenciado nos briefs.
 	 * Default: asset `OUTPUT-FORMAT.md` embarcado no pacote.
@@ -66,4 +66,9 @@ export function defineReviewConfig<TId extends string>(
  */
 export function resolveOutputFormatPath(config: ReviewConfig): string {
 	return config.outputFormatPath ?? defaultOutputFormatPath();
+}
+
+/** Diretório dos artefatos — o valor do projeto ou o default do pacote. */
+export function resolveArtifactDir(config: ReviewConfig): string {
+	return config.artifactDir ?? DEFAULT_ARTIFACT_DIR;
 }

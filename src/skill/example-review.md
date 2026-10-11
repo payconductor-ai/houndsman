@@ -2,7 +2,7 @@
 
 **Data:** 2026-04-20
 **Revisores ativos:** api-contracts, backend-architecture, payments-integrations, acquirer-integrations
-**Achados:** 1 bloqueantes · 1 atenção · 1 sugestões
+**Achados:** 2 bloqueantes · 1 atenção · 1 sugestões · 1 nit
 
 ## Contexto da PR
 **PR:** #482 Adicionar retry de webhooks — https://github.com/org/repo/pull/482
@@ -36,6 +36,12 @@
 - **Complexidade** — `server/src/services/webhook/webhook-retry-service.ts:45-78` · _Arquitetura Backend_
   `retryWithBackoff` com 6 níveis de indentação.
   **Ação:** Extrair `calculateBackoffDelay(attempt, config)` e usar early returns.
+
+## 🔎 nit
+
+- **Ordem de membros** — `server/src/services/webhook/webhook-retry-service.ts:12` · _Arquitetura Backend_
+  Campo privado declarado antes do construtor público.
+  **Ação:** Reordenar membros (públicos primeiro).
 
 ## Cobertura
 

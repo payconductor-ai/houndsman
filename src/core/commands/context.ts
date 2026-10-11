@@ -5,7 +5,7 @@
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import type { ReviewConfig } from "../config";
+import { type ReviewConfig, resolveArtifactDir } from "../config";
 import {
 	type ContextPaths,
 	collectPrContext,
@@ -26,7 +26,7 @@ export function runContextCommand(
 	opts: { branch?: string; dir?: string } = {},
 ): ContextRunResult {
 	const branch = opts.branch ?? currentBranch();
-	const dir = opts.dir ?? config.artifactDir;
+	const dir = opts.dir ?? resolveArtifactDir(config);
 	const paths = contextPaths(dir, branch);
 
 	mkdirSync(paths.dir, { recursive: true });

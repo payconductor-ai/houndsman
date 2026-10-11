@@ -106,7 +106,7 @@ Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<reviewer-id>.md
 Você é o revisor <reviewer-id> do {{projectName}}.
 ```
 
-Cada subagente grava `findings/<reviewer-id>.json` (schema `.houndsman/skill/OUTPUT-FORMAT.md`).
+Cada subagente grava `findings/<reviewer-id>.json` (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
 Sem achados → `"findings": []` (arquivo obrigatório).
 
 **NUNCA enviar:** `git diff` completo · histórico de commits · arquivos de outros domínios ·
@@ -123,7 +123,7 @@ houndsman --finalize
 Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos existem:
 1. Valida o schema de cada JSON
 2. Deduplica achados por `(file, line, rule)` mesclando revisores sobrepostos
-3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion
+3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit
 4. Grava `.houndsman/.runs/<branch-slug>/review.md` + tabela de cobertura
 5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
 
@@ -136,7 +136,7 @@ Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos
 
 **Data:** YYYY-MM-DD
 **Revisores ativos:** [lista]
-**Achados:** N bloqueantes · N atenção · N sugestões
+**Achados:** N bloqueantes · N atenção · N sugestões · N nits
 
 ## Contexto da PR
 **PR:** #123 Título — url
@@ -194,6 +194,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman reviewer <id>` | Contexto de um revisor (`--json`, `--rules`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
+| `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
 | `houndsman test` | Suíte de testes da lib |
 

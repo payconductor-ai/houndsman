@@ -7,7 +7,12 @@
 
 import type { ReviewConfig } from "../config";
 import { findReviewer, getReviewerContext } from "../reviewer-registry";
-import { type ReviewerDefinition, type Rule, SEVERITY_EMOJI } from "../types";
+import {
+	type ReviewerDefinition,
+	type Rule,
+	SEVERITY_EMOJI,
+	severityRank,
+} from "../types";
 
 export type ReviewerContextOptions = {
 	/** Inclui `criticalRules` + `antiPatterns`. */
@@ -39,9 +44,7 @@ function serializeReviewerContext(
 	def: ReviewerDefinition,
 	withRules: boolean,
 ): string {
-	const payload = withRules
-		? { ...ctx, criticalRules: def.criticalRules, antiPatterns: def.antiPatterns }
-		: { ...ctx };
+	const payload = withRules ? { ...ctx, rules: def.rules } : { ...ctx };
 	return JSON.stringify(payload, null, 2);
 }
 
@@ -57,8 +60,8 @@ function ruleSection(title: string, rules: readonly Rule[]): string[] {
 		`## ${title}`,
 		"",
 		...rules.map(
-			([severity, rule]) =>
-				`- ${SEVERITY_EMOJI[severity]} **${severity}** — ${rule}`,
+			(rule) =>
+				`- ${SEVERITY_EMOJI[rule.severity]} **${rule.severity}** — ${rule.text}`,
 		),
 		"",
 	];
@@ -88,8 +91,14 @@ function renderReviewerMarkdown(
 	);
 
 	if (withRules) {
-		lines.push(...ruleSection("Regras críticas", def.criticalRules));
-		lines.push(...ruleSection("Anti-padrões", def.antiPatterns));
+		lines.push(
+			...ruleSection(
+				"Regras",
+				[...def.rules].sort(
+					(a, b) => severityRank(a.severity) - severityRank(b.severity),
+				),
+			),
+		);
 	}
 
 	return lines.join("\n").trimEnd();

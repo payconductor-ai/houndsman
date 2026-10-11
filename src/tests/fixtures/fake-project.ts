@@ -8,18 +8,18 @@
 import { defineReviewConfig, type ReviewConfig } from "../../core/config";
 import { defineReviewer } from "../../core/types";
 
-/** Revisor A — regra com spec Jev (`true`) e um anti-padrão. */
+/** Revisor A — regra bloqueante com spec Jev + outras severidades. */
 export const alphaReviewer = defineReviewer({
 	id: "alpha",
 	name: "Alpha",
 	description: "Revisor A do projeto fake.",
 	scope: "src/alpha/**",
 	classify: [{ value: "^src/alpha/" }],
-	criticalRules: [
-		["blocking", "Nunca usar `any`.", true],
-		["attention", "Validar entrada do usuário."],
+	rules: [
+		{ severity: "blocking", text: "Nunca usar `any`.", jev: true },
+		{ severity: "attention", text: "Validar entrada do usuário." },
+		{ severity: "suggestion", text: "Evitar console.log." },
 	],
-	antiPatterns: [["suggestion", "Evitar console.log."]],
 	contextFiles: ["README.md"],
 });
 
@@ -34,10 +34,14 @@ export const betaReviewer = defineReviewer({
 		{ value: "\\.test\\.ts$" },
 		{ value: "special\\.ts$" },
 	],
-	criticalRules: [
-		["blocking", "Nunca commitar segredos.", "O estado contém segredo hardcoded?"],
+	rules: [
+		{
+			severity: "blocking",
+			text: "Nunca commitar segredos.",
+			jev: "O estado contém segredo hardcoded?",
+		},
+		{ severity: "attention", text: "Evitar código morto." },
 	],
-	antiPatterns: [["attention", "Evitar código morto."]],
 	contextFiles: ["README.md"],
 });
 

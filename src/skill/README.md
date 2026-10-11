@@ -24,6 +24,7 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman reviewer <id>` | Contexto de um revisor (`--json`, `--rules`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
+| `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
 | `houndsman test` | Roda a suíte de testes da lib |
 
@@ -68,7 +69,7 @@ src/
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
-│   ├── commands/            # context · review · reviewer · setup · test
+│   ├── commands/            # context · review · reviewer · setup · update · test
 │   └── jev/                 # subsistema Jev (Passo 1.5)
 ├── skill/*.md           # assets markdown (embarcados no pacote)
 └── tests/               # suíte da lib (project-agnóstica, "project fake")
@@ -77,18 +78,20 @@ src/
 ### Projeto (consumidor — gerado por `houndsman setup`)
 
 ```
-houndsman.config.ts      # ReviewConfig (dados; descoberto em runtime)
-houndsman/
-├── types.ts             # snapshot dos tipos + helpers (autocontido)
-├── reviewers/           # 1 módulo .ts por revisor (regras + classify)
-│   └── index.ts         # REVIEWER_DEFINITIONS + type ReviewerId
-├── exclusions.ts
-├── doc-mappings.ts
-└── skill/*.md           # cópia local dos docs
+houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
+.houndsman/
+├── .runs/.gitignore          # AUTO — ignora os artefatos de revisão
+├── core/                     # AUTO — sincronizado por `houndsman update`
+│   ├── types.ts              # snapshot dos tipos + helpers (autocontido)
+│   └── skill/*.md            # documentação do skill
+├── reviewers/                # USUÁRIO — 1 módulo .ts por revisor
+│   └── index.ts              # REVIEWER_DEFINITIONS + type ReviewerId
+├── exclusions.ts             # USUÁRIO
+└── doc-mappings.ts           # USUÁRIO
 ```
 
 > Os `SKILL.md` em `.agents/skills/houndsman/` e `.claude/skills/houndsman/` são
-> ponteiros para `.houndsman/skill/houndsman.md`.
+> ponteiros para `.houndsman/core/skill/houndsman.md`.
 
 ## Manutenção
 
@@ -101,4 +104,4 @@ houndsman/
 2. Rodar `bun run houndsman doctor` — valida a config (definições, classificação, specs Jev).
 
 > Para qualquer alteração de regra (pontual ou auditoria completa), use o skill
-> **`update-houndsman`**: `.houndsman/skill/update-houndsman.md`.
+> **`update-houndsman`**: `.houndsman/core/skill/update-houndsman.md`.

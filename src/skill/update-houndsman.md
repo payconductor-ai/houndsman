@@ -43,12 +43,12 @@ Ver `AUDIT-PROTOCOL.md` para a taxonomia completa.
 
 | Arquivo | Papel |
 |---|---|
-| `.houndsman/reviewers/<id>.ts` | **Fonte de verdade**: `defineReviewer` com `criticalRules` + severidade, `antiPatterns`, `scope`, `description`, `reviewFocus`, `exclude`, `breakingChange`, `contextFiles`, `classify` |
+| `.houndsman/reviewers/<id>.ts` | **Fonte de verdade**: `defineReviewer` com `rules` (severidade + texto), `scope`, `description`, `reviewFocus`, `exclude`, `breakingChange`, `contextFiles`, `classify` |
 | `.houndsman/reviewers/index.ts` | `REVIEWER_DEFINITIONS` — as **chaves definem os ids** (`ReviewerId`); `reviewerIds` é derivado |
 | `houndsman.config.ts` | `reviewConfig` do projeto — `projectName`, `artifactDir`, `reviewers`, `exclusions`, `docMappings` (descoberto em runtime) |
 | `.houndsman/exclusions.ts` | `EXCLUSION_PATTERNS` + `isExcluded` |
 | `.houndsman/doc-mappings.ts` | `DOC_MAPPINGS` (path → docs) |
-| `.houndsman/types.ts` | Snapshot gerado dos tipos + helpers (autocontido) |
+| `.houndsman/core/types.ts` | Snapshot gerado dos tipos + helpers (autocontido) |
 | `src/core/types.ts` | Tipos genéricos: `Severity`, `Rule`, `ReviewerDefinition`, `defineReviewer` |
 | `src/core/config.ts` | `ReviewConfig<TId>` + `defineReviewConfig` (contrato do motor) |
 | `src/core/config-loader.ts` | Descoberta/carregamento de `houndsman.config.ts` |
@@ -70,6 +70,7 @@ Ver `AUDIT-PROTOCOL.md` para a taxonomia completa.
 | `blocking` | Violação que quebra contrato, segurança ou integridade — e o projeto **já faz** do jeito certo em todos os lugares |
 | `attention` | Boa prática aplicada na maior parte do código, com exceções aceitáveis |
 | `suggestion` | Recomendação aplicada parcialmente; nunca bloqueia |
+| `nit` | Detalhe cosmético/observação; ruído, nunca bloqueia |
 
 > Severidade não é aspiração: se o projeto só aplica o padrão em 15/72 lugares, é `suggestion`.
 
@@ -84,7 +85,7 @@ Ver `AUDIT-PROTOCOL.md` para a taxonomia completa.
    - Determinar se a regra é `ALIGNED`, `UTOPIAN`, `OUTDATED`, `MISCALIBRATED` ou `DEAD-PATH`.
    - Coletar `file:line` como evidência.
 4. **Editar `.houndsman/reviewers/<id>.ts`** (`REVIEWER_DEFINITIONS[<id>]`):
-   - `criticalRules` (regra + severidade) e/ou `antiPatterns`.
+   - `rules`: uma entrada `{ severity, text }` por regra (o que verificar/evitar é implícito no texto).
    - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
    - Se a regra muda para outro domínio (paths), ajustar o `classify` do revisor.
 5. **Revisor novo?** criar `.houndsman/reviewers/<id>.ts` e registrar em `.houndsman/reviewers/index.ts` (o id é derivado das chaves).
@@ -133,7 +134,7 @@ As regras são renderizadas **literalmente** nos briefs dos subagentes (`renderB
 
 ### Passos
 
-1. Inventariar todas as regras (`criticalRules` + `antiPatterns`) dos revisores alvo.
+1. Inventariar todas as regras (`rules`) dos revisores alvo.
 2. Marcar cada regra contra a rubrica; propor reescrita **preservando semântica e severidade**.
 3. Se a regra também for ambígua **e não houver evidência de aplicação** no código, tratá-la como
    `UTOPIAN`/`OUTDATED` (remover/rebaixar) conforme a Regra de Ouro.

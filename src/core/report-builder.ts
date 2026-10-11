@@ -280,7 +280,7 @@ function renderConclusion(counts: Record<Severity, number>): string[] {
 		"## Conclusão",
 		"",
 		`**Status:** ${status}`,
-		`**Resumo:** ${counts.blocking} violações bloqueantes, ${counts.attention} pontos de atenção, ${counts.suggestion} sugestões.`,
+		`**Resumo:** ${counts.blocking} violações bloqueantes, ${counts.attention} pontos de atenção, ${counts.suggestion} sugestões e ${counts.nit} nits.`,
 	];
 }
 
@@ -319,6 +319,7 @@ export function renderReport(
 		blocking: merged.filter((f) => f.severity === "blocking").length,
 		attention: merged.filter((f) => f.severity === "attention").length,
 		suggestion: merged.filter((f) => f.severity === "suggestion").length,
+		nit: merged.filter((f) => f.severity === "nit").length,
 	};
 
 	const lines: string[] = [
@@ -326,7 +327,7 @@ export function renderReport(
 		"",
 		`**Data:** ${now}`,
 		`**Revisores ativos:** ${reports.map((r) => r.reviewerId).join(", ") || "—"}`,
-		`**Achados:** ${counts.blocking} bloqueantes · ${counts.attention} atenção · ${counts.suggestion} sugestões`,
+		`**Achados:** ${counts.blocking} bloqueantes · ${counts.attention} atenção · ${counts.suggestion} sugestões · ${counts.nit} nits`,
 		"",
 	];
 
