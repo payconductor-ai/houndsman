@@ -36,12 +36,12 @@ Isso cria:
 | `.houndsman/exclusions.ts` | Arquivos que nunca entram na revisão |
 | `.houndsman/doc-mappings.ts` | path → documentação de contexto |
 | `.houndsman/skill/*.md` | Cópia local da documentação do skill |
-| `.houndsman/.gitignore` | Ignora `.reviews/` (artefatos de revisão) |
+| `.houndsman/.gitignore` | Ignora `.runs/` (artefatos de revisão) |
 | `.agents/skills/houndsman/SKILL.md` etc. | Ponteiros de skill dos harnesses |
 
 Além disso, adiciona o script `"houndsman": "houndsman"` ao `package.json` — assim
 `bun run houndsman [...]` funciona na raiz do projeto. Os artefatos ficam em
-`.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/` (ignorados pelo `.gitignore` interno).
+`.houndsman/.runs/<branch-slug>/` (ignorados pelo `.gitignore` interno).
 
 Flags: `--name <projeto>` · `--harness agents,claude|both|none` · `--force` (sobrescreve).
 É **idempotente** — arquivos existentes são mantidos (use `--force` para recriar).
@@ -64,7 +64,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/types.ts` (
 | Campo | Descrição |
 |---|---|
 | `projectName` | Nome legível (prompts/docs). |
-| `artifactDir` | Onde gravar os artefatos (default `.houndsman/.reviews`). |
+| `artifactDir` | Onde gravar os artefatos (default `.houndsman/.runs`). |
 | `outputFormatPath` | Caminho do schema de output citado nos briefs. **Opcional** — default é o asset do pacote. |
 | `reviewers` | Definições dos revisores (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |

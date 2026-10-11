@@ -1,7 +1,7 @@
 # Formato de Saída dos Revisores
 
 Todo revisor DEVE gravar **um arquivo JSON** com seus achados. O `report-builder.ts`
-consolida os JSONs em `.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/review.md`.
+consolida os JSONs em `.houndsman/.runs/<branch-slug>/review.md`.
 
 > **Não** escrever markdown livre no chat. O único output consumido pelo pipeline é o JSON.
 
@@ -10,11 +10,10 @@ consolida os JSONs em `.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/review.md`
 O caminho exato é informado no brief do revisor (gerado por `houndsman`):
 
 ```
-.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/findings/<reviewerId>.json
+.houndsman/.runs/<branch-slug>/findings/<reviewerId>.json
 ```
 
 - `<branch-slug>`: branch com `/` substituído por `-` (ex.: `feature/x` → `feature-x`).
-- `<YYYY-MM-DD>`: data local do início da revisão (ex.: `2026-10-11`).
 - `<reviewerId>`: id do revisor (ex.: `backend-architecture`).
 
 ## Schema

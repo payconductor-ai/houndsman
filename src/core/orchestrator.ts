@@ -5,7 +5,7 @@
  * Genérico: recebe o `ReviewConfig` por parâmetro (injeção explícita).
  * Entrypoints: `cli/index.ts` (`houndsman`). Aqui não há `process.argv`.
  *
- * Artefatos (em `opts.dir`, default `ReviewConfig.artifactDir/<branch>-<YYYY-MM-DD>/`):
+ * Artefatos (em `opts.dir`, default `ReviewConfig.artifactDir/<branch-slug>/`):
  *   classification.json   revisores ativados por arquivo + status (A/M/D/R)
  *   candidates.json       candidatos da pré-análise Jev
  *   briefs/<id>.md        instruções prontas para cada sub-agente
@@ -14,14 +14,7 @@
  *   review.md             relatório final (gerado no finalize)
  */
 
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { renderBrief } from "./brief";
 import {
@@ -38,7 +31,6 @@ import {
 	JevClient,
 	JevDetector,
 } from "./jev";
-import { reviewDirName } from "./paths";
 import { contextPaths, currentBranch, readContextSummary } from "./pr-context";
 import {
 	type ContextSummary,
@@ -90,7 +82,7 @@ type Paths = {
 };
 
 function paths(opts: ReviewOptions, branch: string): Paths {
-	const slug = reviewDirName(branch);
+	const slug = sanitizeBranch(branch);
 	const outDir = join(opts.dir, slug);
 	return {
 		slug,
@@ -98,33 +90,6 @@ function paths(opts: ReviewOptions, branch: string): Paths {
 		briefsDir: join(outDir, "briefs"),
 		findingsDir: join(outDir, "findings"),
 	};
-}
-
-/**
- * Diretório de uma revisão a finalizar — o que contém `classification.json`.
- * Fallback para revisões que cruzaram a meia-noite (diretório com a data anterior).
- */
-function resolveOutDir(baseDir: string, branch: string): string {
-	const exact = join(baseDir, reviewDirName(branch));
-	if (existsSync(join(exact, "classification.json"))) return exact;
-
-	try {
-		const newest = readdirSync(baseDir, { withFileTypes: true })
-			.filter(
-				(entry) =>
-					entry.isDirectory() &&
-					entry.name.startsWith(`${sanitizeBranch(branch)}-`),
-			)
-			.map((entry) => entry.name)
-			.filter((name) => existsSync(join(baseDir, name, "classification.json")))
-			.sort()
-			.reverse()
-			.at(0);
-		if (newest) return join(baseDir, newest);
-	} catch {
-		// baseDir ainda não existe (nenhuma revisão preparada)
-	}
-	return exact;
 }
 
 function prepareDirs(dirs: Paths, clean: boolean): void {
@@ -192,7 +157,7 @@ function writeManifest(
 ): void {
 	const manifest = {
 		branch,
-		slug: reviewDirName(branch),
+		slug: sanitizeBranch(branch),
 		base: opts.base,
 		head: opts.head,
 		generatedAt: new Date().toISOString(),
@@ -428,30 +393,17 @@ export function finalize(
 	config: ReviewConfig,
 	dirs: Paths = paths(opts, branch),
 ): FinalizeResult {
-	const outDir = resolveOutDir(opts.dir, branch);
-	const resolved: Paths =
-		outDir === dirs.outDir
-			? dirs
-			: {
-					slug: reviewDirName(branch),
-					outDir,
-					briefsDir: join(outDir, "briefs"),
-					findingsDir: join(outDir, "findings"),
-				};
-
-	const classification = readClassification(
-		join(resolved.outDir, "classification.json"),
-	);
+	const classification = readClassification(join(dirs.outDir, "classification.json"));
 	const activeIds = Object.keys(classification.reviewers);
 
-	const { reports, pending } = readFindings(resolved.findingsDir, activeIds);
+	const { reports, pending } = readFindings(dirs.findingsDir, activeIds);
 	const jev =
 		new JevCandidatesStore(
-			join(resolved.outDir, "candidates.json"),
+			join(dirs.outDir, "candidates.json"),
 			config.reviewerIds,
 		).read() ?? JevCandidatesStore.unavailable("candidates.json ausente");
 	writeManifest(
-		resolved.outDir,
+		dirs.outDir,
 		opts,
 		branch,
 		classification,
@@ -464,7 +416,7 @@ export function finalize(
 	if (pending.length > 0) {
 		throw new Error(
 			`Faltam ${pending.length}/${activeIds.length} findings: ${pending.join(", ")}.\n` +
-				`Cada revisor deve gravar ${relFromRoot(resolved.findingsDir)}/<id>.json (schema ${config.outputFormatPath}).`,
+				`Cada revisor deve gravar ${relFromRoot(dirs.findingsDir)}/<id>.json (schema ${config.outputFormatPath}).`,
 		);
 	}
 
@@ -479,7 +431,7 @@ export function finalize(
 		jev.available ? jev.candidates : undefined,
 		(id) => findReviewer(config, id)?.name ?? id,
 	);
-	const reportPath = join(resolved.outDir, "review.md");
+	const reportPath = join(dirs.outDir, "review.md");
 	writeFileSync(reportPath, `${markdown}\n`);
 
 	const blockers = merged.filter((f) => f.severity === "blocking").length;

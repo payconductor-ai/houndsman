@@ -10,7 +10,7 @@ import { defaultOutputFormatPath } from "./assets";
 import type { ReviewerDefinition } from "./types";
 
 /** Diretório default dos artefatos de revisão. */
-export const DEFAULT_ARTIFACT_DIR = ".houndsman/.reviews";
+export const DEFAULT_ARTIFACT_DIR = ".houndsman/.runs";
 
 /** Documentos sempre incluídos nos briefs (default). */
 export const DEFAULT_ALWAYS_INCLUDE_DOCS: readonly string[] = ["AGENTS.md"];

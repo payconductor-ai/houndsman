@@ -13,7 +13,7 @@
  *   .houndsman/doc-mappings.ts    path → docs
  *   .houndsman/skill/*.md         assets markdown do pacote (com {{projectName}})
  *   .{agents,claude}/skills/**    ponteiros de skill
- *   .houndsman/.gitignore         ignora `.reviews/` (artefatos de revisão)
+ *   .houndsman/.gitignore         ignora `.runs/` (artefatos de revisão)
  *
  * Idempotente: não sobrescreve arquivos existentes sem `--force`.
  */
@@ -47,7 +47,7 @@ import type { ReviewConfig } from "./${PROJECT_DIR}/types";
  */
 export const reviewConfig = {
 	projectName: "${projectName}",
-	artifactDir: "${PROJECT_DIR}/.reviews",
+	artifactDir: "${PROJECT_DIR}/.runs",
 	outputFormatPath: "${PROJECT_DIR}/skill/OUTPUT-FORMAT.md",
 	reviewers: REVIEWER_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
@@ -287,20 +287,18 @@ function ensurePackageScript(target: SetupContext): void {
 }
 
 /**
- * Cria/atualiza `.houndsman/.gitignore` ignorando os artefatos de revisão (`.reviews/`).
+ * Cria/atualiza `.houndsman/.gitignore` ignorando os artefatos de revisão (`.runs/`).
  * Fica dentro da camada de projeto — nada a adicionar no `.gitignore` da raiz.
  */
-function ensureReviewsGitignore(target: SetupContext): void {
+function ensureRunsGitignore(target: SetupContext): void {
 	const relativePath = join(PROJECT_DIR, ".gitignore");
 	const full = join(target.cwd, relativePath);
-	const entry = ".reviews/";
+	const entry = ".runs/";
 	const content = `# Artefatos de revisão (temporários) gerados pelo houndsman\n${entry}\n`;
 
 	const existing = existsSync(full) ? readFileSync(full, "utf8") : null;
 	const alreadyIgnored =
-		existing
-			?.split(/\r?\n/)
-			.some((line) => line.trim() === entry || line.trim() === ".reviews") ?? false;
+		existing?.split(/\r?\n/).some((line) => line.trim() === entry) ?? false;
 	if (alreadyIgnored) {
 		target.skipped.push(relativePath);
 		return;
@@ -351,7 +349,7 @@ export async function runSetupCommand(options: SetupOptions): Promise<void> {
 	copySkillAssets(target);
 	for (const harness of target.harnesses) writeHarnessPointers(target, harness);
 	ensurePackageScript(target);
-	ensureReviewsGitignore(target);
+	ensureRunsGitignore(target);
 
 	for (const path of target.created) console.log(`  + ${path}`);
 	for (const path of target.skipped) console.log(`  = ${path} (mantido)`);

@@ -71,7 +71,7 @@ leia o `context-brief.md` indicado na saída; siga as instruções e grave
 houndsman --base main
 ```
 
-Gera em `.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/`:
+Gera em `.houndsman/.runs/<branch-slug>/`:
 
 | Artefato | Conteúdo |
 |---|---|
@@ -102,7 +102,7 @@ as regras atômicas dos revisores. Respostas acima do limiar viram **candidatos*
 Um subagente por brief, todos no mesmo bloco de tool calls. O prompt é o próprio brief:
 
 ```
-Leia e execute o brief: .houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/briefs/<reviewer-id>.md
+Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<reviewer-id>.md
 Você é o revisor <reviewer-id> do {{projectName}}.
 ```
 
@@ -124,7 +124,7 @@ Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos
 1. Valida o schema de cada JSON
 2. Deduplica achados por `(file, line, rule)` mesclando revisores sobrepostos
 3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion
-4. Grava `.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/review.md` + tabela de cobertura
+4. Grava `.houndsman/.runs/<branch-slug>/review.md` + tabela de cobertura
 5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
 
 ---

@@ -22,7 +22,6 @@ import {
 	JevError,
 	JevQuestionFactory,
 } from "../core/jev";
-import { reviewDirName } from "../core/paths";
 import { checkRegistry } from "../core/registry-check";
 import {
 	dedupeFindings,
@@ -35,18 +34,6 @@ import {
 import { findReviewer, getReviewerContext } from "../core/reviewer-registry";
 import type { ReviewerMeta } from "../core/types";
 import { defineReviewer } from "../core/types";
-
-// ---------------------------------------------------------------------------
-// paths
-// ---------------------------------------------------------------------------
-
-describe("paths", () => {
-	test("reviewDirName normaliza a branch e anexa a data", () => {
-		expect(reviewDirName("feature/add-webhook", new Date(2026, 9, 11))).toBe(
-			"feature-add-webhook-2026-10-11",
-		);
-	});
-});
 
 import {
 	alphaReviewer,

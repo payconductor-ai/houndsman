@@ -34,8 +34,7 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 
 ## Artefatos
 
-Tudo em `.houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/` (default do `artifactDir`,
-`.houndsman/.reviews`):
+Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman/.runs`):
 
 | Arquivo | Conteúdo |
 |---|---|

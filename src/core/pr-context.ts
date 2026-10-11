@@ -5,7 +5,7 @@
  * OPCIONAL: sem binário, sem login ou sem PR para a branch, grava
  * `context.json` com `{ available: false, reason }` e sai com código 0.
  *
- * Artefatos (em --dir, default .houndsman/.reviews/<branch-slug>-<YYYY-MM-DD>/):
+ * Artefatos (em --dir, default .houndsman/.runs/<branch-slug>/):
  *   context.json      payload bruto do `gh pr view` (ou marcador de indisponível)
  *   context-brief.md  instruções para o subagente resumir o contexto
  *
@@ -15,8 +15,11 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { reviewDirName } from "./paths";
-import { type ContextSummary, parseContextSummary } from "./report-builder";
+import {
+	type ContextSummary,
+	parseContextSummary,
+	sanitizeBranch,
+} from "./report-builder";
 
 export const CONTEXT_FILE = "context.json";
 export const CONTEXT_SUMMARY_FILE = "context-summary.json";
@@ -60,7 +63,7 @@ export type ContextPaths = {
 
 /** Caminhos dos artefatos de contexto para uma branch. */
 export function contextPaths(dir: string, branch: string): ContextPaths {
-	const dirPath = join(dir, reviewDirName(branch));
+	const dirPath = join(dir, sanitizeBranch(branch));
 	return {
 		dir: dirPath,
 		context: join(dirPath, CONTEXT_FILE),
