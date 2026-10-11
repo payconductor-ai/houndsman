@@ -4,6 +4,19 @@ Orquestrador de revisão de Pull Requests. Classifica o diff, despacha revisores
 especializados por domínio (um subagente por revisor) e consolida os achados em um
 relatório único.
 
+> Reviewers humanos revisam como quem lê contrato de operadora: página 47, cláusula 12,
+> letra miúda. Aqui não: se um parâmetro virou `any` e ninguém viu, ele só descobre na
+> sexta às 18h — em produção.
+
+## Por que "houndsman"?
+
+Um **houndsman** é o treinador de um time de cães de caça: escolhe cada cão pelo faro,
+manda o mais adequado para cada terreno e recolhe tudo o que a matilha encontrou.
+
+Esta lib funciona igual — você monta o **seu time de cães de caça**, cada um farejando um
+domínio diferente (`api`, `db`, `ui`...) das PRs, e não deixa passar **nada de errado** para
+produção. O motor só coordena a caçada; a matilha é problema seu.
+
 - **Motor genérico** — classificação de arquivos, geração de briefs, pré-análise opcional
   (Jev) e consolidação do relatório. Sem regras nem paths de nenhum projeto.
 - **Camada de projeto** — revisores, exclusões e mapeamentos de docs vivem no repositório do
@@ -50,7 +63,7 @@ import type { ReviewConfig } from "./.houndsman/types";
 
 export const reviewConfig = {
 	projectName: "Meu Projeto",
-	artifactDir: ".houndsman/.reviews",
+	artifactDir: ".houndsman/.runs",
 	reviewers: REVIEWER_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
