@@ -16,15 +16,15 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { SKILL_DIR } from "../assets";
+import {
+	ARTIFACT_DIR,
+	CORE_DIR,
+	CORE_SKILL_DIR,
+	OUTPUT_FORMAT_PATH,
+	PROJECT_DIR,
+} from "../paths";
 
 export type Harness = "agents" | "claude";
-
-/** Diretório da camada de projeto no repositório do consumidor. */
-export const PROJECT_DIR = ".houndsman";
-/** Subdiretório dos arquivos auto-gerados (sincronizados por `update`). */
-export const CORE_DIR = `${PROJECT_DIR}/core`;
-/** Subdiretório dos artefatos de revisão (auto-ignorado). */
-export const RUNS_DIR = `${PROJECT_DIR}/.runs`;
 
 export type ScaffoldContext = {
 	cwd: string;
@@ -87,9 +87,9 @@ import type { ReviewConfig } from "./${CORE_DIR}/types";
 /**
  * Configuração do houndsman para ${projectName}.
  *
- * \`artifactDir\` e \`outputFormatPath\` são opcionais — os defaults já apontam para
- * a camada auto-gerada (${RUNS_DIR} e ${CORE_DIR}/skill). Ajuste revisores,
- * exclusões e mapeamentos de docs conforme o projeto.
+ * Caminhos são resolvidos pela camada: artefatos em ${ARTIFACT_DIR} e schema de
+ * output em ${OUTPUT_FORMAT_PATH}. Ajuste revisores, exclusões e mapeamentos de
+ * docs conforme o projeto.
  */
 export const reviewConfig = {
 	projectName: "${projectName}",
@@ -110,8 +110,18 @@ const TYPES_TEMPLATE = `/**
 
 export type Severity = "blocking" | "attention" | "suggestion" | "nit";
 
-/** Spec de pré-análise Jev (opcional). */
-export type JevRuleSpec = boolean | string | Record<string, unknown>;
+/** Tipo de pergunta aceito pela API Jev. */
+export type JevQuestionType = "noul" | "choice" | "score";
+
+/**
+ * Spec de pré-análise Jev (opcional) — sempre um objeto; \`kind\` é obrigatório.
+ * \`criteria\`: objeto para \`choice\`, lista para \`score\`.
+ */
+export type JevRuleSpec = {
+	kind: JevQuestionType;
+	instructions?: string;
+	criteria?: string[] | Record<string, string>;
+};
 
 /** Regra do revisor: severidade + texto (verificar/evitar é implícito no texto). */
 export type Rule = {
@@ -157,7 +167,6 @@ export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: strin
 export type ReviewConfig<TId extends string = string> = {
 	projectName: string;
 	artifactDir?: string;
-	outputFormatPath?: string;
 	reviewerIds?: readonly TId[];
 	reviewers: Record<TId, ReviewerDefinition>;
 	exclusions: readonly RegExp[];
@@ -194,7 +203,7 @@ export const exampleReviewer = defineReviewer({
 		{
 			severity: "attention",
 			text: "Descreva aqui uma regra do projeto.",
-			jev: true,
+			jev: { kind: "noul" },
 		},
 		{ severity: "nit", text: "Descreva um detalhe de estilo/observação." },
 	],
@@ -313,14 +322,14 @@ export function writeUserLayer(ctx: ScaffoldContext): void {
  */
 export function syncGeneratedFiles(ctx: ScaffoldContext): void {
 	writeGeneratedFile(ctx, join(CORE_DIR, "types.ts"), TYPES_TEMPLATE);
-	writeGeneratedFile(ctx, join(RUNS_DIR, ".gitignore"), RUNS_GITIGNORE);
+	writeGeneratedFile(ctx, join(ARTIFACT_DIR, ".gitignore"), RUNS_GITIGNORE);
 
 	for (const name of readdirSync(SKILL_DIR)) {
 		if (!name.endsWith(".md")) continue;
 		const raw = readFileSync(join(SKILL_DIR, name), "utf8");
 		writeGeneratedFile(
 			ctx,
-			join(CORE_DIR, "skill", name),
+			join(CORE_SKILL_DIR, name),
 			raw.replaceAll("{{projectName}}", ctx.projectName),
 		);
 	}
@@ -337,7 +346,7 @@ function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
 		SKILL_POINTER(
 			"houndsman",
 			ctx.projectName,
-			`${CORE_DIR}/skill/houndsman.md`,
+			`${CORE_SKILL_DIR}/houndsman.md`,
 			"Revisa Pull Requests com revisores especializados por domínio. Orquestra `bun run houndsman context` → `bun run houndsman` → subagentes → `bun run houndsman --finalize`. Config em `houndsman.config.ts`; regras em `.houndsman/`; relatório em `.houndsman/.runs/<branch-slug>/review.md`.",
 			"Nome da branch (opcional, detecta automaticamente se omitido)",
 		),
@@ -348,7 +357,7 @@ function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
 		SKILL_POINTER(
 			"update-houndsman",
 			ctx.projectName,
-			`${CORE_DIR}/skill/update-houndsman.md`,
+			`${CORE_SKILL_DIR}/update-houndsman.md`,
 			"Atualiza as regras e protocolos do skill houndsman (revisores, exclusões, mapeamentos de docs).",
 			"Revisor alvo (opcional)",
 		),

@@ -8,6 +8,8 @@ relatório único.
 > letra miúda. Aqui não: um `catch {}` que engole o erro passa batido na review e só dá as
 > caras na sexta às 18h — em produção.
 
+![alt text](assets/houndsman.png)
+
 ## Por que "houndsman"?
 
 Um **houndsman** é o treinador de um time de cães de caça: escolhe cada cão pelo faro,
@@ -73,8 +75,8 @@ export const reviewConfig = {
 export default reviewConfig;
 ```
 
-> `artifactDir` e `outputFormatPath` são **opcionais** — os defaults já apontam para
-> `.houndsman/.runs` e para o schema embarcado no pacote.
+> `artifactDir` é **opcional** (default `.houndsman/.runs`); o schema de output é
+> derivado da camada (`.houndsman/core/skill/OUTPUT-FORMAT.md`).
 >
 > A camada separa **auto-gerado** (`.houndsman/core/**`, `.houndsman/.runs/.gitignore`,
 > ponteiros de skill) do **usuário** (`.houndsman/reviewers/`, `exclusions.ts`,

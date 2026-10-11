@@ -17,11 +17,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { renderBrief } from "./brief";
-import {
-	DEFAULT_ARTIFACT_DIR,
-	type ReviewConfig,
-	resolveOutputFormatPath,
-} from "./config";
+import type { ReviewConfig } from "./config";
 import { discoverDocs } from "./doc-discoverer";
 import { type ClassificationResult, classifyRange } from "./file-classifier";
 import {
@@ -31,6 +27,7 @@ import {
 	JevClient,
 	JevDetector,
 } from "./jev";
+import { ARTIFACT_DIR, OUTPUT_FORMAT_PATH } from "./paths";
 import { contextPaths, currentBranch, readContextSummary } from "./pr-context";
 import {
 	type ContextSummary,
@@ -55,9 +52,7 @@ export type ReviewOptions = {
 };
 
 /** Valores default das opções (o CLI sobrepõe com as flags). */
-export function defaultOptions(
-	artifactDir: string = DEFAULT_ARTIFACT_DIR,
-): ReviewOptions {
+export function defaultOptions(artifactDir: string = ARTIFACT_DIR): ReviewOptions {
 	return {
 		base: "main",
 		head: "HEAD",
@@ -161,7 +156,7 @@ function writeManifest(
 		base: opts.base,
 		head: opts.head,
 		generatedAt: new Date().toISOString(),
-		outputFormat: resolveOutputFormatPath(config),
+		outputFormat: OUTPUT_FORMAT_PATH,
 		reviewers: activeIds.map((id) => ({
 			id,
 			name: findReviewer(config, id)?.name ?? id,
@@ -216,7 +211,7 @@ function writeBriefs(
 			deleted: classification.deleted,
 			branch,
 			outputPath: relFromRoot(join(dirs.findingsDir, `${id}.json`)),
-			outputFormatPath: resolveOutputFormatPath(config),
+			outputFormatPath: OUTPUT_FORMAT_PATH,
 			docs,
 			context,
 			candidates: candidates.filter((c) => c.reviewerId === id),
@@ -416,7 +411,7 @@ export function finalize(
 	if (pending.length > 0) {
 		throw new Error(
 			`Faltam ${pending.length}/${activeIds.length} findings: ${pending.join(", ")}.\n` +
-				`Cada revisor deve gravar ${relFromRoot(dirs.findingsDir)}/<id>.json (schema ${config.outputFormatPath}).`,
+				`Cada revisor deve gravar ${relFromRoot(dirs.findingsDir)}/<id>.json (schema ${OUTPUT_FORMAT_PATH}).`,
 		);
 	}
 

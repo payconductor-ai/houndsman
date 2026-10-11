@@ -4,8 +4,8 @@
  * Biblioteca: NÃO usa `process.argv`/`process.exit` (o CLI decide o exit code).
  */
 
-import { DEFAULT_ARTIFACT_DIR } from "../config";
 import { defaultOptions, type ReviewOptions } from "../orchestrator";
+import { ARTIFACT_DIR } from "../paths";
 
 const VALUE_FLAGS = new Set(["--base", "--head", "--branch", "--dir"]);
 const BOOLEAN_FLAGS = new Set([
@@ -34,7 +34,7 @@ function applyBoolean(opts: ReviewOptions, flag: string): void {
 /** Converte argv (sem o subcomando) nas opções de prepare/finalize. */
 export function parseReviewArgs(
 	args: string[],
-	artifactDir: string = DEFAULT_ARTIFACT_DIR,
+	artifactDir: string = ARTIFACT_DIR,
 ): ReviewOptions {
 	const opts = defaultOptions(artifactDir);
 	for (let i = 0; i < args.length; i++) {

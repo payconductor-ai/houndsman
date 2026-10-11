@@ -57,9 +57,10 @@ src/
 ├── index.ts             # API pública (defineReviewer, defineReviewConfig, tipos)
 ├── cli/index.ts         # CLI ÚNICO (bin `houndsman`)
 ├── core/                # bibliotecas genéricas
-│   ├── config.ts            # ReviewConfig + defineReviewConfig + resolveOutputFormatPath
+│   ├── config.ts            # contrato ReviewConfig + defineReviewConfig
 │   ├── config-loader.ts     # descoberta/carregamento de houndsman.config.ts
-│   ├── assets.ts            # resolução de assets embarcados (src/skill/)
+│   ├── assets.ts            # assets embarcados (src/skill/) — usados para gerar a camada
+│   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, ReviewerDefinition, defineReviewer
 │   ├── reviewer-registry.ts # getReviewer/findReviewer/getReviewerContext(config)
 │   ├── orchestrator.ts      # preparar/finalizar

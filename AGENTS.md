@@ -41,9 +41,10 @@ src/
 ├── index.ts          # API pública (defineReviewer, defineReviewConfig, tipos)
 ├── cli/index.ts      # ÚNICO executável (bin `houndsman`)
 ├── core/             # bibliotecas genéricas
-│   ├── config.ts            # contrato ReviewConfig + resolveOutputFormatPath
+│   ├── config.ts            # contrato ReviewConfig + defineReviewConfig
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
-│   ├── assets.ts            # resolve assets embarcados (src/skill/)
+│   ├── assets.ts            # assets embarcados (src/skill/) — usados para gerar a camada
+│   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, ReviewerDefinition, defineReviewer
 │   ├── reviewer-registry.ts # getReviewer/findReviewer/getReviewerContext(config)
 │   ├── orchestrator.ts      # prepare/finalize
@@ -53,7 +54,6 @@ src/
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── paths.ts
 │   ├── commands/            # context · review · reviewer · setup · test
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── skill/*.md        # assets markdown (copiados pelo `setup` no consumidor)

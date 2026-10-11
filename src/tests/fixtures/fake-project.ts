@@ -16,7 +16,7 @@ export const alphaReviewer = defineReviewer({
 	scope: "src/alpha/**",
 	classify: [{ value: "^src/alpha/" }],
 	rules: [
-		{ severity: "blocking", text: "Nunca usar `any`.", jev: true },
+		{ severity: "blocking", text: "Nunca usar `any`.", jev: { kind: "noul" } },
 		{ severity: "attention", text: "Validar entrada do usuário." },
 		{ severity: "suggestion", text: "Evitar console.log." },
 	],
@@ -38,7 +38,7 @@ export const betaReviewer = defineReviewer({
 		{
 			severity: "blocking",
 			text: "Nunca commitar segredos.",
-			jev: "O estado contém segredo hardcoded?",
+			jev: { kind: "noul", instructions: "O estado contém segredo hardcoded?" },
 		},
 		{ severity: "attention", text: "Evitar código morto." },
 	],

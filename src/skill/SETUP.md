@@ -72,7 +72,6 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 |---|---|
 | `projectName` | Nome legível (prompts/docs). |
 | `artifactDir` | **Opcional** — onde gravar os artefatos (default `.houndsman/.runs`). |
-| `outputFormatPath` | Caminho do schema de output citado nos briefs. **Opcional** — default é o asset do pacote. |
 | `reviewers` | Definições dos revisores (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |
 | `docMappings` | Path → documentação de contexto. |

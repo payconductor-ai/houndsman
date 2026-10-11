@@ -34,14 +34,6 @@ export class JevQuestionFactory {
 
 	/** Converte uma `JevRuleSpec` em `JevQuestion`; null se a spec for inválida. */
 	fromSpec(description: string, spec: JevRuleSpec): JevQuestion | null {
-		if (spec === true) {
-			return { type: "noul", instructions: this.noul(description) };
-		}
-		if (typeof spec === "string") {
-			const instructions = spec.trim();
-			return instructions ? { type: "noul", instructions } : null;
-		}
-
 		const instructions = (spec.instructions ?? this.noul(description)).trim();
 		if (!instructions) return null;
 
@@ -93,7 +85,7 @@ export class JevQuestionFactory {
 		return rule.jev;
 	}
 
-	/** Instrução padrão para specs `true` (regras redigidas como violação). */
+	/** Instrução padrão quando a spec não traz `instructions`. */
 	private noul(description: string): string {
 		return `No estado fornecido, ocorre a seguinte violação? "${description}"`;
 	}

@@ -474,7 +474,7 @@ describe("context-summary", () => {
 // ---------------------------------------------------------------------------
 
 describe("houndsman brief", () => {
-	const OUTPUT_FORMAT = ".houndsman/skill/OUTPUT-FORMAT.md";
+	const OUTPUT_FORMAT = ".houndsman/core/skill/OUTPUT-FORMAT.md";
 
 	test("inclui regras, arquivos e output do revisor", () => {
 		const brief = renderBrief(alphaReviewer, {
@@ -552,14 +552,17 @@ describe("houndsman brief", () => {
 describe("jev-questions", () => {
 	const factory = new JevQuestionFactory(REGISTRY);
 
-	test("spec true gera noul citando a regra", () => {
-		const q = factory.fromSpec("Regra X", true);
+	test("spec noul sem instructions cita a regra", () => {
+		const q = factory.fromSpec("Regra X", { kind: "noul" });
 		expect(q?.type).toBe("noul");
 		expect(JSON.stringify(q)).toContain("Regra X");
 	});
 
-	test("spec string gera noul com instrução customizada", () => {
-		const q = factory.fromSpec("Regra X", "A pergunta customizada?");
+	test("instructions customizada é preservada", () => {
+		const q = factory.fromSpec("Regra X", {
+			kind: "noul",
+			instructions: "A pergunta customizada?",
+		});
 		expect(q).toEqual({ type: "noul", instructions: "A pergunta customizada?" });
 	});
 

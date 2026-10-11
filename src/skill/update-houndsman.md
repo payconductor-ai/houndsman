@@ -76,6 +76,27 @@ Ver `AUDIT-PROTOCOL.md` para a taxonomia completa.
 
 ---
 
+## Pré-análise Jev (opcional)
+
+Regra que deve ser verificada automaticamente antes da revisão declara `jev`. É sempre um
+**objeto** com `kind` obrigatório — a presença de `jev` não é um liga/desliga do Jev:
+
+| Campo | Obrigatório | Uso |
+|---|---|---|
+| `kind` | ✅ | `noul` (a violação ocorre?), `choice` (opções) ou `score` (rubrica) |
+| `instructions` | — | Pergunta customizada; omitida, é derivada do texto da regra |
+| `criteria` | em `choice`/`score` | Objeto `{ valor: rótulo }` para `choice`; lista de rótulos para `score` |
+
+```ts
+{ severity: "blocking", text: "Import de TypeBox direto", jev: { kind: "noul" } }
+{ severity: "attention", text: "Repository com lógica", jev: { kind: "noul", instructions: "O repository tem lógica de negócio?" } }
+```
+
+Não anotar todas as regras: o Jev custa uma chamada por arquivo. Reservar para as regras
+verificáveis por leitura local. Candidatos não confirmados pelo revisor **não bloqueiam**.
+
+---
+
 ## Modo A — Ajuste pontual (pedido do usuário)
 
 1. **Interpretar o pedido** — extrair: qual regra, qual revisor, adicionar/alterar/remover.
@@ -86,6 +107,7 @@ Ver `AUDIT-PROTOCOL.md` para a taxonomia completa.
    - Coletar `file:line` como evidência.
 4. **Editar `.houndsman/reviewers/<id>.ts`** (`REVIEWER_DEFINITIONS[<id>]`):
    - `rules`: uma entrada `{ severity, text }` por regra (o que verificar/evitar é implícito no texto).
+   - `jev` (opcional): `{ kind: "noul" }`, com `instructions` e/ou `criteria` — ver seção acima.
    - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
    - Se a regra muda para outro domínio (paths), ajustar o `classify` do revisor.
 5. **Revisor novo?** criar `.houndsman/reviewers/<id>.ts` e registrar em `.houndsman/reviewers/index.ts` (o id é derivado das chaves).

@@ -5,15 +5,10 @@
  * (`houndsman.config.ts`): revisores, tipos e helpers de autoria.
  */
 
-export { assetPath, defaultOutputFormatPath, OUTPUT_FORMAT_FILE } from "./core/assets";
+export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
 export type { ReviewConfig, ReviewConfigInput } from "./core/config";
-export {
-	DEFAULT_ALWAYS_INCLUDE_DOCS,
-	DEFAULT_ARTIFACT_DIR,
-	defineReviewConfig,
-	resolveOutputFormatPath,
-} from "./core/config";
+export { DEFAULT_ALWAYS_INCLUDE_DOCS, defineReviewConfig } from "./core/config";
 export type { LoadedConfig } from "./core/config-loader";
 export {
 	CONFIG_FILE_CANDIDATES,
@@ -27,6 +22,14 @@ export {
 	matchReviewers,
 	parseEntries,
 } from "./core/file-classifier";
+export {
+	ARTIFACT_DIR,
+	CORE_DIR,
+	CORE_SKILL_DIR,
+	OUTPUT_FORMAT_PATH,
+	PROJECT_DIR,
+	relFromRoot,
+} from "./core/paths";
 export { checkRegistry } from "./core/registry-check";
 export {
 	findReviewer,

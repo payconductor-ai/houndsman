@@ -75,15 +75,17 @@ export type JevEvaluateResponse = {
 /**
  * Spec de conversão de uma regra do registry em pergunta Jev.
  *
- * - `true`  → `noul` gerado a partir da própria descrição ("esta violação ocorre?").
- * - `string`→ `noul` com instrução customizada (para regras redigidas como requisito).
- * - objeto  → controle fino (kind + instructions + criteria).
+ * Sempre um objeto — `kind` é obrigatório para deixar explícito o que a spec
+ * faz (a presença de `jev` não é um liga/desliga do Jev).
+ *
+ * - `kind: "noul"`   → "a violação descrita ocorre?" (probabilidade 0–1).
+ * - `kind: "choice"` → escolha entre opções (`criteria` obrigatório, objeto).
+ * - `kind: "score"`  → nota numa rubrica (`criteria` obrigatório, lista).
+ *
+ * `instructions` omitida → derivada da própria descrição da regra.
  */
-export type JevRuleSpec =
-	| true
-	| string
-	| {
-			kind: JevQuestionType;
-			instructions?: string;
-			criteria?: string[] | Record<string, string>;
-	  };
+export type JevRuleSpec = {
+	kind: JevQuestionType;
+	instructions?: string;
+	criteria?: string[] | Record<string, string>;
+};

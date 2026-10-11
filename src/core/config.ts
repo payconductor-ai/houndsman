@@ -6,11 +6,8 @@
  * (camada `houndsman/`) — único ponto de troca ao portar para outro repositório.
  */
 
-import { defaultOutputFormatPath } from "./assets";
+import { ARTIFACT_DIR } from "./paths";
 import type { ReviewerDefinition } from "./types";
-
-/** Diretório default dos artefatos de revisão. */
-export const DEFAULT_ARTIFACT_DIR = ".houndsman/.runs";
 
 /** Documentos sempre incluídos nos briefs (default). */
 export const DEFAULT_ALWAYS_INCLUDE_DOCS: readonly string[] = ["AGENTS.md"];
@@ -23,13 +20,8 @@ export const DEFAULT_ALWAYS_INCLUDE_DOCS: readonly string[] = ["AGENTS.md"];
 export type ReviewConfig<TId extends string = string> = {
 	/** Nome legível do projeto (usado em prompts e docs). */
 	projectName: string;
-	/** Diretório dos artefatos (default: `DEFAULT_ARTIFACT_DIR`). */
+	/** Diretório dos artefatos (default: `ARTIFACT_DIR` da camada). */
 	artifactDir?: string;
-	/**
-	 * Caminho do schema de output referenciado nos briefs.
-	 * Default: asset `OUTPUT-FORMAT.md` embarcado no pacote.
-	 */
-	outputFormatPath?: string;
 	/**
 	 * Ids dos revisores — **derivados** das chaves de `reviewers` por
 	 * `defineReviewConfig` (não informar manualmente).
@@ -61,14 +53,7 @@ export function defineReviewConfig<TId extends string>(
 	return { ...input, reviewerIds: Object.keys(input.reviewers) as TId[] };
 }
 
-/**
- * Caminho do schema de output — o valor do projeto ou o asset default do pacote.
- */
-export function resolveOutputFormatPath(config: ReviewConfig): string {
-	return config.outputFormatPath ?? defaultOutputFormatPath();
-}
-
-/** Diretório dos artefatos — o valor do projeto ou o default do pacote. */
+/** Diretório dos artefatos — o valor do projeto ou o default da camada. */
 export function resolveArtifactDir(config: ReviewConfig): string {
-	return config.artifactDir ?? DEFAULT_ARTIFACT_DIR;
+	return config.artifactDir ?? ARTIFACT_DIR;
 }
