@@ -1,12 +1,12 @@
-# houndsman
+# Houndsman
 
 Orquestrador de revisão de Pull Requests. Classifica o diff, despacha revisores
 especializados por domínio (um subagente por revisor) e consolida os achados em um
 relatório único.
 
 > Reviewers humanos revisam como quem lê contrato de operadora: página 47, cláusula 12,
-> letra miúda. Aqui não: se um parâmetro virou `any` e ninguém viu, ele só descobre na
-> sexta às 18h — em produção.
+> letra miúda. Aqui não: um `catch {}` que engole o erro passa batido na review e só dá as
+> caras na sexta às 18h — em produção.
 
 ## Por que "houndsman"?
 
@@ -39,6 +39,7 @@ bun run houndsman setup        # cria houndsman.config.ts + .houndsman/ + pontei
 bun run houndsman doctor       # valida config e ambiente
 bun run houndsman --base main  # Passo 1 — prepara briefs
 bun run houndsman --finalize   # Passo 3 — gera o relatório
+bun run houndsman update       # sincroniza os arquivos auto-gerados (.houndsman/core)
 ```
 
 ### Comandos
@@ -49,6 +50,7 @@ bun run houndsman --finalize   # Passo 3 — gera o relatório
 | `houndsman --finalize` | Passo 3 — consolidar findings em `review.md` |
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman setup` | Cria a configuração inicial do projeto |
+| `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
 | `houndsman test` | Suíte de testes da lib (project-agnóstica) |
 | `houndsman reviewer <id>` | Contexto de um revisor (`--rules`, `--json`) |
@@ -59,11 +61,10 @@ bun run houndsman --finalize   # Passo 3 — gera o relatório
 import { DOC_MAPPINGS } from "./.houndsman/doc-mappings";
 import { EXCLUSION_PATTERNS } from "./.houndsman/exclusions";
 import { REVIEWER_DEFINITIONS } from "./.houndsman/reviewers";
-import type { ReviewConfig } from "./.houndsman/types";
+import type { ReviewConfig } from "./.houndsman/core/types";
 
 export const reviewConfig = {
 	projectName: "Meu Projeto",
-	artifactDir: ".houndsman/.runs",
 	reviewers: REVIEWER_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
@@ -72,8 +73,12 @@ export const reviewConfig = {
 export default reviewConfig;
 ```
 
-> A camada é autocontida (não importa o pacote). `outputFormatPath` é opcional — o default é o
-> schema `OUTPUT-FORMAT.md` embarcado no pacote.
+> `artifactDir` e `outputFormatPath` são **opcionais** — os defaults já apontam para
+> `.houndsman/.runs` e para o schema embarcado no pacote.
+>
+> A camada separa **auto-gerado** (`.houndsman/core/**`, `.houndsman/.runs/.gitignore`,
+> ponteiros de skill) do **usuário** (`.houndsman/reviewers/`, `exclusions.ts`,
+> `doc-mappings.ts`, `houndsman.config.ts`). O `houndsman update` reescreve só os auto-gerados.
 
 ## Documentação
 
