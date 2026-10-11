@@ -1,0 +1,33 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+	"assist": {
+		"actions": {
+			"source": {
+				"organizeImports": "on",
+				"useSortedAttributes": "off",
+				"useSortedKeys": "off",
+				"useSortedProperties": "off"
+			}
+		}
+	},
+	"formatter": {
+		"indentStyle": "tab",
+		"indentWidth": 4,
+		"lineWidth": 90
+	},
+	"linter": {
+		"enabled": true,
+		"rules": {
+			"style": {
+				"useImportType": "error"
+			},
+			"recommended": true
+		}
+	},
+	"root": true,
+	"vcs": {
+		"clientKind": "git",
+		"enabled": true,
+		"useIgnoreFile": true
+	}
+}

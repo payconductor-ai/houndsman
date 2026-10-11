@@ -1,0 +1,54 @@
+{
+	"name": "houndsman",
+	"version": "0.1.0",
+	"description": "Orquestrador de revisão de Pull Requests: classifica o diff, despacha revisores especializados por domínio e consolida o relatório.",
+	"type": "module",
+	"license": "MIT",
+	"bin": {
+		"houndsman": "./src/cli/index.ts"
+	},
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"files": [
+		"src",
+		"README.md",
+		"LICENSE"
+	],
+	"keywords": [
+		"pull-request",
+		"code-review",
+		"cli",
+		"bun",
+		"ai-agents",
+		"orchestrator"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"engines": {
+		"bun": ">=1.1.0"
+	},
+	"scripts": {
+		"houndsman": "bun run ./src/cli/index.ts",
+		"build": "bun build ./src/cli/index.ts --target bun --outdir dist",
+		"test": "bun test ./src/tests",
+		"typecheck": "tsc -b",
+		"lint": "biome check .",
+		"format": "biome format --write .",
+		"ci": "biome ci . && tsc -b",
+		"ci:check": "biome check",
+		"ci:check:fix": "biome check --fix",
+		"ci:fix": "bun run ci:check:fix && bun run ci:format:fix",
+		"ci:format": "biome format",
+		"ci:format:fix": "biome format --fix"
+	},
+	"dependencies": {
+		"axios": "^1.12.2"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.2.4",
+		"bun-types": "^1.3.14",
+		"typescript": "^7.0.2"
+	}
+}
