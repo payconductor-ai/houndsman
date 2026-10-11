@@ -4,9 +4,9 @@ Orquestrador de revisão de Pull Requests. Classifica o diff, despacha revisores
 especializados por domínio (um subagente por revisor) e consolida os achados em um
 relatório único.
 
-> Reviewers humanos revisam como quem lê contrato de operadora: página 47, cláusula 12,
-> letra miúda. Aqui não: um `catch {}` que engole o erro passa batido na review e só dá as
-> caras na sexta às 18h — em produção.
+> Review de PR no piloto automático: alguém aprova no "LGTM" sem ler, um `catch {}` engole
+> o erro e ninguém nota. Sexta às 18h a produção cobra a conta — e aí todo mundo lembra
+> daquela linha.
 
 ![alt text](assets/houndsman.png)
 
