@@ -33,7 +33,7 @@ A camada separa o que é **auto-gerado** do que é **do usuário**:
 | Caminho | Dono | O que é |
 |---|---|---|
 | `houndsman.config.ts` | usuário | Configuração — um objeto de dados (sem imports do pacote) |
-| `.houndsman/reviewers/example.ts` + `index.ts` | usuário | Comece com **1 revisor de exemplo** |
+| `.houndsman/watchdogs/example.ts` + `index.ts` | usuário | Comece com **1 watchdog de exemplo** |
 | `.houndsman/exclusions.ts` | usuário | Arquivos que nunca entram na revisão |
 | `.houndsman/doc-mappings.ts` | usuário | path → documentação de contexto |
 | `.houndsman/core/types.ts` | **auto** | Snapshot dos tipos + helpers (tipagem sem install) |
@@ -64,7 +64,7 @@ bun run houndsman test           # suíte da lib (project-agnóstica)
 bun run houndsman --base main    # prepara briefs do diff atual
 ```
 
-## Contrato do motor (`ReviewConfig`)
+## Contrato do motor (`HoundsmanConfig`)
 
 Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.ts` (gerado):
 
@@ -72,12 +72,12 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 |---|---|
 | `projectName` | Nome legível (prompts/docs). |
 | `artifactDir` | **Opcional** — onde gravar os artefatos (default `.houndsman/.runs`). |
-| `reviewers` | Definições dos revisores (incluem `classify`); os **ids são derivados** das chaves. |
+| `watchdogs` | Definições dos watchdogs (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |
 | `docMappings` | Path → documentação de contexto. |
 | `alwaysIncludeDocs` | Docs sempre presentes nos briefs (default `["AGENTS.md"]`). |
 
-> O motor **não contém** ids, paths ou regras do projeto — tudo chega por `ReviewConfig`,
+> O motor **não contém** ids, paths ou regras do projeto — tudo chega por `HoundsmanConfig`,
 > carregado em runtime a partir de `houndsman.config.ts` (ou `--config <path>`).
 
 ## Estrutura do pacote (motor)
@@ -86,7 +86,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 houndsman/
 ├── package.json
 └── src/
-    ├── index.ts              # API pública (defineReviewer, defineReviewConfig, tipos)
+    ├── index.ts              # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
     ├── cli/index.ts          # CLI único — bin `houndsman`
     ├── core/                 # bibliotecas genéricas (config, orchestrator, brief, jev/, …)
     ├── skill/*.md            # assets markdown (embarcados no pacote)

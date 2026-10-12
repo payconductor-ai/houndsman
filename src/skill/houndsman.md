@@ -6,6 +6,10 @@
 Revisão de PR: classificação de arquivos → revisão paralela por domínio → consolidação.
 O motor é o CLI **`houndsman`**; as regras do projeto ficam em `houndsman.config.ts` + `houndsman/`.
 
+**Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor); **watchdog** = cada agente
+especialista por domínio que audita o diff (antigo "revisor"); **review/revisão** = o processo;
+**Jev** = pré-análise opcional (Passo 1.5).
+
 ## Quem executa o quê
 
 - **Você** só invoca o skill: `/houndsman`. Não precisa rodar nenhum script à mão.
@@ -16,27 +20,27 @@ O motor é o CLI **`houndsman`**; as regras do projeto ficam em `houndsman.confi
 |---|---|---|---|
 | 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
-| 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<revisor>.json` (um por revisor) |
+| 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog) |
 | 3. Finalizar | `houndsman --finalize` | skill | `review.md` |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 
 **Arquitetura:**
 
-- N revisores especializados por domínio de negócio.
-- **Cada revisor declara o que revisa** (`classify` em `.houndsman/reviewers/<id>.ts`:
+- N watchdogs especializados por domínio de negócio.
+- **Cada watchdog declara o que revisa** (`classify` em `.houndsman/watchdogs/<id>.ts`:
   `{ type?: "filename" | "content", value }` — `value` é sempre regex; `filename`
   (padrão) casa o caminho, `content` casa o conteúdo do arquivo). Não há arquivo de
   classificação à parte nem fallback: arquivo fora dos padrões fica `unclassified`.
-- **Fonte única de verdade do projeto:** `houndsman.config.ts` (`ReviewConfig`) +
-  `.houndsman/` (`reviewers/<id>.ts`: regras + escopo + foco + `classify`;
+- **Fonte única de verdade do projeto:** `houndsman.config.ts` (`HoundsmanConfig`) +
+  `.houndsman/` (`watchdogs/<id>.ts`: regras + escopo + foco + `classify`;
   `exclusions.ts`: filtros; `doc-mappings.ts`: docs).
 - **O motor genérico** vive no pacote `houndsman` (`core/` + `cli/`). O markdown do skill
   vive em `src/skill/`.
 - **As regras refletem os padrões APLICADOS hoje** — não validar práticas que o projeto
   não adota. Regra sem aplicação real no código gera falso positivo.
-- Cada revisor recebe apenas seus arquivos relevantes (brief pronto) — nunca o diff completo.
-- Saída estruturada (JSON) por revisor → consolidada e deduplicada automaticamente.
+- Cada watchdog recebe apenas seus arquivos relevantes (brief pronto) — nunca o diff completo.
+- Saída estruturada (JSON) por watchdog → consolidada e deduplicada automaticamente.
 
 ## Quando Usar
 
@@ -75,20 +79,20 @@ Gera em `.houndsman/.runs/<branch-slug>/`:
 
 | Artefato | Conteúdo |
 |---|---|
-| `classification.json` | Revisores ativados por arquivo + status (A/M/D/R) |
+| `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) |
 | `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) |
-| `briefs/<reviewer>.md` | Instruções prontas para cada subagente |
-| `manifest.json` | Resumo: revisores, arquivos, deletados, status, contexto, Jev |
+| `briefs/<watchdog>.md` | Instruções prontas para cada subagente |
+| `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev |
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).
-**Deletados:** não entram como conteúdo; vão para o brief de revisores com
+**Deletados:** não entram como conteúdo; vão para o brief de watchdogs com
 `breakingChange` como candidatos a **breaking change**.
 
 ### Pré-análise Jev (Passo 1.5, opcional)
 
 Se `TYPESAFE_API_KEY` estiver definida, cada arquivo é avaliado pelo modelo **Jev** contra
-as regras atômicas dos revisores. Respostas acima do limiar viram **candidatos** em
+as regras atômicas dos watchdogs. Respostas acima do limiar viram **candidatos** em
 `candidates.json` e entram no brief como *warm start* — o subagente **confirma ou refuta**.
 
 - **Não é achado**: candidatos não bloqueiam.
@@ -102,11 +106,11 @@ as regras atômicas dos revisores. Respostas acima do limiar viram **candidatos*
 Um subagente por brief, todos no mesmo bloco de tool calls. O prompt é o próprio brief:
 
 ```
-Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<reviewer-id>.md
-Você é o revisor <reviewer-id> do {{projectName}}.
+Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<watchdog-id>.md
+Você é o watchdog <watchdog-id> do {{projectName}}.
 ```
 
-Cada subagente grava `findings/<reviewer-id>.json` (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
+Cada subagente grava `findings/<watchdog-id>.json` (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
 Sem achados → `"findings": []` (arquivo obrigatório).
 
 **NUNCA enviar:** `git diff` completo · histórico de commits · arquivos de outros domínios ·
@@ -120,9 +124,9 @@ Sem achados → `"findings": []` (arquivo obrigatório).
 houndsman --finalize
 ```
 
-Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos existem:
+Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todos existem:
 1. Valida o schema de cada JSON
-2. Deduplica achados por `(file, line, rule)` mesclando revisores sobrepostos
+2. Deduplica achados por `(file, line, rule)` mesclando watchdogs sobrepostos
 3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit
 4. Grava `.houndsman/.runs/<branch-slug>/review.md` + tabela de cobertura
 5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
@@ -135,7 +139,7 @@ Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos
 # Review — [branch]
 
 **Data:** YYYY-MM-DD
-**Revisores ativos:** [lista]
+**Watchdogs ativos:** [lista]
 **Achados:** N bloqueantes · N atenção · N sugestões · N nits
 
 ## Contexto da PR
@@ -146,12 +150,12 @@ Falha com mensagem clara se faltar algum `findings/<revisor>.json`. Quando todos
 - ...
 
 ## ❌ blocking
-- **<regra>** — `arquivo:linha` · _<revisores>_
+- **<regra>** — `arquivo:linha` · _<watchdogs>_
   <mensagem>
   **Ação:** <ação>
 
 ## Cobertura
-| Revisor | Arquivos revisados | Findings |
+| Watchdog | Arquivos revisados | Findings |
 |---|---|---|
 
 ## Conclusão
@@ -169,7 +173,7 @@ git diff --name-status (base...head)
         ↓
 [1] houndsman                  ──►  classification.json + candidates.json + briefs/ + manifest.json
         ↓
-[2] N subagentes em paralelo   ──►  findings/<revisor>.json
+[2] N subagentes em paralelo   ──►  findings/<watchdog>.json
         ↓
 [3] houndsman --finalize       ──►  review.md
 ```
@@ -192,7 +196,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman` | Passo 1 — preparar (briefs + manifesto) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
-| `houndsman reviewer <id>` | Contexto de um revisor (`--json`, `--rules`) |
+| `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
@@ -202,9 +206,9 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 
 ## Anti-padrões
 
-- ❌ Enviar git diff completo para qualquer revisor
-- ❌ Ativar revisores sem arquivos no seu domínio
-- ❌ Carregar documentação que o revisor não precisa
+- ❌ Enviar git diff completo para qualquer watchdog
+- ❌ Ativar watchdogs sem arquivos no seu domínio
+- ❌ Carregar documentação que o watchdog não precisa
 - ❌ Revisar arquivos gerados (lock files, builds, migrations)
 - ❌ Escrever markdown livre em vez do JSON de `OUTPUT-FORMAT.md`
 - ❌ Revisar arquivos `deleted` (não têm conteúdo) em vez de tratá-los como breaking change
@@ -227,7 +231,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 
 ## Performance Esperada
 
-| Tamanho do PR | Revisores | Tempo |
+| Tamanho do PR | Watchdogs | Tempo |
 |---|---|---|
 | Pequeno (500 linhas) | 2-4 | ~30-60s |
 | Médio (5k linhas) | 4-7 | ~1-2 min |

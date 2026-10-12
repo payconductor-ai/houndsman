@@ -5,14 +5,14 @@
  * por isso usam esta configuração fictícia em vez da config do projeto real.
  */
 
-import { defineReviewConfig, type ReviewConfig } from "../../core/config";
-import { defineReviewer } from "../../core/types";
+import { defineHoundsmanConfig, type HoundsmanConfig } from "../../core/config";
+import { defineWatchdog } from "../../core/types";
 
-/** Revisor A — regra bloqueante com spec Jev + outras severidades. */
-export const alphaReviewer = defineReviewer({
+/** Watchdog A — regra bloqueante com spec Jev + outras severidades. */
+export const alphaWatchdog = defineWatchdog({
 	id: "alpha",
 	name: "Alpha",
-	description: "Revisor A do projeto fake.",
+	description: "Watchdog A do projeto fake.",
 	scope: "src/alpha/**",
 	classify: [{ value: "^src/alpha/" }],
 	rules: [
@@ -23,11 +23,11 @@ export const alphaReviewer = defineReviewer({
 	contextFiles: ["README.md"],
 });
 
-/** Revisor B — cobre testes e um padrão de nome de arquivo. */
-export const betaReviewer = defineReviewer({
+/** Watchdog B — cobre testes e um padrão de nome de arquivo. */
+export const betaWatchdog = defineWatchdog({
 	id: "beta",
 	name: "Beta",
-	description: "Revisor B do projeto fake.",
+	description: "Watchdog B do projeto fake.",
 	scope: "src/beta/**, arquivos de teste e o arquivo especial",
 	classify: [
 		{ value: "^src/beta/" },
@@ -45,19 +45,19 @@ export const betaReviewer = defineReviewer({
 	contextFiles: ["README.md"],
 });
 
-export const FAKE_REVIEWER_DEFINITIONS = {
-	alpha: alphaReviewer,
-	beta: betaReviewer,
+export const FAKE_WATCHDOG_DEFINITIONS = {
+	alpha: alphaWatchdog,
+	beta: betaWatchdog,
 };
 
-export type FakeReviewerId = keyof typeof FAKE_REVIEWER_DEFINITIONS;
+export type FakeWatchdogId = keyof typeof FAKE_WATCHDOG_DEFINITIONS;
 
 /** Configuração completa do projeto fake. */
-export const fakeReviewConfig: ReviewConfig<FakeReviewerId> =
-	defineReviewConfig<FakeReviewerId>({
+export const fakeHoundsmanConfig: HoundsmanConfig<FakeWatchdogId> =
+	defineHoundsmanConfig<FakeWatchdogId>({
 		projectName: "Fake Project",
 		artifactDir: "tmp/fake-review",
-		reviewers: FAKE_REVIEWER_DEFINITIONS,
+		watchdogs: FAKE_WATCHDOG_DEFINITIONS,
 		exclusions: [/^dist\//, /\.lock$/],
 		docMappings: [[/^src\//, ["README.md"]]],
 		alwaysIncludeDocs: ["README.md"],

@@ -1,47 +1,47 @@
 /**
- * Subcomando `reviewer` — contexto de um revisor (biblioteca).
+ * Subcomando `watchdog` — contexto de um watchdog (biblioteca).
  *
  * Devolve o texto pronto (markdown ou JSON); `null` se o id não existe.
  * O CLI decide o log/exit.
  */
 
-import type { ReviewConfig } from "../config";
-import { findReviewer, getReviewerContext } from "../reviewer-registry";
+import type { HoundsmanConfig } from "../config";
 import {
-	type ReviewerDefinition,
 	type Rule,
 	SEVERITY_EMOJI,
 	severityRank,
+	type WatchdogDefinition,
 } from "../types";
+import { findWatchdog, getWatchdogContext } from "../watchdog-registry";
 
-export type ReviewerContextOptions = {
+export type WatchdogContextOptions = {
 	/** Inclui `criticalRules` + `antiPatterns`. */
 	withRules?: boolean;
 	/** Saída JSON (default: markdown legível). */
 	json?: boolean;
 };
 
-type ReviewerContext = ReturnType<typeof getReviewerContext>;
+type WatchdogContext = ReturnType<typeof getWatchdogContext>;
 
-/** Renderiza o contexto de um revisor (markdown ou JSON). `null` se o id não existe. */
-export function renderReviewerContext(
-	config: ReviewConfig,
+/** Renderiza o contexto de um watchdog (markdown ou JSON). `null` se o id não existe. */
+export function renderWatchdogContext(
+	config: HoundsmanConfig,
 	id: string,
-	opts: ReviewerContextOptions = {},
+	opts: WatchdogContextOptions = {},
 ): string | null {
-	const def = findReviewer(config, id);
+	const def = findWatchdog(config, id);
 	if (!def) return null;
-	const ctx = getReviewerContext(config, def.id);
+	const ctx = getWatchdogContext(config, def.id);
 	const withRules = opts.withRules ?? false;
 	return opts.json
-		? serializeReviewerContext(ctx, def, withRules)
-		: renderReviewerMarkdown(ctx, def, withRules);
+		? serializeWatchdogContext(ctx, def, withRules)
+		: renderWatchdogMarkdown(ctx, def, withRules);
 }
 
 /** Payload serializável (regras incluídas apenas com `withRules`). */
-function serializeReviewerContext(
-	ctx: ReviewerContext,
-	def: ReviewerDefinition,
+function serializeWatchdogContext(
+	ctx: WatchdogContext,
+	def: WatchdogDefinition,
 	withRules: boolean,
 ): string {
 	const payload = withRules ? { ...ctx, rules: def.rules } : { ...ctx };
@@ -67,10 +67,10 @@ function ruleSection(title: string, rules: readonly Rule[]): string[] {
 	];
 }
 
-/** Render markdown legível do contexto do revisor. */
-function renderReviewerMarkdown(
-	ctx: ReviewerContext,
-	def: ReviewerDefinition,
+/** Render markdown legível do contexto do watchdog. */
+function renderWatchdogMarkdown(
+	ctx: WatchdogContext,
+	def: WatchdogDefinition,
 	withRules: boolean,
 ): string {
 	const lines: string[] = [

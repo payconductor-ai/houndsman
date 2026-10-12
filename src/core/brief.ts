@@ -1,22 +1,22 @@
 /**
- * Renderização do brief de um revisor (biblioteca) — `defaultRenderBrief`.
+ * Renderização do brief de um watchdog (biblioteca) — `defaultRenderBrief`.
  *
- * O procedimento (`PROCEDURE`) é compartilhado por todos os revisores; o que era
- * protocolo específico vive nas regras do revisor (`rules`).
+ * O procedimento (`PROCEDURE`) é compartilhado por todos os watchdogs; o que era
+ * protocolo específico vive nas regras do watchdog (`rules`).
  */
 
 import {
-	type ReviewerDefinition,
-	type ReviewerRenderArgs,
-	type ReviewerRenderCandidate,
-	type ReviewerRenderContext,
 	type Rule,
 	SEVERITY_EMOJI,
 	severityRank,
+	type WatchdogDefinition,
+	type WatchdogRenderArgs,
+	type WatchdogRenderCandidate,
+	type WatchdogRenderContext,
 } from "./types";
 
 /**
- * Procedimento de revisão — compartilhado por todos os revisores.
+ * Procedimento de revisão — compartilhado por todos os watchdogs.
  * Substitui o antigo protocolo genérico de 5 passos + o ponteiro `PROTOCOL_GLOB`.
  */
 export const PROCEDURE: readonly string[] = [
@@ -27,8 +27,8 @@ export const PROCEDURE: readonly string[] = [
 	'5. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
-/** Bloco de contexto da PR, injetado no brief de cada revisor. */
-export function renderBriefContext(context: ReviewerRenderContext): string[] {
+/** Bloco de contexto da PR, injetado no brief de cada watchdog. */
+export function renderBriefContext(context: WatchdogRenderContext): string[] {
 	const lines = ["## Contexto da PR", ""];
 	if (context.objective) lines.push(`**Objetivo:** ${context.objective}`);
 	if (context.motivation) lines.push(`**Motivação:** ${context.motivation}`);
@@ -41,9 +41,9 @@ export function renderBriefContext(context: ReviewerRenderContext): string[] {
 	return lines;
 }
 
-/** Seção de candidatos pré-analisados (Jev) — o revisor confirma ou refuta. */
+/** Seção de candidatos pré-analisados (Jev) — o watchdog confirma ou refuta. */
 export function renderBriefCandidates(
-	candidates: readonly ReviewerRenderCandidate[],
+	candidates: readonly WatchdogRenderCandidate[],
 ): string[] {
 	const lines = [
 		"## Candidatos pré-analisados (Jev) — confirme ou refute",
@@ -79,15 +79,15 @@ function optionalList(title: string, items: readonly string[] | undefined): stri
 }
 
 /** Lista de arquivos do domínio com status. */
-function fileItems(args: ReviewerRenderArgs): string[] {
+function fileItems(args: WatchdogRenderArgs): string[] {
 	return args.files.map((file) => {
 		const status = args.statuses[file]?.status ?? "modified";
 		return `- \`${file}\` (${status})`;
 	});
 }
 
-/** Seção de deletados (breaking change) — só p/ revisores com `breakingChange`. */
-function deletedSection(args: ReviewerRenderArgs, def: ReviewerDefinition): string[] {
+/** Seção de deletados (breaking change) — só p/ watchdogs com `breakingChange`. */
+function deletedSection(args: WatchdogRenderArgs, def: WatchdogDefinition): string[] {
 	if (!def.breakingChange || args.deleted.length === 0) return [];
 	return [
 		"## Deletados — checar breaking change",
@@ -98,12 +98,12 @@ function deletedSection(args: ReviewerRenderArgs, def: ReviewerDefinition): stri
 }
 
 /**
- * Render padrão do brief de um revisor (ordem estável).
- * `def` é a definição do próprio revisor (evita ciclo com o registry).
+ * Render padrão do brief de um watchdog (ordem estável).
+ * `def` é a definição do próprio watchdog (evita ciclo com o registry).
  */
 export function defaultRenderBrief(
-	args: ReviewerRenderArgs,
-	def: ReviewerDefinition,
+	args: WatchdogRenderArgs,
+	def: WatchdogDefinition,
 ): string[] {
 	const lines: string[] = [
 		`# Brief — ${def.name} (\`${def.id}\`)`,
@@ -156,7 +156,7 @@ export function defaultRenderBrief(
  * Renderiza o brief via hook custom (`def.renderBrief`) ou o padrão.
  * Passa a própria definição para que o hook possa reutilizar o render padrão.
  */
-export function renderBrief(def: ReviewerDefinition, args: ReviewerRenderArgs): string {
+export function renderBrief(def: WatchdogDefinition, args: WatchdogRenderArgs): string {
 	const render = def.renderBrief ?? defaultRenderBrief;
 	return render(args, def).join("\n");
 }

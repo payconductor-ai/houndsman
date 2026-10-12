@@ -2,50 +2,50 @@
  * Validações de consistência do motor de revisão (biblioteca).
  *
  * Usado pelo subcomando `check` (`cli/index.ts`). Tudo é **inferido** do
- * `ReviewConfig` — não há caminhos de arquivo do projeto na config.
+ * `HoundsmanConfig` — não há caminhos de arquivo do projeto na config.
  */
 
-import type { ReviewConfig } from "./config";
+import type { HoundsmanConfig } from "./config";
 import { JevQuestionFactory } from "./jev";
 import { renderReport, sanitizeBranch } from "./report-builder";
-import type { ReviewerMeta } from "./types";
+import type { WatchdogMeta } from "./types";
 
 /** `id` da definição bate com a chave; `description` não vazio. */
-function checkDefinitions(config: ReviewConfig, problems: string[]): void {
-	for (const id of config.reviewerIds) {
-		const def = config.reviewers[id];
+function checkDefinitions(config: HoundsmanConfig, problems: string[]): void {
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
 		if (!def) {
-			problems.push(`Revisor '${id}' sem definição em reviewers`);
+			problems.push(`Watchdog '${id}' sem definição em watchdogs`);
 			continue;
 		}
 		if (def.id !== id) {
-			problems.push(`reviewers['${id}'].id = '${def.id}' (esperado '${id}')`);
+			problems.push(`watchdogs['${id}'].id = '${def.id}' (esperado '${id}')`);
 		}
 		if (!def.description.trim()) {
-			problems.push(`Revisor '${id}' sem 'description'`);
+			problems.push(`Watchdog '${id}' sem 'description'`);
 		}
 	}
 }
 
-/** Todo revisor precisa declarar ao menos um arquivo em `classify`. */
-function checkClassification(config: ReviewConfig, problems: string[]): void {
-	for (const id of config.reviewerIds) {
-		const def = config.reviewers[id];
+/** Todo watchdog precisa declarar ao menos um arquivo em `classify`. */
+function checkClassification(config: HoundsmanConfig, problems: string[]): void {
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
 		if (!def) continue;
 		if (!def.classify || def.classify.length === 0) {
-			problems.push(`Revisor '${id}' não declara nenhum padrão em 'classify'`);
+			problems.push(`Watchdog '${id}' não declara nenhum padrão em 'classify'`);
 		}
 	}
 }
 
 /** Smoke test dos helpers críticos de renderização. */
-function checkRendering(config: ReviewConfig, problems: string[]): void {
+function checkRendering(config: HoundsmanConfig, problems: string[]): void {
 	if (sanitizeBranch("feature/x") !== "feature-x") {
 		problems.push("sanitizeBranch não está normalizando branches");
 	}
-	const sampleId = config.reviewerIds[0] ?? "reviewer";
+	const sampleId = config.watchdogIds[0] ?? "watchdog";
 	const report = {
-		reviewerId: sampleId,
+		watchdogId: sampleId,
 		reviewedFiles: [],
 		skipped: [],
 		findings: [],
@@ -71,15 +71,15 @@ function checkRendering(config: ReviewConfig, problems: string[]): void {
 }
 
 /** Valida as specs Jev da config e conta as perguntas derivadas. */
-function checkJevSpecs(config: ReviewConfig, problems: string[]): number {
+function checkJevSpecs(config: HoundsmanConfig, problems: string[]): number {
 	const factory = new JevQuestionFactory(
-		config.reviewers as Record<string, ReviewerMeta>,
+		config.watchdogs as Record<string, WatchdogMeta>,
 	);
 	let generated = 0;
 	const keys = new Set<string>();
 
-	for (const id of config.reviewerIds) {
-		const def = config.reviewers[id];
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
 		if (!def) continue;
 		def.rules.forEach((rule, index) => {
 			const key = `${id}::rule-${index}`;
@@ -113,9 +113,9 @@ const POLARITY_PREFIX = /^(promover|evitar|não|nao|nunca)\b/i;
  * Aviso **não bloqueante** para regra sem polaridade explícita: o texto deve
  * começar com `Promover:` (DEVE acontecer) ou `Evitar:`/`Não`/`Nunca` (NÃO DEVE).
  */
-function checkRulePolarity(config: ReviewConfig, warnings: string[]): void {
-	for (const id of config.reviewerIds) {
-		const def = config.reviewers[id];
+function checkRulePolarity(config: HoundsmanConfig, warnings: string[]): void {
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
 		if (!def) continue;
 		def.rules.forEach((rule, index) => {
 			const text = rule.text.trim();
@@ -127,7 +127,7 @@ function checkRulePolarity(config: ReviewConfig, warnings: string[]): void {
 	}
 }
 
-export function checkRegistry(config: ReviewConfig): {
+export function checkRegistry(config: HoundsmanConfig): {
 	problems: string[];
 	warnings: string[];
 	jevQuestions: number;

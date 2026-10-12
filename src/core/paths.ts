@@ -26,5 +26,5 @@ export const CORE_SKILL_DIR = `${CORE_DIR}/skill`;
 /** Artefatos da revisão (briefs, findings, review.md) — default de `artifactDir`. */
 export const ARTIFACT_DIR = `${PROJECT_DIR}/.runs`;
 
-/** Schema de output dos revisores, citado nos briefs. */
+/** Schema de output dos watchdogs, citado nos briefs. */
 export const OUTPUT_FORMAT_PATH = `${CORE_SKILL_DIR}/${OUTPUT_FORMAT_FILE}`;

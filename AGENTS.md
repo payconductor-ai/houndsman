@@ -8,7 +8,11 @@
 ## Projeto
 
 `houndsman` é um **CLI independente** que revisa Pull Requests: classifica o diff por domínio,
-despacha revisores especializados (um subagente por brief) e consolida um relatório.
+despacha watchdogs especializados (um subagente por brief) e consolida um relatório.
+
+> **Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor); **watchdog** = cada
+> agente especialista por domínio que audita o diff (antigo "revisor"); **review/revisão** =
+> o processo; **Jev** = pré-análise opcional.
 
 O motor é **genérico e agnóstico ao projeto** — nenhuma regra, path ou nome de consumidor vive
 aqui. O consumidor fornece a configuração em `houndsman.config.ts` + `.houndsman/` (camada de
@@ -38,23 +42,23 @@ projeto **autocontida**), carregada em runtime.
 
 ```
 src/
-├── index.ts          # API pública (defineReviewer, defineReviewConfig, tipos)
+├── index.ts          # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
 ├── cli/index.ts      # ÚNICO executável (bin `houndsman`)
 ├── core/             # bibliotecas genéricas
-│   ├── config.ts            # contrato ReviewConfig + defineReviewConfig
+│   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
 │   ├── assets.ts            # assets embarcados (src/skill/) — usados para gerar a camada
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
-│   ├── types.ts             # Severity, Rule, ReviewerDefinition, defineReviewer
-│   ├── reviewer-registry.ts # getReviewer/findReviewer/getReviewerContext(config)
+│   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
+│   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
 │   ├── orchestrator.ts      # prepare/finalize
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
-│   ├── file-classifier.ts   # classificação via `classify` dos revisores
+│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── commands/            # context · review · reviewer · setup · test
+│   ├── commands/            # context · review · watchdog · setup · test
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── skill/*.md        # assets markdown (copiados pelo `setup` no consumidor)
 └── tests/            # suíte project-agnóstica
@@ -67,7 +71,7 @@ src/
 ## Regras críticas
 
 - **`core/` é agnóstico ao projeto.** Nenhum id, path, nome de projeto ou regra de negócio de
-  consumidor. Tudo chega por `ReviewConfig`.
+  consumidor. Tudo chega por `HoundsmanConfig`.
 - **Nunca** importe caminhos de projeto (`scripts/`, `docs/.ai`, `packages/...`) nem cite
   projetos consumidores. O pacote deve poder ser copiado para um repositório zerado.
 - **Assets** (`src/skill/*.md`) são resolvidos por `core/assets.ts` (`import.meta.dir`) — nunca

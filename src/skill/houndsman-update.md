@@ -3,7 +3,7 @@
 > **Documento canônico do skill `/houndsman-update`.** Os `SKILL.md` de cada harness
 > (`.agents/skills/houndsman-update/` e `.claude/skills/houndsman-update/`) são apenas ponteiros para cá.
 
-> **Propósito:** manter os revisores do skill `houndsman` alinhados ao que o
+> **Propósito:** manter os watchdogs do skill `houndsman` alinhados ao que o
 > projeto **realmente aplica** — seja para adicionar/ajustar uma regra a pedido do
 > usuário, seja para uma auditoria geral após mudanças de padrão no código.
 
@@ -42,7 +42,7 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 3. **Critério concreto** — limite/prazo/lista explícito ou referência a símbolo real do código.
 4. **Geral e reutilizável** — descreve um padrão do **domínio**, não uma regra de negócio pontual
    que só existe dentro de uma classe/use-case. Regra amarrada a um único ponto do código não é
-   replicável em outros contextos — isso é papel de **teste automatizado**, não do revisor.
+   replicável em outros contextos — isso é papel de **teste automatizado**, não do watchdog.
    - ❌ `Promover: cálculo de taxa deve usar toDecimals` (o cálculo de taxa vive atrás de um único
      use-case — a regra não se aplica em nenhum outro contexto).
 5. **Sem jargão abreviado ou vago** — sigla/termo/apelido deve estar definido ou ancorado num
@@ -53,8 +53,8 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 7. **Polaridade explícita** — a regra começa com o sentido inequívoco:
    - `Promover:` → algo que **DEVE** acontecer (ex.: `Promover: rotas validam a entrada com o schema do Elysia`).
    - `Evitar:` → algo que **NÃO DEVE** acontecer; `Não` / `Nunca` no início são **equivalentes aceitos** de `Evitar:`.
-8. **Escopo coerente** — a regra pertence ao domínio do revisor.
-9. **Sem duplicata** — nenhuma regra repetida literalmente no mesmo revisor.
+8. **Escopo coerente** — a regra pertence ao domínio do watchdog.
+9. **Sem duplicata** — nenhuma regra repetida literalmente no mesmo watchdog.
 
 > O `houndsman doctor` emite um **aviso** (não bloqueante) para regra sem polaridade explícita
 > (`Promover:`, `Evitar:`, `Não` ou `Nunca`).
@@ -64,9 +64,9 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 ## Quando Usar
 
 - Usuário pede para **adicionar / alterar / remover** uma regra de revisão.
-- Um revisor está gerando **falso positivo** (cobra padrão não aplicado).
+- Um watchdog está gerando **falso positivo** (cobra padrão não aplicado).
 - O projeto mudou de padrão (ex.: passou a usar uma lib, mudou autenticação, etc.).
-- **Auditoria completa** dos revisores após revisão geral do código.
+- **Auditoria completa** dos watchdogs após revisão geral do código.
 - **Regra confusa/ambígua** (humano ou IA não entende) — ver Modo C.
 - O usuário invoca `/houndsman-update`.
 
@@ -79,20 +79,20 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 
 | Arquivo | Papel |
 |---|---|
-| `.houndsman/reviewers/<id>.ts` | **Fonte de verdade**: `defineReviewer` com `rules` (severidade + texto), `scope`, `description`, `reviewFocus`, `exclude`, `breakingChange`, `contextFiles`, `classify` |
-| `.houndsman/reviewers/index.ts` | `REVIEWER_DEFINITIONS` — as **chaves definem os ids** (`ReviewerId`); `reviewerIds` é derivado |
-| `houndsman.config.ts` | `reviewConfig` do projeto — `projectName`, `artifactDir`, `reviewers`, `exclusions`, `docMappings` (descoberto em runtime) |
+| `.houndsman/watchdogs/<id>.ts` | **Fonte de verdade**: `defineWatchdog` com `rules` (severidade + texto), `scope`, `description`, `reviewFocus`, `exclude`, `breakingChange`, `contextFiles`, `classify` |
+| `.houndsman/watchdogs/index.ts` | `WATCHDOG_DEFINITIONS` — as **chaves definem os ids** (`WatchdogId`); `watchdogIds` é derivado |
+| `houndsman.config.ts` | `houndsmanConfig` do projeto — `projectName`, `artifactDir`, `watchdogs`, `exclusions`, `docMappings` (descoberto em runtime) |
 | `.houndsman/exclusions.ts` | `EXCLUSION_PATTERNS` + `isExcluded` |
 | `.houndsman/doc-mappings.ts` | `DOC_MAPPINGS` (path → docs) |
 | `.houndsman/core/types.ts` | Snapshot gerado dos tipos + helpers (autocontido) |
-| `src/core/types.ts` | Tipos genéricos: `Severity`, `Rule`, `ReviewerDefinition`, `defineReviewer` |
-| `src/core/config.ts` | `ReviewConfig<TId>` + `defineReviewConfig` (contrato do motor) |
+| `src/core/types.ts` | Tipos genéricos: `Severity`, `Rule`, `WatchdogDefinition`, `defineWatchdog` |
+| `src/core/config.ts` | `HoundsmanConfig<TId>` + `defineHoundsmanConfig` (contrato do motor) |
 | `src/core/config-loader.ts` | Descoberta/carregamento de `houndsman.config.ts` |
 | `src/core/brief.ts` | Render do brief: `defaultRenderBrief` + `PROCEDURE` |
 | `src/core/registry-check.ts` | Validação anti-drift (config-driven) |
-| `src/skill/houndsman.md` | Orquestração + tabela de revisores |
+| `src/skill/houndsman.md` | Orquestração + tabela de watchdogs |
 | `src/tests/**` | Suíte da lib (project-agnóstica; usa `fixtures/fake-project.ts`) |
-| `src/cli/index.ts` | **CLI único** — `houndsman [context, setup, doctor, test, reviewer, --finalize]` |
+| `src/cli/index.ts` | **CLI único** — `houndsman [context, setup, doctor, test, watchdog, --finalize]` |
 
 > Todo o markdown canônico vive em `src/skill/` (fonte única). Os `SKILL.md` de cada harness
 > são apenas ponteiros — não duplicar conteúdo.
@@ -129,27 +129,27 @@ Regra que deve ser verificada automaticamente antes da revisão declara `jev`. �
 ```
 
 Não anotar todas as regras: o Jev custa uma chamada por arquivo. Reservar para as regras
-verificáveis por leitura local. Candidatos não confirmados pelo revisor **não bloqueiam**.
+verificáveis por leitura local. Candidatos não confirmados pelo watchdog **não bloqueiam**.
 
 ---
 
 ## Modo A — Ajuste pontual (pedido do usuário)
 
-1. **Interpretar o pedido** — extrair: qual regra, qual revisor, adicionar/alterar/remover.
-2. **Identificar o revisor** pelos paths de `classify` da camada de projeto. Em dúvida, perguntar.
+1. **Interpretar o pedido** — extrair: qual regra, qual watchdog, adicionar/alterar/remover.
+2. **Identificar o watchdog** pelos paths de `classify` da camada de projeto. Em dúvida, perguntar.
 3. **Provar no código** (Regra de Ouro):
    - `grep_search` pelo padrão real e pelo anti-padrão.
    - Determinar a **polaridade**: afirmativa (`Promover:` → exige presença; ausência = `UTOPIAN`) ou
      negativa (`Evitar:`/`Não`/`Nunca` → exige ausência; **0 ocorrências do anti-padrão = `ALIGNED`**).
    - Classificar: `ALIGNED`, `UTOPIAN`, `OUTDATED`, `MISCALIBRATED` ou `DEAD-PATH`.
    - Coletar a evidência (`file:line` afirmativa; `0 ocorrências via grep X` negativa).
-4. **Editar `.houndsman/reviewers/<id>.ts`** (`REVIEWER_DEFINITIONS[<id>]`):
+4. **Editar `.houndsman/watchdogs/<id>.ts`** (`WATCHDOG_DEFINITIONS[<id>]`):
    - `rules`: uma entrada `{ severity, text }` por regra — o texto começa com `Promover:` (DEVE) ou
      `Evitar:`/`Não`/`Nunca` (NÃO DEVE), conforme as Convenções de escrita.
    - `jev` (opcional): `{ kind: "noul" }`, com `instructions` e/ou `criteria` — ver seção acima.
    - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
-   - Se a regra muda para outro domínio (paths), ajustar o `classify` do revisor.
-5. **Revisor novo?** criar `.houndsman/reviewers/<id>.ts` e registrar em `.houndsman/reviewers/index.ts` (o id é derivado das chaves).
+   - Se a regra muda para outro domínio (paths), ajustar o `classify` do watchdog.
+5. **Watchdog novo?** criar `.houndsman/watchdogs/<id>.ts` e registrar em `.houndsman/watchdogs/index.ts` (o id é derivado das chaves).
 6. **Atualizar `src/skill/houndsman.md`/`README.md`** se escopo/regra visível mudou (no motor).
 7. **Atualizar a suíte da lib** se o comportamento do MOTOR mudou (a suíte é project-agnóstica).
 8. **Verificar** (seção abaixo).
@@ -158,18 +158,18 @@ verificáveis por leitura local. Candidatos não confirmados pelo revisor **não
 
 ## Modo B — Auditoria completa (revisão geral do código)
 
-Para alinhar **todos** os revisores de uma vez.
+Para alinhar **todos** os watchdogs de uma vez.
 
 1. **Fase 0 — Preparação.** Criar `.houndsman-audit/<slug>/` e copiar/adequar `AUDIT-PROTOCOL.md`.
-2. **Fase 1 — Auditoria por revisor (subagentes, 1 por revisor, em ondas paralelas).**
-   Cada subagente recebe: `REVIEWER_DEFINITIONS[<id>]` + `src/core/brief.ts` (`PROCEDURE`) +
+2. **Fase 1 — Auditoria por watchdog (subagentes, 1 por watchdog, em ondas paralelas).**
+   Cada subagente recebe: `WATCHDOG_DEFINITIONS[<id>]` + `src/core/brief.ts` (`PROCEDURE`) +
    fontes ground-truth do projeto (ex.: `AGENTS.md`, docs de arquitetura) + código real.
    Saída: `<slug>/<id>.md` com ground-truth do domínio + tabela regra × veredito × evidência × ação.
 3. **Fase 2 — Consolidação.** Merge em `audit-summary.md`; agrupar temas transversais; resolver
-   regras duplicadas entre revisores.
+   regras duplicadas entre watchdogs.
 4. **Fase 3 — Alinhamento com o usuário.** Apresentar remoções/correções borderline e obter
    aprovação **antes** de editar (regra utópica → remover; parcial → `suggestion`).
-5. **Fase 4 — Aplicar.** Editar `.houndsman/reviewers/*.ts` + `.houndsman/**` + `src/skill/**` + testes.
+5. **Fase 4 — Aplicar.** Editar `.houndsman/watchdogs/*.ts` + `.houndsman/**` + `src/skill/**` + testes.
 6. **Fase 5 — Verificar** (seção abaixo).
 
 > Detalhes de taxonomia, formato de relatório e evidência: `AUDIT-PROTOCOL.md`.
@@ -188,14 +188,14 @@ todos os itens — em especial: **geral/reutilizável** (não regra de negócio 
 
 ### Passos
 
-1. Inventariar todas as regras (`rules`) dos revisores alvo.
+1. Inventariar todas as regras (`rules`) dos watchdogs alvo.
 2. Marcar cada regra contra a rubrica; propor reescrita **preservando semântica e severidade**.
 3. Se for regra **afirmativa** ambígua **e não houver evidência de aplicação** no código,
    tratá-la como `UTOPIAN`/`OUTDATED` (remover/rebaixar) conforme a Regra de Ouro.
    Para regra **negativa**, a ausência de ocorrências é o **esperado** — não remover por isso.
-4. Aplicar em `.houndsman/reviewers/<id>.ts`; corrigir duplicatas/sobreposições.
+4. Aplicar em `.houndsman/watchdogs/<id>.ts`; corrigir duplicatas/sobreposições.
 5. Se o termo citado for do procedimento, ajustar `PROCEDURE`/`reviewFocus`/`exclude` em
-   `src/core/brief.ts` ou no revisor.
+   `src/core/brief.ts` ou no watchdog.
 6. Conferir que o `renderBrief` continua renderizando o texto da regra (dry-run abaixo).
 7. Verificar (seção abaixo).
 
@@ -215,8 +215,8 @@ Checklist final:
 - [ ] `bun run houndsman doctor` → sem problemas reportados.
 - [ ] `bun run houndsman test` → **0 fail**.
 - [ ] `ci:fix` + `ci:check` → exit 0 (warnings pré-existentes não contam).
-- [ ] `REVIEWER_DEFINITIONS[<id>].id` bate com a chave e `description` não vazio.
-- [ ] `src/skill/houndsman.md` continua consistente com os revisores do projeto.
+- [ ] `WATCHDOG_DEFINITIONS[<id>].id` bate com a chave e `description` não vazio.
+- [ ] `src/skill/houndsman.md` continua consistente com os watchdogs do projeto.
 - [ ] Toda regra nova/alterada tem **evidência** registrada no PR/relatório
       (`file:line` se afirmativa; `0 ocorrências do anti-padrão` se negativa).
 - [ ] Nenhuma regra **negativa** foi removida por "0 ocorrências" (Regra de Ouro).
@@ -226,5 +226,5 @@ Checklist final:
 
 ```bash
 # Dry-run: gerar briefs e conferir ausência de regras removidas
-bun -e "import { renderBrief } from 'houndsman'; import { REVIEWER_DEFINITIONS } from './.houndsman/reviewers'; const base={files:['x.ts'],branch:'t',outputPath:'o.json',docs:[],statuses:{},deleted:[]}; for (const id of Object.keys(REVIEWER_DEFINITIONS)) console.log(id, /verifySignature|circuit|saldo/i.test(renderBrief(REVIEWER_DEFINITIONS[id],{...base,reviewerId:id})) ? 'FOUND' : 'OK');"
+bun -e "import { renderBrief } from 'houndsman'; import { WATCHDOG_DEFINITIONS } from './.houndsman/watchdogs'; const base={files:['x.ts'],branch:'t',outputPath:'o.json',docs:[],statuses:{},deleted:[]}; for (const id of Object.keys(WATCHDOG_DEFINITIONS)) console.log(id, /verifySignature|circuit|saldo/i.test(renderBrief(WATCHDOG_DEFINITIONS[id],{...base,watchdogId:id})) ? 'FOUND' : 'OK');"
 ```

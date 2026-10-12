@@ -5,7 +5,7 @@
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";
-import { type ReviewConfig, resolveArtifactDir } from "../config";
+import { type HoundsmanConfig, resolveArtifactDir } from "../config";
 import {
 	type ContextPaths,
 	collectPrContext,
@@ -22,7 +22,7 @@ export type ContextRunResult = {
 
 /** Coleta a PR atual e grava `context.json` + `context-brief.md`. */
 export function runContextCommand(
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 	opts: { branch?: string; dir?: string } = {},
 ): ContextRunResult {
 	const branch = opts.branch ?? currentBranch();

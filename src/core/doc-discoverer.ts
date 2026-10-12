@@ -3,13 +3,13 @@
  * (biblioteca). Entrypoint: `cli/review.ts`.
  *
  * Os mapeamentos (`docMappings`) e os docs sempre incluídos vivem no projeto
- * (`project/doc-mappings.ts`) e chegam via `ReviewConfig`.
+ * (`project/doc-mappings.ts`) e chegam via `HoundsmanConfig`.
  */
 
-import { DEFAULT_ALWAYS_INCLUDE_DOCS, type ReviewConfig } from "./config";
+import { DEFAULT_ALWAYS_INCLUDE_DOCS, type HoundsmanConfig } from "./config";
 
 /** Descobre docs relevantes com base nos paths + docs sempre incluídos. */
-export function discoverDocs(filePaths: string[], config: ReviewConfig): string[] {
+export function discoverDocs(filePaths: string[], config: HoundsmanConfig): string[] {
 	const docs = new Set<string>();
 
 	for (const doc of config.alwaysIncludeDocs ?? DEFAULT_ALWAYS_INCLUDE_DOCS) {

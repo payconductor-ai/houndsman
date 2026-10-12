@@ -3,14 +3,14 @@
  *
  * Um candidato NÃO é um achado: é um indício com confiança calibrada, injetado
  * nos briefs para o subagente **confirmar ou refutar**. A severidade/validação
- * final continua sendo do revisor (LLM) ou humano.
+ * final continua sendo do watchdog (LLM) ou humano.
  */
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { SEVERITY_ORDER, type Severity } from "../types";
 
 export type JevCandidate = {
-	reviewerId: string;
+	watchdogId: string;
 	/** Descrição da regra (deve ser usada como `rule` se confirmada). */
 	rule: string;
 	severity: Severity;
@@ -48,11 +48,11 @@ export class JevCandidatesStore {
 
 	private readonly filePath: string;
 	/** Ids válidos (null = sem filtro por id). */
-	private readonly reviewerIdSet: Set<string> | null;
+	private readonly watchdogIdSet: Set<string> | null;
 
 	constructor(filePath: string, validIds: readonly string[] = []) {
 		this.filePath = filePath;
-		this.reviewerIdSet = validIds.length > 0 ? new Set(validIds) : null;
+		this.watchdogIdSet = validIds.length > 0 ? new Set(validIds) : null;
 	}
 
 	/** Grava o `candidates.json` (sempre com candidatos válidos apenas). */
@@ -92,8 +92,8 @@ export class JevCandidatesStore {
 		if (typeof value !== "object" || value === null) return false;
 		const c = value as Record<string, unknown>;
 		return (
-			typeof c.reviewerId === "string" &&
-			(this.reviewerIdSet === null || this.reviewerIdSet.has(c.reviewerId)) &&
+			typeof c.watchdogId === "string" &&
+			(this.watchdogIdSet === null || this.watchdogIdSet.has(c.watchdogId)) &&
 			typeof c.rule === "string" &&
 			typeof c.severity === "string" &&
 			SEVERITY_SET.has(c.severity) &&

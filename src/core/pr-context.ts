@@ -10,7 +10,7 @@
  *   context-brief.md  instruções para o subagente resumir o contexto
  *
  * O subagente lê o brief e grava `context-summary.json`, consumido pelo
- * orchestrator (briefs dos revisores + relatório final).
+ * orchestrator (briefs dos watchdogs + relatório final).
  */
 
 import { existsSync, readFileSync } from "node:fs";

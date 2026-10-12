@@ -1,8 +1,8 @@
 /**
  * Subcomando `setup` — cria a configuração inicial do houndsman no projeto.
  *
- * Gera a camada `.houndsman/`: arquivos do usuário (config, revisores, exclusões,
- * mapeamentos) + arquivos auto-gerados (tipos, skill, `.runs/.gitignore`,
+ * Gera a camada `.houndsman/`: arquivos do usuário (config, watchdogs, exclusões,
+ * mapeamentos) + arquivos auto-gerados (tipos, skill, `.houndsman/.gitignore`,
  * ponteiros de harness). O `houndsman update` sincroniza só os auto-gerados.
  *
  * A camada é **autocontida** — não importa o pacote `houndsman` em runtime, o que
@@ -68,7 +68,7 @@ export async function runSetupCommand(options: SetupOptions): Promise<void> {
 	for (const path of ctx.generated) console.log(`  ~ ${path} (auto)`);
 
 	console.log("\nPróximos passos:");
-	console.log("  1. Ajuste `houndsman.config.ts` e `.houndsman/reviewers/`.");
+	console.log("  1. Ajuste `houndsman.config.ts` e `.houndsman/watchdogs/`.");
 	console.log("  2. Valide: bun run houndsman doctor");
 	console.log("  3. Prepare a revisão: bun run houndsman");
 	console.log("  ·  Sincronizar arquivos auto-gerados: bun run houndsman update");

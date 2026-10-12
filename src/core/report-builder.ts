@@ -1,19 +1,19 @@
 /**
- * Consolidação dos relatórios JSON dos revisores em um markdown (biblioteca).
+ * Consolidação dos relatórios JSON dos watchdogs em um markdown (biblioteca).
  *
  * Entrypoint: `cli/review.ts` (via `core/orchestrator.ts`). Deduplica achados
  * por (file, line, rule), agrupa por severidade e renderiza a tabela de cobertura.
  *
- * Schema dos revisores: asset `OUTPUT-FORMAT.md` (embarcado em `src/skill/`).
+ * Schema dos watchdogs: asset `OUTPUT-FORMAT.md` (embarcado em `src/skill/`).
  */
 
 import type { JevCandidate } from "./jev";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity, severityRank } from "./types";
 
-/** Resolve o nome legível de um revisor (default: identidade). */
-export type ReviewerNameResolver = (reviewerId: string) => string;
+/** Resolve o nome legível de um watchdog (default: identidade). */
+export type WatchdogNameResolver = (watchdogId: string) => string;
 
-const identityName: ReviewerNameResolver = (id) => id;
+const identityName: WatchdogNameResolver = (id) => id;
 
 export type Finding = {
 	rule: string;
@@ -25,16 +25,16 @@ export type Finding = {
 	evidence?: string;
 };
 
-export type ReviewerReport = {
-	reviewerId: string;
+export type WatchdogReport = {
+	watchdogId: string;
 	reviewedFiles: string[];
 	skipped: string[];
 	findings: Finding[];
 };
 
-/** Achado deduplicado, com todos os revisores que o apontaram. */
+/** Achado deduplicado, com todos os watchdogs que o apontaram. */
 export type MergedFinding = Finding & {
-	reviewers: string[];
+	watchdogs: string[];
 };
 
 /** Resumo do contexto da PR (objetivo/motivação/resumo das alterações), gravado pelo subagente. */
@@ -56,7 +56,7 @@ const VALID_SEVERITIES = new Set<string>(SEVERITY_ORDER);
 
 /**
  * Limites do resumo da PR: mantém o relatório e os briefs enxutos — evita
- * confundir o revisor humano e estourar o contexto da IA revisora.
+ * confundir o watchdog humano e estourar o contexto da IA watchdog.
  */
 const CONTEXT_LIMITS = {
 	objective: 200,
@@ -99,14 +99,14 @@ function isFinding(value: unknown): value is Finding {
 }
 
 /** Valida e normaliza um relatório. Retorna null se inválido. */
-export function parseReviewerReport(raw: unknown, source: string): ReviewerReport | null {
+export function parseWatchdogReport(raw: unknown, source: string): WatchdogReport | null {
 	if (typeof raw !== "object" || raw === null) {
 		console.error(`[report-builder] ${source}: não é um objeto JSON`);
 		return null;
 	}
 	const obj = raw as Record<string, unknown>;
-	if (typeof obj.reviewerId !== "string") {
-		console.error(`[report-builder] ${source}: campo 'reviewerId' ausente`);
+	if (typeof obj.watchdogId !== "string") {
+		console.error(`[report-builder] ${source}: campo 'watchdogId' ausente`);
 		return null;
 	}
 	if (!Array.isArray(obj.findings)) {
@@ -123,7 +123,7 @@ export function parseReviewerReport(raw: unknown, source: string): ReviewerRepor
 	});
 
 	return {
-		reviewerId: obj.reviewerId,
+		watchdogId: obj.watchdogId,
 		reviewedFiles: Array.isArray(obj.reviewedFiles)
 			? (obj.reviewedFiles as string[])
 			: [],
@@ -136,7 +136,7 @@ export function parseReviewerReport(raw: unknown, source: string): ReviewerRepor
  * Valida/normaliza o `context-summary.json` do subagente de contexto.
  * Retorna null se indisponível ou sem conteúdo útil — a seção é omitida.
  * Aplica limites de tamanho: o resumo precisa ser curto para não confundir o
- * revisor humano nem estourar o contexto da IA revisora (briefs + relatório).
+ * watchdog humano nem estourar o contexto da IA watchdog (briefs + relatório).
  */
 export function parseContextSummary(raw: unknown): ContextSummary | null {
 	if (typeof raw !== "object" || raw === null) return null;
@@ -168,16 +168,16 @@ export function parseContextSummary(raw: unknown): ContextSummary | null {
 	return { available: true, source, objective, motivation, changeSummary };
 }
 
-/** Deduplica achados por (file, line, rule), mesclando atribuição de revisores. */
-export function dedupeFindings(reports: ReviewerReport[]): MergedFinding[] {
+/** Deduplica achados por (file, line, rule), mesclando atribuição de watchdogs. */
+export function dedupeFindings(reports: WatchdogReport[]): MergedFinding[] {
 	const map = new Map<string, MergedFinding>();
 	for (const report of reports) {
 		for (const finding of report.findings) {
 			const key = `${finding.file}|${finding.line ?? ""}|${finding.rule}`;
 			const existing = map.get(key);
 			if (existing) {
-				if (!existing.reviewers.includes(report.reviewerId)) {
-					existing.reviewers.push(report.reviewerId);
+				if (!existing.watchdogs.includes(report.watchdogId)) {
+					existing.watchdogs.push(report.watchdogId);
 				}
 				// Mantém a versão de maior severidade (severidade + detalhes)
 				if (severityRank(finding.severity) < severityRank(existing.severity)) {
@@ -188,7 +188,7 @@ export function dedupeFindings(reports: ReviewerReport[]): MergedFinding[] {
 				}
 				continue;
 			}
-			map.set(key, { ...finding, reviewers: [report.reviewerId] });
+			map.set(key, { ...finding, watchdogs: [report.watchdogId] });
 		}
 	}
 	return [...map.values()].sort((a, b) => {
@@ -199,15 +199,15 @@ export function dedupeFindings(reports: ReviewerReport[]): MergedFinding[] {
 	});
 }
 
-function reviewerName(nameOf: ReviewerNameResolver, id: string): string {
+function watchdogName(nameOf: WatchdogNameResolver, id: string): string {
 	return nameOf(id);
 }
 
-function renderFinding(finding: MergedFinding, nameOf: ReviewerNameResolver): string[] {
+function renderFinding(finding: MergedFinding, nameOf: WatchdogNameResolver): string[] {
 	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-	const reviewers = finding.reviewers.map((r) => reviewerName(nameOf, r)).join(", ");
+	const watchdogs = finding.watchdogs.map((r) => watchdogName(nameOf, r)).join(", ");
 	const lines = [
-		`- **${finding.rule}** — \`${location}\` · _${reviewers}_`,
+		`- **${finding.rule}** — \`${location}\` · _${watchdogs}_`,
 		`  ${finding.message}`,
 		`  **Ação:** ${finding.action}`,
 	];
@@ -219,18 +219,18 @@ function renderFinding(finding: MergedFinding, nameOf: ReviewerNameResolver): st
 }
 
 function renderCoverage(
-	reports: ReviewerReport[],
+	reports: WatchdogReport[],
 	coverage: { classified?: Record<string, string[]> },
-	nameOf: ReviewerNameResolver,
+	nameOf: WatchdogNameResolver,
 ): string[] {
 	const lines = [
 		"## Cobertura",
 		"",
-		"| Revisor | Arquivos revisados | Findings |",
+		"| Watchdog | Arquivos revisados | Findings |",
 		"|---|---|---|",
 	];
 	for (const report of reports) {
-		const expected = coverage.classified?.[report.reviewerId];
+		const expected = coverage.classified?.[report.watchdogId];
 		const reviewed = new Set(report.reviewedFiles);
 		const pending = expected ? expected.filter((f) => !reviewed.has(f)) : [];
 		const reviewedLabel =
@@ -238,14 +238,14 @@ function renderCoverage(
 				? `${report.reviewedFiles.length}/${expected.length} (faltam ${pending.length})`
 				: `${report.reviewedFiles.length}`;
 		lines.push(
-			`| ${reviewerName(nameOf, report.reviewerId)} | ${reviewedLabel} | ${report.findings.length} |`,
+			`| ${watchdogName(nameOf, report.watchdogId)} | ${reviewedLabel} | ${report.findings.length} |`,
 		);
 	}
 	lines.push("");
 	return lines;
 }
 
-/** Candidatos Jev não confirmados por nenhum revisor — revisão manual, não bloqueiam. */
+/** Candidatos Jev não confirmados por nenhum watchdog — revisão manual, não bloqueiam. */
 function renderUnconfirmedCandidates(
 	candidates: JevCandidate[],
 	merged: MergedFinding[],
@@ -256,12 +256,12 @@ function renderUnconfirmedCandidates(
 	const lines = [
 		"## 🔎 Candidatos não verificados (Jev)",
 		"",
-		"> Indícios automáticos que nenhum revisor confirmou. Revise manualmente — não bloqueiam.",
+		"> Indícios automáticos que nenhum watchdog confirmou. Revise manualmente — não bloqueiam.",
 		"",
 	];
 	for (const c of pending) {
 		lines.push(
-			`- \`${c.file}\` · **${c.severity}** · confiança ${c.confidence.toFixed(2)} · _${c.reviewerId}_`,
+			`- \`${c.file}\` · **${c.severity}** · confiança ${c.confidence.toFixed(2)} · _${c.watchdogId}_`,
 			`  ${c.rule}`,
 			"",
 		);
@@ -307,12 +307,12 @@ function renderContext(context: ContextSummary): string[] {
 
 export function renderReport(
 	branch: string,
-	reports: ReviewerReport[],
+	reports: WatchdogReport[],
 	merged: MergedFinding[],
 	coverage: { classified?: Record<string, string[]> },
 	context?: ContextSummary | null,
 	candidates?: JevCandidate[],
-	nameOf: ReviewerNameResolver = identityName,
+	nameOf: WatchdogNameResolver = identityName,
 ): string {
 	const now = new Date().toISOString().slice(0, 10);
 	const counts = {
@@ -326,7 +326,7 @@ export function renderReport(
 		`# PR Review — ${branch}`,
 		"",
 		`**Data:** ${now}`,
-		`**Revisores ativos:** ${reports.map((r) => r.reviewerId).join(", ") || "—"}`,
+		`**Watchdogs ativos:** ${reports.map((r) => r.watchdogId).join(", ") || "—"}`,
 		`**Achados:** ${counts.blocking} bloqueantes · ${counts.attention} atenção · ${counts.suggestion} sugestões · ${counts.nit} nits`,
 		"",
 	];

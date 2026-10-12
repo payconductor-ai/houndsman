@@ -1,7 +1,7 @@
 {
 	"name": "houndsman",
 	"version": "0.1.0",
-	"description": "Orquestrador de revisão de Pull Requests: classifica o diff, despacha revisores especializados por domínio e consolida o relatório.",
+	"description": "Orquestrador de revisão de Pull Requests: classifica o diff, despacha watchdogs especializados por domínio e consolida o relatório.",
 	"type": "module",
 	"license": "MIT",
 	"bin": {

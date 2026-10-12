@@ -1,18 +1,18 @@
 /**
- * Deriva perguntas Jev (tipadas) a partir das regras do `REVIEWER_DEFINITIONS`.
+ * Deriva perguntas Jev (tipadas) a partir das regras do `WATCHDOG_DEFINITIONS`.
  *
  * Fonte única de verdade: o registry. Uma regra só gera pergunta se tiver a
  * spec Jev (campo opcional `jev` de `Rule`). Assim não há lista paralela para
  * sincronizar — alterar a regra no registry altera a pergunta.
  */
 
-import type { ReviewerMeta, Rule, Severity } from "../types";
+import type { Rule, Severity, WatchdogMeta } from "../types";
 import type { JevQuestion, JevRuleSpec } from "./jev-types";
 
 export type DerivedQuestion = {
-	/** Chave estável da pergunta (`<reviewerId>::<bucket>-<índice>`). */
+	/** Chave estável da pergunta (`<watchdogId>::<bucket>-<índice>`). */
 	key: string;
-	reviewerId: string;
+	watchdogId: string;
 	severity: Severity;
 	/** Descrição original da regra (usada como `rule` no achado confirmado). */
 	rule: string;
@@ -22,13 +22,13 @@ export type DerivedQuestion = {
 /**
  * Converte regras do registry em perguntas tipadas para a API.
  *
- * Encapsula toda a lógica de conversão/derivação. O registry (revisores) é
- * injetado via `ReviewConfig`, permitindo testes sem tocar no registry real.
+ * Encapsula toda a lógica de conversão/derivação. O registry (watchdogs) é
+ * injetado via `HoundsmanConfig`, permitindo testes sem tocar no registry real.
  */
 export class JevQuestionFactory {
-	private readonly registry: Record<string, ReviewerMeta>;
+	private readonly registry: Record<string, WatchdogMeta>;
 
-	constructor(registry: Record<string, ReviewerMeta>) {
+	constructor(registry: Record<string, WatchdogMeta>) {
 		this.registry = registry;
 	}
 
@@ -51,9 +51,9 @@ export class JevQuestionFactory {
 		return { type: "score", instructions, criteria: spec.criteria };
 	}
 
-	/** Perguntas derivadas das regras de um revisor (`rules`). */
-	derive(reviewerId: string): DerivedQuestion[] {
-		const meta = this.registry[reviewerId];
+	/** Perguntas derivadas das regras de um watchdog (`rules`). */
+	derive(watchdogId: string): DerivedQuestion[] {
+		const meta = this.registry[watchdogId];
 		if (!meta) return [];
 
 		const out: DerivedQuestion[] = [];
@@ -63,8 +63,8 @@ export class JevQuestionFactory {
 			const question = this.fromSpec(rule.text, spec);
 			if (!question) return;
 			out.push({
-				key: `${reviewerId}::rule-${index}`,
-				reviewerId,
+				key: `${watchdogId}::rule-${index}`,
+				watchdogId,
 				severity: rule.severity,
 				rule: rule.text,
 				question,
@@ -73,9 +73,9 @@ export class JevQuestionFactory {
 		return out;
 	}
 
-	/** Perguntas derivadas para um conjunto de revisores. */
-	build(reviewerIds: readonly string[]): DerivedQuestion[] {
-		return reviewerIds.flatMap((id) => this.derive(id));
+	/** Perguntas derivadas para um conjunto de watchdogs. */
+	build(watchdogIds: readonly string[]): DerivedQuestion[] {
+		return watchdogIds.flatMap((id) => this.derive(id));
 	}
 
 	/**

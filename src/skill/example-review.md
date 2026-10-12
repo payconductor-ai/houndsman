@@ -1,7 +1,7 @@
 # PR Review — feature/add-webhook-retry
 
 **Data:** 2026-04-20
-**Revisores ativos:** api-contracts, backend-architecture, payments-integrations, acquirer-integrations
+**Watchdogs ativos:** api-contracts, backend-architecture, payments-integrations, acquirer-integrations
 **Achados:** 2 bloqueantes · 1 atenção · 1 sugestões · 1 nit
 
 ## Contexto da PR
@@ -45,7 +45,7 @@
 
 ## Cobertura
 
-| Revisor | Arquivos revisados | Findings |
+| Watchdog | Arquivos revisados | Findings |
 |---|---|---|
 | API & Contratos | 2 | 0 |
 | Arquitetura Backend | 3 | 1 |

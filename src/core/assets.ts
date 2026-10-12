@@ -11,7 +11,7 @@ import { join } from "node:path";
 /** Diretório de assets markdown embarcados no pacote. */
 export const SKILL_DIR = join(import.meta.dir, "..", "skill");
 
-/** Nome do arquivo de schema de output dos revisores. */
+/** Nome do arquivo de schema de output dos watchdogs. */
 export const OUTPUT_FORMAT_FILE = "OUTPUT-FORMAT.md";
 
 /** Caminho absoluto de um asset embarcado em `src/skill/`. */

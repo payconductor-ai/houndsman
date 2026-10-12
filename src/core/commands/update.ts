@@ -3,7 +3,7 @@
  *
  * Reescreve `core/types.ts`, `core/skill/*.md`, `.houndsman/.gitignore` e os
  * ponteiros de skill dos harnesses. Nunca toca nos arquivos do usuário
- * (`reviewers/`, `doc-mappings.ts`, `exclusions.ts`, `houndsman.config.ts`).
+ * (`watchdogs/`, `doc-mappings.ts`, `exclusions.ts`, `houndsman.config.ts`).
  */
 
 import { createScaffoldContext, syncGeneratedFiles } from "./scaffold";
@@ -25,6 +25,6 @@ export async function runUpdateCommand(options: UpdateOptions): Promise<void> {
 
 	console.log("\nArquivos do usuário não foram tocados:");
 	console.log(
-		"  .houndsman/reviewers/ · exclusions.ts · doc-mappings.ts · houndsman.config.ts",
+		"  .houndsman/watchdogs/ · exclusions.ts · doc-mappings.ts · houndsman.config.ts",
 	);
 }

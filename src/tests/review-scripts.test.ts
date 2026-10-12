@@ -5,13 +5,13 @@ import { join } from "node:path";
 import type { AxiosInstance } from "axios";
 import { renderBrief } from "../core/brief";
 import { parseReviewArgs } from "../core/commands/review";
-import { renderReviewerContext } from "../core/commands/reviewer";
+import { renderWatchdogContext } from "../core/commands/watchdog";
 import { discoverDocs } from "../core/doc-discoverer";
 import {
 	type ClassificationResult,
 	classifyEntries,
 	isExcludedPath,
-	matchReviewers,
+	matchWatchdogs,
 	parseEntries,
 } from "../core/file-classifier";
 import {
@@ -26,36 +26,36 @@ import { checkRegistry } from "../core/registry-check";
 import {
 	dedupeFindings,
 	parseContextSummary,
-	parseReviewerReport,
-	type ReviewerReport,
+	parseWatchdogReport,
 	renderReport,
 	sanitizeBranch,
+	type WatchdogReport,
 } from "../core/report-builder";
-import { findReviewer, getReviewerContext } from "../core/reviewer-registry";
-import type { ReviewerMeta } from "../core/types";
-import { defineReviewer } from "../core/types";
+import type { WatchdogMeta } from "../core/types";
+import { defineWatchdog } from "../core/types";
+import { findWatchdog, getWatchdogContext } from "../core/watchdog-registry";
 
 import {
-	alphaReviewer,
-	FAKE_REVIEWER_DEFINITIONS,
-	fakeReviewConfig,
+	alphaWatchdog,
+	FAKE_WATCHDOG_DEFINITIONS,
+	fakeHoundsmanConfig,
 } from "./fixtures/fake-project";
 
 /** Registry do projeto fake, para injetar nos helpers genéricos. */
-const REGISTRY = FAKE_REVIEWER_DEFINITIONS as Record<string, ReviewerMeta>;
+const REGISTRY = FAKE_WATCHDOG_DEFINITIONS as Record<string, WatchdogMeta>;
 
 // ---------------------------------------------------------------------------
 // Config / registry
 // ---------------------------------------------------------------------------
 
 describe("config", () => {
-	test("deriva reviewerIds das chaves de reviewers", () => {
-		expect(fakeReviewConfig.reviewerIds).toEqual(["alpha", "beta"]);
+	test("deriva watchdogIds das chaves de watchdogs", () => {
+		expect(fakeHoundsmanConfig.watchdogIds).toEqual(["alpha", "beta"]);
 	});
 
-	test("todo revisor tem metadados completos", () => {
-		for (const id of fakeReviewConfig.reviewerIds) {
-			const def = fakeReviewConfig.reviewers[id];
+	test("todo watchdog tem metadados completos", () => {
+		for (const id of fakeHoundsmanConfig.watchdogIds) {
+			const def = fakeHoundsmanConfig.watchdogs[id];
 			expect(def.name.length).toBeGreaterThan(0);
 			expect(def.scope.length).toBeGreaterThan(0);
 			expect(def.rules.length).toBeGreaterThan(0);
@@ -63,13 +63,13 @@ describe("config", () => {
 		}
 	});
 
-	test("findReviewer resolve por id e devolve null p/ inexistente", () => {
-		expect(findReviewer(fakeReviewConfig, "alpha")?.name).toBe("Alpha");
-		expect(findReviewer(fakeReviewConfig, "nao-existe")).toBeNull();
+	test("findWatchdog resolve por id e devolve null p/ inexistente", () => {
+		expect(findWatchdog(fakeHoundsmanConfig, "alpha")?.name).toBe("Alpha");
+		expect(findWatchdog(fakeHoundsmanConfig, "nao-existe")).toBeNull();
 	});
 
-	test("getReviewerContext expõe metadados sem regras", () => {
-		const ctx = getReviewerContext(fakeReviewConfig, "beta");
+	test("getWatchdogContext expõe metadados sem regras", () => {
+		const ctx = getWatchdogContext(fakeHoundsmanConfig, "beta");
 		expect(ctx.id).toBe("beta");
 		expect(ctx.contextFiles).toContain("README.md");
 		expect("rules" in ctx).toBe(false);
@@ -82,22 +82,22 @@ describe("config", () => {
 
 describe("registry-check", () => {
 	test("config fake é consistente (0 problemas)", () => {
-		const { problems } = checkRegistry(fakeReviewConfig);
+		const { problems } = checkRegistry(fakeHoundsmanConfig);
 		expect(problems).toEqual([]);
 	});
 
-	test("falha quando um revisor não declara 'classify'", () => {
-		const broken = { ...alphaReviewer, classify: undefined };
+	test("falha quando um watchdog não declara 'classify'", () => {
+		const broken = { ...alphaWatchdog, classify: undefined };
 		const config = {
-			...fakeReviewConfig,
-			reviewers: { ...fakeReviewConfig.reviewers, alpha: broken },
+			...fakeHoundsmanConfig,
+			watchdogs: { ...fakeHoundsmanConfig.watchdogs, alpha: broken },
 		};
-		const { problems } = checkRegistry(config as typeof fakeReviewConfig);
+		const { problems } = checkRegistry(config as typeof fakeHoundsmanConfig);
 		expect(problems.some((p) => p.includes("'alpha'"))).toBe(true);
 	});
 
 	test("regra sem polaridade explícita gera aviso (não problema)", () => {
-		const { problems, warnings } = checkRegistry(fakeReviewConfig);
+		const { problems, warnings } = checkRegistry(fakeHoundsmanConfig);
 		expect(problems).toEqual([]);
 		expect(warnings.length).toBeGreaterThan(0);
 		expect(warnings.some((w) => w.includes("polaridade"))).toBe(true);
@@ -105,11 +105,11 @@ describe("registry-check", () => {
 
 	test("regras com 'Promover:'/'Evitar:'/'Não'/'Nunca' não geram aviso", () => {
 		const config = {
-			...fakeReviewConfig,
-			reviewers: {
-				...fakeReviewConfig.reviewers,
+			...fakeHoundsmanConfig,
+			watchdogs: {
+				...fakeHoundsmanConfig.watchdogs,
 				alpha: {
-					...alphaReviewer,
+					...alphaWatchdog,
 					rules: [
 						{
 							severity: "blocking" as const,
@@ -125,7 +125,7 @@ describe("registry-check", () => {
 				},
 			},
 		};
-		const { warnings } = checkRegistry(config as typeof fakeReviewConfig);
+		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
 		expect(warnings).toEqual([]);
 	});
 });
@@ -162,132 +162,135 @@ describe("parseEntries", () => {
 	});
 });
 
-describe("matchReviewers", () => {
-	test("une os revisores cujo classify casa", () => {
+describe("matchWatchdogs", () => {
+	test("une os watchdogs cujo classify casa", () => {
 		expect(
-			matchReviewers(
+			matchWatchdogs(
 				"src/alpha/x.ts",
-				fakeReviewConfig.reviewers,
-				fakeReviewConfig.reviewerIds,
+				fakeHoundsmanConfig.watchdogs,
+				fakeHoundsmanConfig.watchdogIds,
 			),
 		).toEqual(["alpha"]);
 	});
 
 	test("casa por padrão de nome de arquivo (sem casar sufixos)", () => {
 		expect(
-			matchReviewers(
+			matchWatchdogs(
 				"lib/special.ts",
-				fakeReviewConfig.reviewers,
-				fakeReviewConfig.reviewerIds,
+				fakeHoundsmanConfig.watchdogs,
+				fakeHoundsmanConfig.watchdogIds,
 			),
 		).toEqual(["beta"]);
 		expect(
-			matchReviewers(
+			matchWatchdogs(
 				"lib/special-extra.ts",
-				fakeReviewConfig.reviewers,
-				fakeReviewConfig.reviewerIds,
+				fakeHoundsmanConfig.watchdogs,
+				fakeHoundsmanConfig.watchdogIds,
 			),
 		).toEqual([]);
 	});
 
 	test("casa pelo conteúdo do arquivo quando type é 'content'", () => {
-		const probe = defineReviewer({
+		const probe = defineWatchdog({
 			id: "probe",
 			name: "Probe",
-			description: "Revisor por conteúdo.",
+			description: "Watchdog por conteúdo.",
 			scope: "qualquer arquivo",
 			classify: [{ type: "content", value: "NEEDLE" }],
 			rules: [],
 			contextFiles: [],
 		});
-		const reviewers = { probe };
+		const watchdogs = { probe };
 
-		expect(matchReviewers("any/file.ts", reviewers, ["probe"], "// NEEDLE")).toEqual([
+		expect(matchWatchdogs("any/file.ts", watchdogs, ["probe"], "// NEEDLE")).toEqual([
 			"probe",
 		]);
-		expect(matchReviewers("any/file.ts", reviewers, ["probe"], "sem alvo")).toEqual(
+		expect(matchWatchdogs("any/file.ts", watchdogs, ["probe"], "sem alvo")).toEqual(
 			[],
 		);
 		// Sem conteúdo (arquivo não lido) a regra de conteúdo não casa.
-		expect(matchReviewers("any/file.ts", reviewers, ["probe"])).toEqual([]);
+		expect(matchWatchdogs("any/file.ts", watchdogs, ["probe"])).toEqual([]);
 	});
 
-	test("arquivo sem padrão não casa nenhum revisor", () => {
+	test("arquivo sem padrão não casa nenhum watchdog", () => {
 		expect(
-			matchReviewers(
+			matchWatchdogs(
 				"scripts/foo.ts",
-				fakeReviewConfig.reviewers,
-				fakeReviewConfig.reviewerIds,
+				fakeHoundsmanConfig.watchdogs,
+				fakeHoundsmanConfig.watchdogIds,
 			),
 		).toEqual([]);
 	});
 });
 
 describe("classifyEntries", () => {
-	test("atribui ao revisor dono do padrão", () => {
+	test("atribui ao watchdog dono do padrão", () => {
 		const result = classifyEntries(
 			parseEntries("M\tsrc/alpha/x.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
-		expect(result.reviewers.alpha).toEqual(["src/alpha/x.ts"]);
+		expect(result.watchdogs.alpha).toEqual(["src/alpha/x.ts"]);
 	});
 
-	test("arquivo de teste casa o revisor de testes", () => {
+	test("arquivo de teste casa o watchdog de testes", () => {
 		const result = classifyEntries(
 			parseEntries("M\tsrc/beta/x.test.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
-		expect(result.reviewers.beta).toEqual(["src/beta/x.test.ts"]);
+		expect(result.watchdogs.beta).toEqual(["src/beta/x.test.ts"]);
 	});
 
 	test("arquivo sem match fica unclassified (sem fallback)", () => {
 		const scripts = classifyEntries(
 			parseEntries("M\tscripts/foo.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(scripts.unclassified).toEqual(["scripts/foo.ts"]);
 
 		const gamma = classifyEntries(
 			parseEntries("M\tsrc/gamma/x.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(gamma.unclassified).toEqual(["src/gamma/x.ts"]);
 	});
 
 	test("casa por padrão de nome de arquivo", () => {
-		const hit = classifyEntries(parseEntries("M\tlib/special.ts"), fakeReviewConfig);
-		expect(hit.reviewers.beta).toEqual(["lib/special.ts"]);
+		const hit = classifyEntries(
+			parseEntries("M\tlib/special.ts"),
+			fakeHoundsmanConfig,
+		);
+		expect(hit.watchdogs.beta).toEqual(["lib/special.ts"]);
 
 		const miss = classifyEntries(
 			parseEntries("M\tlib/special-extra.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(miss.unclassified).toEqual(["lib/special-extra.ts"]);
 	});
 
-	test("excluídos não entram em reviewers", () => {
+	test("excluídos não entram em watchdogs", () => {
 		const result = classifyEntries(
 			parseEntries("M\tdist/x.js\nM\tsrc/alpha/y.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(result.excluded).toEqual(["dist/x.js"]);
-		expect(result.reviewers.alpha).toEqual(["src/alpha/y.ts"]);
+		expect(result.watchdogs.alpha).toEqual(["src/alpha/y.ts"]);
 	});
 
-	test("deletados não entram em reviewers mas ficam em deleted", () => {
+	test("deletados não entram em watchdogs mas ficam em deleted", () => {
 		const result = classifyEntries(
 			parseEntries("D\tsrc/alpha/old.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(result.deleted).toEqual(["src/alpha/old.ts"]);
-		expect(result.reviewers.alpha).toBeUndefined();
+		expect(result.watchdogs.alpha).toBeUndefined();
 		expect(result.files["src/alpha/old.ts"]).toEqual({ status: "deleted" });
 	});
 
-	test("stats refletem o número de arquivos por reviewer", () => {
+	test("stats refletem o número de arquivos por watchdog", () => {
 		const result = classifyEntries(
 			parseEntries("M\tsrc/alpha/a.ts\nM\tsrc/alpha/b.ts"),
-			fakeReviewConfig,
+			fakeHoundsmanConfig,
 		);
 		expect(result.stats.alpha).toBe(2);
 	});
@@ -295,9 +298,11 @@ describe("classifyEntries", () => {
 
 describe("isExcludedPath", () => {
 	test("casa os padrões de exclusão", () => {
-		expect(isExcludedPath("dist/x.js", fakeReviewConfig.exclusions)).toBe(true);
-		expect(isExcludedPath("bun.lock", fakeReviewConfig.exclusions)).toBe(true);
-		expect(isExcludedPath("src/alpha/x.ts", fakeReviewConfig.exclusions)).toBe(false);
+		expect(isExcludedPath("dist/x.js", fakeHoundsmanConfig.exclusions)).toBe(true);
+		expect(isExcludedPath("bun.lock", fakeHoundsmanConfig.exclusions)).toBe(true);
+		expect(isExcludedPath("src/alpha/x.ts", fakeHoundsmanConfig.exclusions)).toBe(
+			false,
+		);
 	});
 });
 
@@ -307,11 +312,15 @@ describe("isExcludedPath", () => {
 
 describe("discoverDocs", () => {
 	test("sempre inclui os docs de alwaysIncludeDocs", () => {
-		expect(discoverDocs(["src/alpha/x.ts"], fakeReviewConfig)).toContain("README.md");
+		expect(discoverDocs(["src/alpha/x.ts"], fakeHoundsmanConfig)).toContain(
+			"README.md",
+		);
 	});
 
 	test("aplica os docMappings do projeto", () => {
-		expect(discoverDocs(["src/beta/y.ts"], fakeReviewConfig)).toContain("README.md");
+		expect(discoverDocs(["src/beta/y.ts"], fakeHoundsmanConfig)).toContain(
+			"README.md",
+		);
 	});
 });
 
@@ -326,10 +335,10 @@ describe("report-builder", () => {
 		expect(sanitizeBranch("main")).toBe("main");
 	});
 
-	test("parseReviewerReport rejeita severidade inválida", () => {
-		const report = parseReviewerReport(
+	test("parseWatchdogReport rejeita severidade inválida", () => {
+		const report = parseWatchdogReport(
 			{
-				reviewerId: "alpha",
+				watchdogId: "alpha",
 				findings: [
 					{
 						rule: "x",
@@ -345,10 +354,10 @@ describe("report-builder", () => {
 		expect(report?.findings).toHaveLength(0);
 	});
 
-	test("dedupeFindings mescla revisores e mantém a severidade mais grave", () => {
-		const reports: ReviewerReport[] = [
+	test("dedupeFindings mescla watchdogs e mantém a severidade mais grave", () => {
+		const reports: WatchdogReport[] = [
 			{
-				reviewerId: "alpha",
+				watchdogId: "alpha",
 				reviewedFiles: ["a.ts"],
 				skipped: [],
 				findings: [
@@ -363,7 +372,7 @@ describe("report-builder", () => {
 				],
 			},
 			{
-				reviewerId: "beta",
+				watchdogId: "beta",
 				reviewedFiles: ["a.ts"],
 				skipped: [],
 				findings: [
@@ -381,14 +390,14 @@ describe("report-builder", () => {
 
 		const merged = dedupeFindings(reports);
 		expect(merged).toHaveLength(1);
-		expect(merged[0].reviewers).toHaveLength(2);
+		expect(merged[0].watchdogs).toHaveLength(2);
 		expect(merged[0].severity).toBe("blocking");
 		expect(merged[0].message).toBe("maior");
 	});
 
 	test("renderReport marca status conforme severidade", () => {
-		const reports: ReviewerReport[] = [
-			{ reviewerId: "alpha", reviewedFiles: ["s.ts"], skipped: [], findings: [] },
+		const reports: WatchdogReport[] = [
+			{ watchdogId: "alpha", reviewedFiles: ["s.ts"], skipped: [], findings: [] },
 		];
 
 		expect(renderReport("main", reports, [], {})).toContain("✅ Aprovado");
@@ -403,7 +412,7 @@ describe("report-builder", () => {
 					file: "s.ts",
 					message: "m",
 					action: "a",
-					reviewers: ["alpha"],
+					watchdogs: ["alpha"],
 				},
 			],
 			{},
@@ -413,8 +422,8 @@ describe("report-builder", () => {
 	});
 
 	test("renderReport mostra cobertura pendente", () => {
-		const reports: ReviewerReport[] = [
-			{ reviewerId: "alpha", reviewedFiles: ["s.ts"], skipped: [], findings: [] },
+		const reports: WatchdogReport[] = [
+			{ watchdogId: "alpha", reviewedFiles: ["s.ts"], skipped: [], findings: [] },
 		];
 		const md = renderReport("main", reports, [], {
 			classified: { alpha: ["s.ts", "t.ts"] },
@@ -423,13 +432,13 @@ describe("report-builder", () => {
 	});
 
 	test("renderReport usa o resolver de nome injetado", () => {
-		const reports: ReviewerReport[] = [
-			{ reviewerId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
+		const reports: WatchdogReport[] = [
+			{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
 		];
 		const md = renderReport("main", reports, [], {}, undefined, undefined, (id) =>
-			id === "alpha" ? "Revisor Alpha" : id,
+			id === "alpha" ? "Watchdog Alpha" : id,
 		);
-		expect(md).toContain("Revisor Alpha");
+		expect(md).toContain("Watchdog Alpha");
 	});
 });
 
@@ -473,8 +482,8 @@ describe("context-summary", () => {
 	});
 
 	test("renderReport coloca a seção de contexto quando presente", () => {
-		const reports: ReviewerReport[] = [
-			{ reviewerId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
+		const reports: WatchdogReport[] = [
+			{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
 		];
 		const md = renderReport(
 			"main",
@@ -493,8 +502,8 @@ describe("context-summary", () => {
 	});
 
 	test("renderReport omite a seção sem contexto", () => {
-		const reports: ReviewerReport[] = [
-			{ reviewerId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
+		const reports: WatchdogReport[] = [
+			{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] },
 		];
 		expect(renderReport("main", reports, [], {}, null)).not.toContain(
 			"## Contexto da PR",
@@ -509,9 +518,9 @@ describe("context-summary", () => {
 describe("houndsman brief", () => {
 	const OUTPUT_FORMAT = ".houndsman/core/skill/OUTPUT-FORMAT.md";
 
-	test("inclui regras, arquivos e output do revisor", () => {
-		const brief = renderBrief(alphaReviewer, {
-			reviewerId: "alpha",
+	test("inclui regras, arquivos e output do watchdog", () => {
+		const brief = renderBrief(alphaWatchdog, {
+			watchdogId: "alpha",
 			files: ["src/alpha/x.ts"],
 			branch: "feature/x",
 			outputPath: "tmp/fake-review/feature-x/findings/alpha.json",
@@ -528,7 +537,7 @@ describe("houndsman brief", () => {
 
 	test("seção Deletados aparece só com `breakingChange`", () => {
 		const args = {
-			reviewerId: "alpha",
+			watchdogId: "alpha",
 			files: [],
 			branch: "main",
 			outputPath: "o.json",
@@ -537,14 +546,14 @@ describe("houndsman brief", () => {
 			statuses: {},
 			deleted: ["src/alpha/old.ts"],
 		};
-		const breakingDef = { ...alphaReviewer, breakingChange: true };
+		const breakingDef = { ...alphaWatchdog, breakingChange: true };
 		expect(renderBrief(breakingDef, args)).toContain("Deletados");
-		expect(renderBrief(alphaReviewer, args)).not.toContain("Deletados");
+		expect(renderBrief(alphaWatchdog, args)).not.toContain("Deletados");
 	});
 
 	test("injeta o contexto da PR quando presente", () => {
-		const brief = renderBrief(alphaReviewer, {
-			reviewerId: "alpha",
+		const brief = renderBrief(alphaWatchdog, {
+			watchdogId: "alpha",
 			files: ["a.ts"],
 			branch: "feature/x",
 			outputPath: "o.json",
@@ -563,9 +572,9 @@ describe("houndsman brief", () => {
 	});
 
 	test("hook custom de renderBrief é usado no lugar do default", () => {
-		const custom = { ...alphaReviewer, renderBrief: () => ["# Custom"] };
+		const custom = { ...alphaWatchdog, renderBrief: () => ["# Custom"] };
 		const brief = renderBrief(custom, {
-			reviewerId: "alpha",
+			watchdogId: "alpha",
 			files: [],
 			branch: "main",
 			outputPath: "o.json",
@@ -631,7 +640,7 @@ describe("jev-questions", () => {
 		expect(factory.derive("nao-existe")).toEqual([]);
 	});
 
-	test("build agrega revisores sem chaves duplicadas", () => {
+	test("build agrega watchdogs sem chaves duplicadas", () => {
 		const all = factory.build(["alpha", "beta"]);
 		const keys = all.map((q) => q.key);
 		expect(new Set(keys).size).toBe(keys.length);
@@ -688,7 +697,7 @@ describe("jev-client", () => {
 
 describe("jev-detector", () => {
 	const classification: ClassificationResult = {
-		reviewers: { alpha: ["src/alpha/x.ts"] },
+		watchdogs: { alpha: ["src/alpha/x.ts"] },
 		files: { "src/alpha/x.ts": { status: "modified" } },
 		unclassified: [],
 		excluded: [],
@@ -762,7 +771,7 @@ describe("jev-candidates", () => {
 			analyzedFiles: 1,
 			candidates: [
 				{
-					reviewerId: "alpha",
+					watchdogId: "alpha",
 					rule: "R",
 					severity: "blocking",
 					file: "a.ts",
@@ -772,10 +781,10 @@ describe("jev-candidates", () => {
 			],
 		};
 		try {
-			new JevCandidatesStore(file, fakeReviewConfig.reviewerIds).write(data);
+			new JevCandidatesStore(file, fakeHoundsmanConfig.watchdogIds).write(data);
 			const read = new JevCandidatesStore(
 				file,
-				fakeReviewConfig.reviewerIds,
+				fakeHoundsmanConfig.watchdogIds,
 			).read();
 			expect(read?.available).toBe(true);
 			expect(read?.candidates).toHaveLength(1);
@@ -788,7 +797,7 @@ describe("jev-candidates", () => {
 	test("read retorna null para arquivo ausente", () => {
 		const store = new JevCandidatesStore(
 			join(tmpdir(), `missing-${Date.now()}.json`),
-			fakeReviewConfig.reviewerIds,
+			fakeHoundsmanConfig.watchdogIds,
 		);
 		expect(store.read()).toBeNull();
 	});
@@ -819,15 +828,15 @@ describe("parseReviewArgs", () => {
 	});
 });
 
-describe("renderReviewerContext", () => {
+describe("renderWatchdogContext", () => {
 	test("markdown inclui nome e escopo", () => {
-		const md = renderReviewerContext(fakeReviewConfig, "alpha");
+		const md = renderWatchdogContext(fakeHoundsmanConfig, "alpha");
 		expect(md).toContain("# Alpha");
 		expect(md).toContain("**Escopo:**");
 	});
 
 	test("json inclui id; com --rules inclui regras", () => {
-		const json = renderReviewerContext(fakeReviewConfig, "alpha", {
+		const json = renderWatchdogContext(fakeHoundsmanConfig, "alpha", {
 			json: true,
 			withRules: true,
 		});
@@ -837,6 +846,6 @@ describe("renderReviewerContext", () => {
 	});
 
 	test("id inexistente devolve null", () => {
-		expect(renderReviewerContext(fakeReviewConfig, "nao-existe")).toBeNull();
+		expect(renderWatchdogContext(fakeHoundsmanConfig, "nao-existe")).toBeNull();
 	});
 });

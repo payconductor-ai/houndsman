@@ -1,9 +1,9 @@
 /**
  * Tipos e constantes genéricas do motor de revisão (houndsman).
  *
- * Sem dependência do projeto: os ids de revisor são derivados do
- * `ReviewConfig` injetado pelo consumidor. `Severity` é a escala de achados;
- * `Rule` e `ReviewerMeta` descrevem as regras consumidas pela renderização.
+ * Sem dependência do projeto: os ids de watchdog são derivados do
+ * `HoundsmanConfig` injetado pelo consumidor. `Severity` é a escala de achados;
+ * `Rule` e `WatchdogMeta` descrevem as regras consumidas pela renderização.
  */
 
 import type { JevRuleSpec } from "./jev/jev-types";
@@ -28,7 +28,7 @@ export const SEVERITY_EMOJI: Record<Severity, string> = {
 };
 
 /**
- * Regra do revisor: severidade + texto. O texto declara a polaridade de forma
+ * Regra do watchdog: severidade + texto. O texto declara a polaridade de forma
  * explícita — `Promover:` (algo que DEVE acontecer) ou `Evitar:`/`Não`/`Nunca`
  * (algo que NÃO DEVE acontecer).
  *
@@ -42,7 +42,7 @@ export type Rule = {
 };
 
 /**
- * Entrada de classificação: como o revisor casa um arquivo alterado.
+ * Entrada de classificação: como o watchdog casa um arquivo alterado.
  *
  * `value` é sempre um padrão (regex, estilo grep — fonte sem barras).
  *
@@ -54,14 +54,14 @@ export type ClassifyRule = {
 	value: string;
 };
 
-export type ReviewerMeta = {
-	/** Nome legível do revisor */
+export type WatchdogMeta = {
+	/** Nome legível do watchdog */
 	name: string;
 	/** Escopo de atuação (quais arquivos/pastas revisa) */
 	scope: string;
-	/** Arquivos que este revisor cobre (classificação). */
+	/** Arquivos que este watchdog cobre (classificação). */
 	classify?: readonly ClassifyRule[];
-	/** Regras do revisor (texto com polaridade explícita: `Promover:`/`Evitar:`). */
+	/** Regras do watchdog (texto com polaridade explícita: `Promover:`/`Evitar:`). */
 	rules: readonly Rule[];
 	/** Arquivos de documentação de contexto (caminhos relativos à raiz) */
 	contextFiles: string[];
@@ -80,14 +80,14 @@ export type FileStatus =
 export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: string }>;
 
 /** Contexto da PR injetado no brief (estrutural — sem dependência de runtime). */
-export type ReviewerRenderContext = {
+export type WatchdogRenderContext = {
 	objective?: string;
 	motivation?: string;
 	changeSummary?: string[];
 };
 
 /** Candidato pré-analisado (Jev) exibido no brief. */
-export type ReviewerRenderCandidate = {
+export type WatchdogRenderCandidate = {
 	file: string;
 	severity: Severity;
 	confidence: number;
@@ -95,8 +95,8 @@ export type ReviewerRenderCandidate = {
 };
 
 /** Dados que o renderer do brief recebe (sem dependência de runtime do jev/cli). */
-export type ReviewerRenderArgs = {
-	reviewerId: string;
+export type WatchdogRenderArgs = {
+	watchdogId: string;
 	files: readonly string[];
 	statuses: FileStatusMap;
 	deleted: readonly string[];
@@ -104,17 +104,17 @@ export type ReviewerRenderArgs = {
 	outputPath: string;
 	outputFormatPath: string;
 	docs: readonly string[];
-	context?: ReviewerRenderContext | null;
-	candidates?: readonly ReviewerRenderCandidate[];
+	context?: WatchdogRenderContext | null;
+	candidates?: readonly WatchdogRenderCandidate[];
 };
 
-/** Definição completa de um revisor — 1 por arquivo em `project/reviewers/`. */
-export type ReviewerDefinition = ReviewerMeta & {
-	/** Id do revisor (deve casar com a chave em `REVIEWER_DEFINITIONS`). */
+/** Definição completa de um watchdog — 1 por arquivo em `project/watchdogs/`. */
+export type WatchdogDefinition = WatchdogMeta & {
+	/** Id do watchdog (deve casar com a chave em `WATCHDOG_DEFINITIONS`). */
 	id: string;
 	/** Uma frase sobre o propósito (ex-`Objetivo` do .md). */
 	description: string;
-	/** Revisor deve checar breaking change em arquivos deletados do seu domínio. */
+	/** Watchdog deve checar breaking change em arquivos deletados do seu domínio. */
 	breakingChange?: boolean;
 	/** Prioridade de arquivos/paths (ex-`O Que Revisar`). Opcional. */
 	reviewFocus?: readonly string[];
@@ -123,11 +123,11 @@ export type ReviewerDefinition = ReviewerMeta & {
 	/** Render customizado do brief; se omitido usa `defaultRenderBrief`.
 	 *  Recebe a própria definição (`def`) para reutilizar `defaultRenderBrief`
 	 *  sem criar dependência de runtime `registry → core`. */
-	renderBrief?: (args: ReviewerRenderArgs, def: ReviewerDefinition) => string[];
+	renderBrief?: (args: WatchdogRenderArgs, def: WatchdogDefinition) => string[];
 };
 
-/** Helper de autoria: tipa o objeto do revisor (id contra `ReviewerId`). */
-export function defineReviewer(def: ReviewerDefinition): ReviewerDefinition {
+/** Helper de autoria: tipa o objeto do watchdog (id contra `WatchdogId`). */
+export function defineWatchdog(def: WatchdogDefinition): WatchdogDefinition {
 	return def;
 }
 

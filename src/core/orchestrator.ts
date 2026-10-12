@@ -2,11 +2,11 @@
  * Orquestração do houndsman (biblioteca): preparar (classificação + briefs +
  * manifesto + Jev) e finalizar (findings → dedupe → relatório).
  *
- * Genérico: recebe o `ReviewConfig` por parâmetro (injeção explícita).
+ * Genérico: recebe o `HoundsmanConfig` por parâmetro (injeção explícita).
  * Entrypoints: `cli/index.ts` (`houndsman`). Aqui não há `process.argv`.
  *
- * Artefatos (em `opts.dir`, default `ReviewConfig.artifactDir/<branch-slug>/`):
- *   classification.json   revisores ativados por arquivo + status (A/M/D/R)
+ * Artefatos (em `opts.dir`, default `HoundsmanConfig.artifactDir/<branch-slug>/`):
+ *   classification.json   watchdogs ativados por arquivo + status (A/M/D/R)
  *   candidates.json       candidatos da pré-análise Jev
  *   briefs/<id>.md        instruções prontas para cada sub-agente
  *   findings/<id>.json    saída dos sub-agentes (schema skill/OUTPUT-FORMAT.md)
@@ -17,7 +17,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { renderBrief } from "./brief";
-import type { ReviewConfig } from "./config";
+import type { HoundsmanConfig } from "./config";
 import { discoverDocs } from "./doc-discoverer";
 import { type ClassificationResult, classifyRange } from "./file-classifier";
 import {
@@ -32,13 +32,13 @@ import { contextPaths, currentBranch, readContextSummary } from "./pr-context";
 import {
 	type ContextSummary,
 	dedupeFindings,
-	parseReviewerReport,
-	type ReviewerReport,
+	parseWatchdogReport,
 	renderReport,
 	sanitizeBranch,
+	type WatchdogReport,
 } from "./report-builder";
-import { findReviewer } from "./reviewer-registry";
-import type { ReviewerMeta } from "./types";
+import type { WatchdogMeta } from "./types";
+import { findWatchdog } from "./watchdog-registry";
 
 export type ReviewOptions = {
 	base: string;
@@ -103,8 +103,8 @@ function prepareDirs(dirs: Paths, clean: boolean): void {
 function readFindings(
 	findingsDir: string,
 	activeIds: string[],
-): { reports: ReviewerReport[]; pending: string[] } {
-	const reports: ReviewerReport[] = [];
+): { reports: WatchdogReport[]; pending: string[] } {
+	const reports: WatchdogReport[] = [];
 	const pending: string[] = [];
 	for (const id of activeIds) {
 		const path = join(findingsDir, `${id}.json`);
@@ -114,7 +114,7 @@ function readFindings(
 		}
 		try {
 			const raw = JSON.parse(readFileSync(path, "utf8"));
-			const report = parseReviewerReport(raw, path);
+			const report = parseWatchdogReport(raw, path);
 			if (report) reports.push(report);
 			else pending.push(id);
 		} catch (err) {
@@ -148,7 +148,7 @@ function writeManifest(
 	activeIds: string[],
 	pending: string[],
 	jev: JevCandidatesFile,
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 ): void {
 	const manifest = {
 		branch,
@@ -157,10 +157,10 @@ function writeManifest(
 		head: opts.head,
 		generatedAt: new Date().toISOString(),
 		outputFormat: OUTPUT_FORMAT_PATH,
-		reviewers: activeIds.map((id) => ({
+		watchdogs: activeIds.map((id) => ({
 			id,
-			name: findReviewer(config, id)?.name ?? id,
-			files: classification.reviewers[id] ?? [],
+			name: findWatchdog(config, id)?.name ?? id,
+			files: classification.watchdogs[id] ?? [],
 			brief: relFromRoot(join(outDir, "briefs", `${id}.md`)),
 			findings: relFromRoot(join(outDir, "findings", `${id}.json`)),
 			status: pending.includes(id) ? "pending" : "done",
@@ -197,15 +197,15 @@ function writeBriefs(
 	branch: string,
 	context: ContextSummary | null,
 	candidates: JevCandidate[],
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 ): void {
 	const docs = discoverDocs(Object.keys(classification.files), config);
 	for (const id of activeIds) {
-		const def = findReviewer(config, id);
+		const def = findWatchdog(config, id);
 		if (!def) continue;
-		const files = classification.reviewers[id] ?? [];
+		const files = classification.watchdogs[id] ?? [];
 		const brief = renderBrief(def, {
-			reviewerId: id,
+			watchdogId: id,
 			files,
 			statuses: classification.files,
 			deleted: classification.deleted,
@@ -214,7 +214,7 @@ function writeBriefs(
 			outputFormatPath: OUTPUT_FORMAT_PATH,
 			docs,
 			context,
-			candidates: candidates.filter((c) => c.reviewerId === id),
+			candidates: candidates.filter((c) => c.watchdogId === id),
 		});
 		writeFileSync(join(dirs.briefsDir, `${id}.md`), `${brief}\n`);
 	}
@@ -232,11 +232,11 @@ async function resolveCandidates(
 	opts: ReviewOptions,
 	classification: ClassificationResult,
 	dirs: Paths,
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 ): Promise<JevCandidatesFile> {
 	const store = new JevCandidatesStore(
 		join(dirs.outDir, "candidates.json"),
-		config.reviewerIds,
+		config.watchdogIds,
 	);
 	const save = (data: JevCandidatesFile): JevCandidatesFile => {
 		store.write(data);
@@ -255,7 +255,7 @@ async function resolveCandidates(
 	try {
 		const detector = new JevDetector(
 			client,
-			config.reviewers as Record<string, ReviewerMeta>,
+			config.watchdogs as Record<string, WatchdogMeta>,
 		);
 		const result = await detector.detect(classification, opts.base, opts.head);
 		return save({
@@ -293,7 +293,7 @@ function printDiscovery(
 	briefsDir: string,
 ): void {
 	console.log(
-		`Discovery: ${activeIds.length} revisor(es) ativado(s), ${Object.keys(classification.files).length} arquivo(s), ${classification.deleted.length} deletado(s).`,
+		`Discovery: ${activeIds.length} watchdog(s) ativado(s), ${Object.keys(classification.files).length} arquivo(s), ${classification.deleted.length} deletado(s).`,
 	);
 	console.log(`Briefs: ${relFromRoot(briefsDir)}/`);
 	for (const file of classification.deleted) {
@@ -305,7 +305,7 @@ function printDiscovery(
 export async function prepare(
 	opts: ReviewOptions,
 	branch: string,
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 	dirs: Paths = paths(opts, branch),
 ): Promise<void> {
 	prepareDirs(dirs, opts.clean);
@@ -318,7 +318,7 @@ export async function prepare(
 
 	const jev = await resolveCandidates(opts, classification, dirs, config);
 
-	const activeIds = Object.keys(classification.reviewers);
+	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
 		console.log(`Nenhuma alteração entre ${opts.base}...${opts.head}.`);
 		return;
@@ -385,17 +385,17 @@ export type FinalizeResult = {
 export function finalize(
 	opts: ReviewOptions,
 	branch: string,
-	config: ReviewConfig,
+	config: HoundsmanConfig,
 	dirs: Paths = paths(opts, branch),
 ): FinalizeResult {
 	const classification = readClassification(join(dirs.outDir, "classification.json"));
-	const activeIds = Object.keys(classification.reviewers);
+	const activeIds = Object.keys(classification.watchdogs);
 
 	const { reports, pending } = readFindings(dirs.findingsDir, activeIds);
 	const jev =
 		new JevCandidatesStore(
 			join(dirs.outDir, "candidates.json"),
-			config.reviewerIds,
+			config.watchdogIds,
 		).read() ?? JevCandidatesStore.unavailable("candidates.json ausente");
 	writeManifest(
 		dirs.outDir,
@@ -411,7 +411,7 @@ export function finalize(
 	if (pending.length > 0) {
 		throw new Error(
 			`Faltam ${pending.length}/${activeIds.length} findings: ${pending.join(", ")}.\n` +
-				`Cada revisor deve gravar ${relFromRoot(dirs.findingsDir)}/<id>.json (schema ${OUTPUT_FORMAT_PATH}).`,
+				`Cada watchdog deve gravar ${relFromRoot(dirs.findingsDir)}/<id>.json (schema ${OUTPUT_FORMAT_PATH}).`,
 		);
 	}
 
@@ -421,10 +421,10 @@ export function finalize(
 		branch,
 		reports,
 		merged,
-		{ classified: classification.reviewers },
+		{ classified: classification.watchdogs },
 		context,
 		jev.available ? jev.candidates : undefined,
-		(id) => findReviewer(config, id)?.name ?? id,
+		(id) => findWatchdog(config, id)?.name ?? id,
 	);
 	const reportPath = join(dirs.outDir, "review.md");
 	writeFileSync(reportPath, `${markdown}\n`);

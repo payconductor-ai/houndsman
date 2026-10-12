@@ -1,7 +1,7 @@
 # Houndsman
 
-Orquestrador de revisão de Pull Requests. Classifica o diff, despacha revisores
-especializados por domínio (um subagente por revisor) e consolida os achados em um
+Orquestrador de revisão de Pull Requests. Classifica o diff, despacha watchdogs
+especializados por domínio (um subagente por watchdog) e consolida os achados em um
 relatório único.
 
 > Review de PR no piloto automático: alguém aprova no "LGTM" sem ler, um `catch {}` engole
@@ -9,6 +9,13 @@ relatório único.
 > daquela linha.
 
 ![alt text](assets/houndsman.png)
+
+## Terminologia
+
+- **houndsman** — o orquestrador/treinador (CLI + motor).
+- **watchdog** — cada agente especialista por domínio que audita o diff (antigo "revisor").
+- **review/revisão** — o processo de revisão.
+- **Jev** — pré-análise opcional.
 
 ## Por que "houndsman"?
 
@@ -21,7 +28,7 @@ produção. O motor só coordena a caçada; a matilha é problema seu.
 
 - **Motor genérico** — classificação de arquivos, geração de briefs, pré-análise opcional
   (Jev) e consolidação do relatório. Sem regras nem paths de nenhum projeto.
-- **Camada de projeto** — revisores, exclusões e mapeamentos de docs vivem no repositório do
+- **Camada de projeto** — watchdogs, exclusões e mapeamentos de docs vivem no repositório do
   consumidor (`houndsman.config.ts` + `.houndsman/`), carregados em runtime.
 
 ## Instalação (global)
@@ -55,35 +62,35 @@ bun run houndsman update       # sincroniza os arquivos auto-gerados (.houndsman
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
 | `houndsman test` | Suíte de testes da lib (project-agnóstica) |
-| `houndsman reviewer <id>` | Contexto de um revisor (`--rules`, `--json`) |
+| `houndsman watchdog <id>` | Contexto de um watchdog (`--rules`, `--json`) |
 
 ## Configuração (`houndsman.config.ts`)
 
 ```ts
 import { DOC_MAPPINGS } from "./.houndsman/doc-mappings";
 import { EXCLUSION_PATTERNS } from "./.houndsman/exclusions";
-import { REVIEWER_DEFINITIONS } from "./.houndsman/reviewers";
-import type { ReviewConfig } from "./.houndsman/core/types";
+import { WATCHDOG_DEFINITIONS } from "./.houndsman/watchdogs";
+import type { HoundsmanConfig } from "./.houndsman/core/types";
 
-export const reviewConfig = {
+export const houndsmanConfig = {
 	projectName: "Meu Projeto",
-	reviewers: REVIEWER_DEFINITIONS,
+	watchdogs: WATCHDOG_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
-} satisfies ReviewConfig;
+} satisfies HoundsmanConfig;
 
-export default reviewConfig;
+export default houndsmanConfig;
 ```
 
 > `artifactDir` é **opcional** (default `.houndsman/.runs`); o schema de output é
 > derivado da camada (`.houndsman/core/skill/OUTPUT-FORMAT.md`).
 >
 > A camada separa **auto-gerado** (`.houndsman/core/**`, `.houndsman/.gitignore`,
-> ponteiros de skill) do **usuário** (`.houndsman/reviewers/`, `exclusions.ts`,
+> ponteiros de skill) do **usuário** (`.houndsman/watchdogs/`, `exclusions.ts`,
 > `doc-mappings.ts`, `houndsman.config.ts`). O `houndsman update` reescreve só os auto-gerados.
 
 ## Documentação
 
 - `src/skill/SETUP.md` — instalação e configuração passo a passo.
 - `src/skill/houndsman.md` — orquestração do skill (`/houndsman`).
-- `src/skill/houndsman-update.md` — manutenção das regras dos revisores.
+- `src/skill/houndsman-update.md` — manutenção das regras dos watchdogs.

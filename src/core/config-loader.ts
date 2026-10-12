@@ -1,7 +1,7 @@
 /**
  * Descoberta e carregamento da configuração do projeto — biblioteca.
  *
- * O motor é agnóstico: a config do projeto (`ReviewConfig`) é resolvida em
+ * O motor é agnóstico: a config do projeto (`HoundsmanConfig`) é resolvida em
  * runtime a partir do cwd do consumidor — nunca importada estaticamente.
  *
  * Ordem de resolução:
@@ -13,7 +13,7 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { ReviewConfig } from "./config";
+import type { HoundsmanConfig } from "./config";
 
 /** Nomes de arquivo procurados no cwd, em ordem de precedência. */
 export const CONFIG_FILE_CANDIDATES: readonly string[] = [
@@ -26,7 +26,7 @@ export const CONFIG_FILE_CANDIDATES: readonly string[] = [
 ];
 
 export type LoadedConfig<TId extends string = string> = {
-	config: ReviewConfig<TId>;
+	config: HoundsmanConfig<TId>;
 	/** Caminho absoluto do arquivo de config carregado. */
 	path: string;
 };
@@ -46,7 +46,7 @@ const MISSING_CONFIG_HINT =
 	"Rode `houndsman setup` para criar uma configuração inicial.";
 
 /**
- * Carrega o `ReviewConfig` do projeto. Lança se ausente ou inválido.
+ * Carrega o `HoundsmanConfig` do projeto. Lança se ausente ou inválido.
  * `configPath` sobrepõe a descoberta automática.
  */
 export async function loadConfig<TId extends string = string>(
@@ -62,24 +62,24 @@ export async function loadConfig<TId extends string = string>(
 	}
 
 	const module = (await import(pathToFileURL(path).href)) as {
-		default?: ReviewConfig<TId>;
-		reviewConfig?: ReviewConfig<TId>;
+		default?: HoundsmanConfig<TId>;
+		houndsmanConfig?: HoundsmanConfig<TId>;
 	};
-	const config = module.default ?? module.reviewConfig;
+	const config = module.default ?? module.houndsmanConfig;
 
 	if (!config) {
 		throw new Error(
-			`Configuração inválida em ${path}: exporte \`export default reviewConfig\`.`,
+			`Configuração inválida em ${path}: exporte \`export default houndsmanConfig\`.`,
 		);
 	}
-	if (!config.reviewers || typeof config.reviewers !== "object") {
-		throw new Error(`Configuração inválida em ${path}: campo 'reviewers' ausente.`);
+	if (!config.watchdogs || typeof config.watchdogs !== "object") {
+		throw new Error(`Configuração inválida em ${path}: campo 'watchdogs' ausente.`);
 	}
-	// Deriva `reviewerIds` de quem não passou por `defineReviewConfig` (ex.: objeto
+	// Deriva `watchdogIds` de quem não passou por `defineHoundsmanConfig` (ex.: objeto
 	// literal) — mantém o motor robusto a configs escritas à mão.
-	if (!Array.isArray(config.reviewerIds)) {
-		(config as unknown as { reviewerIds: string[] }).reviewerIds = Object.keys(
-			config.reviewers,
+	if (!Array.isArray(config.watchdogIds)) {
+		(config as unknown as { watchdogIds: string[] }).watchdogIds = Object.keys(
+			config.watchdogs,
 		);
 	}
 

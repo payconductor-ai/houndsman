@@ -1,14 +1,14 @@
-# Protocolo de Auditoria dos Revisores — houndsman
+# Protocolo de Auditoria dos Watchdogs — houndsman
 
 Referência do Modo B do skill `houndsman-update`. Objetivo: garantir que as regras dos
-revisores validam **apenas padrões que o projeto aplica hoje**. Regras "utópicas" (não
+watchdogs validam **apenas padrões que o projeto aplica hoje**. Regras "utópicas" (não
 aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas rebaixadas.
 
 ---
 
 ## Entradas
 
-1. `.houndsman/reviewers/<id>.ts` — `REVIEWER_DEFINITIONS[<id>]` é a fonte única de verdade:
+1. `.houndsman/watchdogs/<id>.ts` — `WATCHDOG_DEFINITIONS[<id>]` é a fonte única de verdade:
    `description`, `scope`, `rules` (severidade + texto), `classify`, `contextFiles`,
    `reviewFocus`, `exclude`.
 2. `src/core/brief.ts` (no motor) — `PROCEDURE` (passos de revisão compartilhados).
@@ -44,10 +44,10 @@ classifique sem evidência (caminho de arquivo, linha, ou "0 ocorrências via gr
 
 ## Formato do relatório
 
-Gravar `.houndsman-audit/<reviewer-id>.md`:
+Gravar `.houndsman-audit/<watchdog-id>.md`:
 
 ```markdown
-# Auditoria — <Nome do revisor> (`<reviewer-id>`)
+# Auditoria — <Nome do watchdog> (`<watchdog-id>`)
 
 ## Ground truth do domínio
 - Padrões reais observados (com caminhos de arquivo).
@@ -66,7 +66,7 @@ Gravar `.houndsman-audit/<reviewer-id>.md`:
 - `contextFiles`: ...
 
 ## Protocolo (procedimento)
-- Ajustes no `PROCEDURE` compartilhado (`src/core/brief.ts`) ou no `reviewFocus`/`exclude` do revisor.
+- Ajustes no `PROCEDURE` compartilhado (`src/core/brief.ts`) ou no `reviewFocus`/`exclude` do watchdog.
 
 ## Resumo
 - Total de regras: N · ALIGNED: N · UTOPIAN: N · OUTDATED: N · MISCALIBRATED: N · DEAD-PATH: N
@@ -77,18 +77,18 @@ Gravar `.houndsman-audit/<reviewer-id>.md`:
 ## Consolidação
 
 - Um relatório consolidado em `.houndsman-audit/audit-summary.md`.
-- Agrupar **temas transversais** (ex.: a mesma regra aparecia em 2 revisores).
-- Resolver conflitos: uma regra duplicada entre revisores deve viver no revisor dono do domínio.
+- Agrupar **temas transversais** (ex.: a mesma regra aparecia em 2 watchdogs).
+- Resolver conflitos: uma regra duplicada entre watchdogs deve viver no watchdog dono do domínio.
 
 ## Disparo dos subagentes
 
-- 1 subagente por revisor; despachar em ondas paralelas (ex.: 8 + 7).
+- 1 subagente por watchdog; despachar em ondas paralelas (ex.: 8 + 7).
 - Prompt mínimo:
 
   > Você é um auditor do skill `houndsman` do {{projectName}}. Leia e siga
-  > `.houndsman/core/skill/AUDIT-PROTOCOL.md`. Revisor alvo: `<reviewer-id>`. Audite CADA regra de
-  > `REVIEWER_DEFINITIONS["<reviewer-id>"]` contra o código/docs reais, provando cada veredito.
-  > Grave `.houndsman-audit/<reviewer-id>.md`. Retorne: contagem por veredito,
+  > `.houndsman/core/skill/AUDIT-PROTOCOL.md`. Watchdog alvo: `<watchdog-id>`. Audite CADA regra de
+  > `WATCHDOG_DEFINITIONS["<watchdog-id>"]` contra o código/docs reais, provando cada veredito.
+  > Grave `.houndsman-audit/<watchdog-id>.md`. Retorne: contagem por veredito,
   > regras a REMOVER e a CORRIGIR. Não altere outros arquivos.
 
 ## Idioma

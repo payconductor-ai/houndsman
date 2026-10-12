@@ -3,7 +3,7 @@
 /**
  * Entrypoint único do `houndsman` — `houndsman [comando]`.
  *
- * Carrega a configuração do projeto (`ReviewConfig`) em runtime (a partir do
+ * Carrega a configuração do projeto (`HoundsmanConfig`) em runtime (a partir do
  * cwd) e orquestra funções/classes de `core/`. Não importa nenhum caminho do
  * projeto consumidor estaticamente.
  *
@@ -15,7 +15,7 @@
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
  *   doctor               Valida a configuração e o ambiente (anti-drift)
  *   test                 Roda a suíte de testes da lib
- *   reviewer <id>        Contexto de um revisor (`--rules`, `--json`)
+ *   watchdog <id>        Contexto de um watchdog (`--rules`, `--json`)
  *
  * Flags: `--base <b>` · `--head <ref>` · `--branch <b>` · `--dir <d>` ·
  *   `--config <path>` · `--clean` · `--no-jev` · `--fail-on-blocking`.
@@ -23,11 +23,11 @@
 
 import { runContextCommand } from "../core/commands/context";
 import { parseReviewArgs } from "../core/commands/review";
-import { renderReviewerContext } from "../core/commands/reviewer";
 import { runSetupCommand } from "../core/commands/setup";
 import { runLibTests } from "../core/commands/test";
 import { runUpdateCommand } from "../core/commands/update";
-import { type ReviewConfig, resolveArtifactDir } from "../core/config";
+import { renderWatchdogContext } from "../core/commands/watchdog";
+import { type HoundsmanConfig, resolveArtifactDir } from "../core/config";
 import { loadConfig } from "../core/config-loader";
 import { finalize, prepare, resolveBranch } from "../core/orchestrator";
 import { relFromRoot } from "../core/paths";
@@ -43,7 +43,7 @@ Comandos:
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
   doctor              Valida a configuração e o ambiente (anti-drift)
   test                Roda a suíte de testes da lib
-  reviewer <id>       Contexto de um revisor (--rules, --json)
+  watchdog <id>       Contexto de um watchdog (--rules, --json)
 
 Flags:
   --config <path>     Caminho do houndsman.config.* (default: detecta no cwd)
@@ -61,7 +61,7 @@ function readFlag(args: string[], flag: string): string | undefined {
 }
 
 /** Passo 0 — contexto da PR via `gh`. */
-function runContext(config: ReviewConfig, args: string[]): void {
+function runContext(config: HoundsmanConfig, args: string[]): void {
 	const { paths, context } = runContextCommand(config, {
 		branch: readFlag(args, "--branch"),
 		dir: readFlag(args, "--dir"),
@@ -89,7 +89,7 @@ function runContext(config: ReviewConfig, args: string[]): void {
 }
 
 /** Valida a configuração do projeto e o ambiente (anti-drift). */
-function runDoctor(config: ReviewConfig): void {
+function runDoctor(config: HoundsmanConfig): void {
 	console.log("→ Validando configuração do projeto...");
 	const { problems, warnings, jevQuestions } = checkRegistry(config);
 
@@ -99,7 +99,7 @@ function runDoctor(config: ReviewConfig): void {
 		process.exit(1);
 	}
 	console.log(
-		`  ✅ ${config.reviewerIds.length} revisores, ${jevQuestions} pergunta(s) Jev.`,
+		`  ✅ ${config.watchdogIds.length} watchdogs, ${jevQuestions} pergunta(s) Jev.`,
 	);
 
 	if (warnings.length > 0) {
@@ -115,22 +115,22 @@ function runDoctor(config: ReviewConfig): void {
 	);
 }
 
-/** Contexto de um revisor. */
-function runReviewer(config: ReviewConfig, args: string[]): void {
+/** Contexto de um watchdog. */
+function runWatchdog(config: HoundsmanConfig, args: string[]): void {
 	const id = args.find((arg) => !arg.startsWith("-"));
 
-	if (!id || renderReviewerContext(config, id) === null) {
+	if (!id || renderWatchdogContext(config, id) === null) {
 		console.error(
 			id
-				? `Revisor '${id}' não existe.`
-				: "Informe o id do revisor: houndsman reviewer <id>",
+				? `Watchdog '${id}' não existe.`
+				: "Informe o id do watchdog: houndsman watchdog <id>",
 		);
-		console.error(`Ids válidos: ${config.reviewerIds.join(", ")}`);
+		console.error(`Ids válidos: ${config.watchdogIds.join(", ")}`);
 		process.exit(1);
 	}
 
 	console.log(
-		renderReviewerContext(config, id, {
+		renderWatchdogContext(config, id, {
 			withRules: args.includes("--rules"),
 			json: args.includes("--json"),
 		}),
@@ -138,7 +138,7 @@ function runReviewer(config: ReviewConfig, args: string[]): void {
 }
 
 /** Passo 1/3 — preparar ou finalizar. */
-async function runReview(config: ReviewConfig, args: string[]): Promise<void> {
+async function runReview(config: HoundsmanConfig, args: string[]): Promise<void> {
 	const opts = parseReviewArgs(args, resolveArtifactDir(config));
 	const branch = resolveBranch(opts);
 
@@ -189,8 +189,8 @@ export async function main(): Promise<void> {
 		case "check":
 			runDoctor(config);
 			return;
-		case "reviewer":
-			runReviewer(config, rest);
+		case "watchdog":
+			runWatchdog(config, rest);
 			return;
 		case undefined:
 			await runReview(config, rest);

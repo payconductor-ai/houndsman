@@ -2,7 +2,7 @@
  * Detector de candidatos (Passo 1.5) — roda as perguntas Jev por arquivo.
  *
  * Para cada arquivo revisável: monta o `state` (topo do arquivo + hunk do diff),
- * reúne as perguntas dos revisores do arquivo e consulta o modelo. Respostas
+ * reúne as perguntas dos watchdogs do arquivo e consulta o modelo. Respostas
  * `noul` acima do limiar viram candidatos.
  *
  * Falha-aberto: erro por arquivo é registrado em `skipped` e não interrompe.
@@ -10,7 +10,7 @@
 
 import { readFileSync } from "node:fs";
 import type { ClassificationResult } from "../file-classifier";
-import type { ReviewerMeta } from "../types";
+import type { WatchdogMeta } from "../types";
 import {
 	type JevCandidate,
 	JevCandidatesStore,
@@ -45,8 +45,8 @@ export class JevDetector {
 	private readonly client: JevClient;
 	private readonly questions: JevQuestionFactory;
 
-	/** Construtor que recebe o cliente e o registry de revisores (injeção). */
-	constructor(client: JevClient, registry: Record<string, ReviewerMeta>) {
+	/** Construtor que recebe o cliente e o registry de watchdogs (injeção). */
+	constructor(client: JevClient, registry: Record<string, WatchdogMeta>) {
 		this.client = client;
 		this.questions = new JevQuestionFactory(registry);
 	}
@@ -86,7 +86,7 @@ export class JevDetector {
 					const dq = questionByKey.get(key);
 					if (!dq) continue;
 					candidates.push({
-						reviewerId: dq.reviewerId,
+						watchdogId: dq.watchdogId,
 						rule: dq.rule,
 						severity: dq.severity,
 						file: job.file,
@@ -112,15 +112,15 @@ export class JevDetector {
 		};
 	}
 
-	/** Arquivo → perguntas dos revisores que o cobrem (só arquivos com perguntas). */
+	/** Arquivo → perguntas dos watchdogs que o cobrem (só arquivos com perguntas). */
 	private buildJobs(
 		classification: ClassificationResult,
 	): { file: string; questions: DerivedQuestion[] }[] {
-		const filesToReviewers = JevDetector.mapFilesToReviewers(classification);
-		return [...filesToReviewers.entries()]
-			.map(([file, reviewers]) => ({
+		const filesToWatchdogs = JevDetector.mapFilesToWatchdogs(classification);
+		return [...filesToWatchdogs.entries()]
+			.map(([file, watchdogs]) => ({
 				file,
-				questions: this.questions.build([...reviewers]),
+				questions: this.questions.build([...watchdogs]),
 			}))
 			.filter((job) => job.questions.length > 0);
 	}
@@ -164,12 +164,12 @@ export class JevDetector {
 			.slice(0, JevDetector.MAX_DIFF_CHARS);
 	}
 
-	/** Arquivo → revisores que o cobrem. */
-	private static mapFilesToReviewers(
+	/** Arquivo → watchdogs que o cobrem. */
+	private static mapFilesToWatchdogs(
 		classification: ClassificationResult,
 	): Map<string, Set<string>> {
 		const map = new Map<string, Set<string>>();
-		for (const [id, files] of Object.entries(classification.reviewers)) {
+		for (const [id, files] of Object.entries(classification.watchdogs)) {
 			for (const file of files ?? []) {
 				let set = map.get(file);
 				if (!set) {

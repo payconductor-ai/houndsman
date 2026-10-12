@@ -8,18 +8,12 @@
  *   ├── .gitignore          AUTO — ignora core/ e .runs/ (gerados/temporários)
  *   ├── core/types.ts       AUTO — snapshot dos tipos + helpers
  *   ├── core/skill/*.md     AUTO — docs do skill (com {{projectName}} resolvido)
- *   ├── reviewers/*.ts      USUÁRIO
+ *   ├── watchdogs/*.ts      USUÁRIO
  *   ├── doc-mappings.ts     USUÁRIO
  *   └── exclusions.ts       USUÁRIO
  */
 
-import {
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { SKILL_DIR } from "../assets";
 import {
@@ -87,24 +81,24 @@ const CONFIG_TEMPLATE = (
 	projectName: string,
 ): string => `import { DOC_MAPPINGS } from "./${PROJECT_DIR}/doc-mappings";
 import { EXCLUSION_PATTERNS } from "./${PROJECT_DIR}/exclusions";
-import { REVIEWER_DEFINITIONS } from "./${PROJECT_DIR}/reviewers";
-import type { ReviewConfig } from "./${CORE_DIR}/types";
+import { WATCHDOG_DEFINITIONS } from "./${PROJECT_DIR}/watchdogs";
+import type { HoundsmanConfig } from "./${CORE_DIR}/types";
 
 /**
  * Configuração do houndsman para ${projectName}.
  *
  * Caminhos são resolvidos pela camada: artefatos em ${ARTIFACT_DIR} e schema de
- * output em ${OUTPUT_FORMAT_PATH}. Ajuste revisores, exclusões e mapeamentos de
+ * output em ${OUTPUT_FORMAT_PATH}. Ajuste watchdogs, exclusões e mapeamentos de
  * docs conforme o projeto.
  */
-export const reviewConfig = {
+export const houndsmanConfig = {
 	projectName: "${projectName}",
-	reviewers: REVIEWER_DEFINITIONS,
+	watchdogs: WATCHDOG_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
-} satisfies ReviewConfig;
+} satisfies HoundsmanConfig;
 
-export default reviewConfig;
+export default houndsmanConfig;
 `;
 
 const TYPES_TEMPLATE = `/**
@@ -129,7 +123,7 @@ export type JevRuleSpec = {
 	criteria?: string[] | Record<string, string>;
 };
 
-/** Regra do revisor: severidade + texto — o texto declara a polaridade
+/** Regra do watchdog: severidade + texto — o texto declara a polaridade
  *  (\`Promover:\` = deve acontecer; \`Evitar:\`/\`Não\`/\`Nunca\` = não deve acontecer). */
 export type Rule = {
 	severity: Severity;
@@ -137,13 +131,13 @@ export type Rule = {
 	jev?: JevRuleSpec;
 };
 
-/** Como o revisor casa um arquivo alterado. \`value\` é sempre regex. */
+/** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
 export type ClassifyRule = {
 	type?: "filename" | "content";
 	value: string;
 };
 
-export type ReviewerMeta = {
+export type WatchdogMeta = {
 	name: string;
 	scope: string;
 	classify?: readonly ClassifyRule[];
@@ -151,8 +145,8 @@ export type ReviewerMeta = {
 	contextFiles: string[];
 };
 
-/** Definição completa de um revisor — 1 por arquivo em \`${PROJECT_DIR}/reviewers/\`. */
-export type ReviewerDefinition = ReviewerMeta & {
+/** Definição completa de um watchdog — 1 por arquivo em \`${PROJECT_DIR}/watchdogs/\`. */
+export type WatchdogDefinition = WatchdogMeta & {
 	id: string;
 	description: string;
 	breakingChange?: boolean;
@@ -171,41 +165,41 @@ export type FileStatus =
 export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: string }>;
 
 /** Contrato de configuração do motor. */
-export type ReviewConfig<TId extends string = string> = {
+export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
 	artifactDir?: string;
-	reviewerIds?: readonly TId[];
-	reviewers: Record<TId, ReviewerDefinition>;
+	watchdogIds?: readonly TId[];
+	watchdogs: Record<TId, WatchdogDefinition>;
 	exclusions: readonly RegExp[];
 	docMappings: readonly (readonly [RegExp, readonly string[]])[];
 	alwaysIncludeDocs?: readonly string[];
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
-export function defineReviewer(definition: ReviewerDefinition): ReviewerDefinition {
+export function defineWatchdog(definition: WatchdogDefinition): WatchdogDefinition {
 	return definition;
 }
 
-/** Helper de autoria — deriva \`reviewerIds\` das chaves de \`reviewers\`. */
-export function defineReviewConfig<TId extends string>(
-	input: Omit<ReviewConfig<TId>, "reviewerIds">,
-): ReviewConfig<TId> {
-	return { ...input, reviewerIds: Object.keys(input.reviewers) as TId[] };
+/** Helper de autoria — deriva \`watchdogIds\` das chaves de \`watchdogs\`. */
+export function defineHoundsmanConfig<TId extends string>(
+	input: Omit<HoundsmanConfig<TId>, "watchdogIds">,
+): HoundsmanConfig<TId> {
+	return { ...input, watchdogIds: Object.keys(input.watchdogs) as TId[] };
 }
 `;
 
-const REVIEWER_EXAMPLE = `import { defineReviewer } from "../core/types";
+const WATCHDOG_EXAMPLE = `import { defineWatchdog } from "../core/types";
 
 /**
- * Revisor de exemplo — substitua pelas regras reais do projeto.
- * Um revisor declara seus arquivos via \`classify\` (regex de path ou conteúdo).
+ * Watchdog de exemplo — substitua pelas regras reais do projeto.
+ * Um watchdog declara seus arquivos via \`classify\` (regex de path ou conteúdo).
  * O texto de cada regra começa com a polaridade: \`Promover:\` (DEVE acontecer)
  * ou \`Evitar:\`/\`Não\`/\`Nunca\` (NÃO DEVE acontecer).
  */
-export const exampleReviewer = defineReviewer({
+export const exampleWatchdog = defineWatchdog({
 	id: "example",
 	name: "Exemplo",
-	description: "Revisor de exemplo — descreva o propósito em uma frase.",
+	description: "Watchdog de exemplo — descreva o propósito em uma frase.",
 	scope: "Todo o repositório (ajuste o escopo)",
 	classify: [{ value: "^src/" }],
 	rules: [
@@ -223,17 +217,17 @@ export const exampleReviewer = defineReviewer({
 });
 `;
 
-const REVIEWERS_INDEX = `import { exampleReviewer } from "./example";
+const WATCHDOGS_INDEX = `import { exampleWatchdog } from "./example";
 
 /**
- * Definições dos revisores — as chaves definem o union \`ReviewerId\`.
- * Adicionar um revisor = criar \`<id>.ts\` e registrá-lo aqui.
+ * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
+ * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
  */
-export const REVIEWER_DEFINITIONS = {
-	example: exampleReviewer,
+export const WATCHDOG_DEFINITIONS = {
+	example: exampleWatchdog,
 };
 
-export type ReviewerId = keyof typeof REVIEWER_DEFINITIONS;
+export type WatchdogId = keyof typeof WATCHDOG_DEFINITIONS;
 `;
 
 const EXCLUSIONS_TEMPLATE = `/** Arquivos que nunca entram na revisão — gerados, locks, builds. */
@@ -252,7 +246,7 @@ export function isExcluded(filePath: string): boolean {
 
 const DOC_MAPPINGS_TEMPLATE = `/**
  * Mapeamento de padrões nos paths → documentação relevante.
- * Consumido pelo motor via \`ReviewConfig.docMappings\`.
+ * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
  */
 export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
 	[/^src\\//, ["AGENTS.md"]],
@@ -316,45 +310,15 @@ function writeGeneratedFile(
 	ctx.generated.push(relativePath);
 }
 
-/** Remove ponteiros e markdown canônico de skills renomeadas (migração). */
-function removeDeprecatedSkills(ctx: ScaffoldContext): void {
-	for (const name of DEPRECATED_SKILLS) {
-		const targets = [
-			join(CORE_SKILL_DIR, `${name}.md`),
-			...ctx.harnesses.map((harness) => join(`.${harness}`, "skills", name)),
-		];
-		for (const relativePath of targets) {
-			if (!existsSync(join(ctx.cwd, relativePath))) continue;
-			rmSync(join(ctx.cwd, relativePath), { recursive: true, force: true });
-			ctx.removed.push(relativePath);
-		}
-	}
-}
-
-/** Remove ponteiros e markdown canônico de skills renomeadas (migração). */
-function removeDeprecatedSkills(ctx: ScaffoldContext): void {
-	for (const name of DEPRECATED_SKILLS) {
-		const targets = [
-			join(CORE_SKILL_DIR, `${name}.md`),
-			...ctx.harnesses.map((harness) => join(`.${harness}`, "skills", name)),
-		];
-		for (const relativePath of targets) {
-			if (!existsSync(join(ctx.cwd, relativePath))) continue;
-			rmSync(join(ctx.cwd, relativePath), { recursive: true, force: true });
-			ctx.removed.push(relativePath);
-		}
-	}
-}
-
 // ---------------------------------------------------------------------------
 // Camadas
 // ---------------------------------------------------------------------------
 
-/** Arquivos do usuário: config, revisores, exclusões e mapeamentos. */
+/** Arquivos do usuário: config, watchdogs, exclusões e mapeamentos. */
 export function writeUserLayer(ctx: ScaffoldContext): void {
 	writeUserFile(ctx, "houndsman.config.ts", CONFIG_TEMPLATE(ctx.projectName));
-	writeUserFile(ctx, join(PROJECT_DIR, "reviewers", "example.ts"), REVIEWER_EXAMPLE);
-	writeUserFile(ctx, join(PROJECT_DIR, "reviewers", "index.ts"), REVIEWERS_INDEX);
+	writeUserFile(ctx, join(PROJECT_DIR, "watchdogs", "example.ts"), WATCHDOG_EXAMPLE);
+	writeUserFile(ctx, join(PROJECT_DIR, "watchdogs", "index.ts"), WATCHDOGS_INDEX);
 	writeUserFile(ctx, join(PROJECT_DIR, "exclusions.ts"), EXCLUSIONS_TEMPLATE);
 	writeUserFile(ctx, join(PROJECT_DIR, "doc-mappings.ts"), DOC_MAPPINGS_TEMPLATE);
 }
@@ -391,7 +355,7 @@ function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
 			"houndsman",
 			ctx.projectName,
 			`${CORE_SKILL_DIR}/houndsman.md`,
-			"Revisa Pull Requests com revisores especializados por domínio. Orquestra `bun run houndsman context` → `bun run houndsman` → subagentes → `bun run houndsman --finalize`. Config em `houndsman.config.ts`; regras em `.houndsman/`; relatório em `.houndsman/.runs/<branch-slug>/review.md`.",
+			"Revisa Pull Requests com watchdogs especializados por domínio. Orquestra `bun run houndsman context` → `bun run houndsman` → subagentes → `bun run houndsman --finalize`. Config em `houndsman.config.ts`; regras em `.houndsman/`; relatório em `.houndsman/.runs/<branch-slug>/review.md`.",
 			"Nome da branch (opcional, detecta automaticamente se omitido)",
 		),
 	);
@@ -402,8 +366,8 @@ function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
 			"houndsman-update",
 			ctx.projectName,
 			`${CORE_SKILL_DIR}/houndsman-update.md`,
-			"Atualiza as regras e protocolos do skill houndsman (revisores, exclusões, mapeamentos de docs).",
-			"Revisor alvo (opcional)",
+			"Atualiza as regras e protocolos do skill houndsman (watchdogs, exclusões, mapeamentos de docs).",
+			"Watchdog alvo (opcional)",
 		),
 	);
 }

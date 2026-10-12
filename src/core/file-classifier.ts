@@ -1,13 +1,13 @@
 /**
  * Classificação de arquivos alterados por domínio de review (biblioteca).
  *
- * Cada revisor declara os arquivos que cobre (`classify`); exclusões chegam via
- * `ReviewConfig`. Use `classifyRange(base, head, config)`.
+ * Cada watchdog declara os arquivos que cobre (`classify`); exclusões chegam via
+ * `HoundsmanConfig`. Use `classifyRange(base, head, config)`.
  */
 
 import { readFileSync } from "node:fs";
-import type { ReviewConfig } from "./config";
-import type { ClassifyRule, ReviewerDefinition } from "./types";
+import type { HoundsmanConfig } from "./config";
+import type { ClassifyRule, WatchdogDefinition } from "./types";
 
 type FileStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "unknown";
 
@@ -18,8 +18,8 @@ type FileEntry = {
 };
 
 export type ClassificationResult = {
-	/** reviewerId → file paths (apenas arquivos revisáveis) */
-	reviewers: Record<string, string[]>;
+	/** watchdogId → file paths (apenas arquivos revisáveis) */
+	watchdogs: Record<string, string[]>;
 	/** path → metadados (status, oldPath) */
 	files: Record<string, { status: FileStatus; oldPath?: string }>;
 	/** Arquivos não classificados (revisar manualmente) */
@@ -28,7 +28,7 @@ export type ClassificationResult = {
 	excluded: string[];
 	/** Arquivos deletados — candidatos a breaking change, sem conteúdo para ler */
 	deleted: string[];
-	/** Estatísticas por reviewer */
+	/** Estatísticas por watchdog */
 	stats: Record<string, number>;
 	excludedCount: number;
 	base?: string;
@@ -44,11 +44,11 @@ const DEFAULT_CLASSIFY_TYPE: NonNullable<ClassifyRule["type"]> = "filename";
 
 /** `true` se há entradas de conteúdo (as únicas que exigem ler o arquivo). */
 function hasContentRules<TId extends string>(
-	reviewers: Record<TId, ReviewerDefinition>,
-	reviewerIds: readonly TId[],
+	watchdogs: Record<TId, WatchdogDefinition>,
+	watchdogIds: readonly TId[],
 ): boolean {
-	return reviewerIds.some((id) =>
-		reviewers[id]?.classify?.some((rule) => rule.type === "content"),
+	return watchdogIds.some((id) =>
+		watchdogs[id]?.classify?.some((rule) => rule.type === "content"),
 	);
 }
 
@@ -73,17 +73,17 @@ function matchesClassifyRule(
 	return new RegExp(rule.value).test(filePath);
 }
 
-/** Revisores que declaram o arquivo (união dos `classify`). */
-export function matchReviewers<TId extends string>(
+/** Watchdogs que declaram o arquivo (união dos `classify`). */
+export function matchWatchdogs<TId extends string>(
 	filePath: string,
-	reviewers: Record<TId, ReviewerDefinition>,
-	reviewerIds: readonly TId[],
+	watchdogs: Record<TId, WatchdogDefinition>,
+	watchdogIds: readonly TId[],
 	content?: string,
 ): TId[] {
 	const ids: TId[] = [];
-	for (const id of reviewerIds) {
+	for (const id of watchdogIds) {
 		if (
-			reviewers[id]?.classify?.some((rule) =>
+			watchdogs[id]?.classify?.some((rule) =>
 				matchesClassifyRule(filePath, rule, content),
 			)
 		) {
@@ -166,15 +166,15 @@ export function parseEntries(raw: string): FileEntry[] {
 
 export function classifyEntries<TId extends string>(
 	entries: FileEntry[],
-	config: ReviewConfig<TId>,
+	config: HoundsmanConfig<TId>,
 ): ClassificationResult {
-	const reviewerFiles: Record<string, string[]> = {};
+	const watchdogFiles: Record<string, string[]> = {};
 	const files: ClassificationResult["files"] = {};
 	const unclassified: string[] = [];
 	const excluded: string[] = [];
 	const deleted: string[] = [];
-	// Leitura de conteúdo só é habilitada se algum revisor declarar regra `content`.
-	const needsContent = hasContentRules(config.reviewers, config.reviewerIds);
+	// Leitura de conteúdo só é habilitada se algum watchdog declarar regra `content`.
+	const needsContent = hasContentRules(config.watchdogs, config.watchdogIds);
 
 	for (const entry of entries) {
 		const { path, status, oldPath } = entry;
@@ -192,10 +192,10 @@ export function classifyEntries<TId extends string>(
 		}
 
 		const content = needsContent ? readFileContent(path) : undefined;
-		const ids: string[] = matchReviewers(
+		const ids: string[] = matchWatchdogs(
 			path,
-			config.reviewers,
-			config.reviewerIds,
+			config.watchdogs,
+			config.watchdogIds,
 			content,
 		);
 
@@ -205,23 +205,23 @@ export function classifyEntries<TId extends string>(
 		}
 
 		for (const id of ids) {
-			reviewerFiles[id] ??= [];
-			reviewerFiles[id].push(path);
+			watchdogFiles[id] ??= [];
+			watchdogFiles[id].push(path);
 		}
 	}
 
-	const reviewers: Record<string, string[]> = {};
+	const watchdogs: Record<string, string[]> = {};
 	const stats: Record<string, number> = {};
-	for (const id of config.reviewerIds) {
-		const list = [...new Set(reviewerFiles[id] ?? [])];
+	for (const id of config.watchdogIds) {
+		const list = [...new Set(watchdogFiles[id] ?? [])];
 		if (list.length > 0) {
-			reviewers[id] = list;
+			watchdogs[id] = list;
 			stats[id] = list.length;
 		}
 	}
 
 	return {
-		reviewers,
+		watchdogs,
 		files,
 		unclassified,
 		excluded,
@@ -237,7 +237,7 @@ export function classifyEntries<TId extends string>(
 export function classifyRange<TId extends string>(
 	base: string,
 	head: string,
-	config: ReviewConfig<TId>,
+	config: HoundsmanConfig<TId>,
 ): ClassificationResult {
 	const entries = parseEntries(runGitDiff(base, head));
 	const result = classifyEntries(entries, config);

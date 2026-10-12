@@ -2,6 +2,12 @@
 
 Revisão automatizada de Pull Requests — CLI independente + camada de configuração do projeto.
 
+## Terminologia
+
+- **houndsman** — o orquestrador/treinador (CLI + motor).
+- **watchdog** — cada agente especialista por domínio que audita o diff.
+- **review/revisão** — o processo de revisão.
+
 ## Quem executa o quê
 
 - **Você** só invoca o skill: `/houndsman`. Não roda script à mão.
@@ -12,7 +18,7 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 |---|---|---|---|
 | 0. Contexto | `bun run houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
 | 1. Preparar | `bun run houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
-| 2. Revisar | *(subagentes)* | skill | `findings/<revisor>.json` (um por revisor) |
+| 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (um por watchdog) |
 | 3. Finalizar | `bun run houndsman --finalize` | skill | `review.md` |
 
 ## Comandos
@@ -22,7 +28,7 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
-| `houndsman reviewer <id>` | Contexto de um revisor (`--json`, `--rules`) |
+| `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
@@ -39,13 +45,13 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman
 
 | Arquivo | Conteúdo |
 |---|---|
-| `classification.json` | Revisores ativados + status (A/M/D/R) |
+| `classification.json` | Watchdogs ativados + status (A/M/D/R) |
 | `candidates.json` | Candidatos da pré-análise Jev |
 | `context.json` | Payload bruto da PR via `gh` (ou marcador de indisponível) |
 | `context-summary.json` | Resumo do subagente (objetivo/motivação/alterações) |
-| `briefs/<reviewer>.md` | Instruções prontas para cada sub-agente |
-| `manifest.json` | Resumo (revisores, arquivos, deletados, status, contexto) |
-| `findings/<reviewer>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
+| `briefs/<watchdog>.md` | Instruções prontas para cada sub-agente |
+| `manifest.json` | Resumo (watchdogs, arquivos, deletados, status, contexto) |
+| `findings/<watchdog>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
 | `review.md` | Relatório final |
 
 ## Estrutura
@@ -54,23 +60,23 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman
 
 ```
 src/
-├── index.ts             # API pública (defineReviewer, defineReviewConfig, tipos)
+├── index.ts             # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
 ├── cli/index.ts         # CLI ÚNICO (bin `houndsman`)
 ├── core/                # bibliotecas genéricas
-│   ├── config.ts            # contrato ReviewConfig + defineReviewConfig
+│   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── config-loader.ts     # descoberta/carregamento de houndsman.config.ts
 │   ├── assets.ts            # assets embarcados (src/skill/) — usados para gerar a camada
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
-│   ├── types.ts             # Severity, Rule, ReviewerDefinition, defineReviewer
-│   ├── reviewer-registry.ts # getReviewer/findReviewer/getReviewerContext(config)
+│   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
+│   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
 │   ├── orchestrator.ts      # preparar/finalizar
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── pr-context.ts        # contexto da PR via gh
-│   ├── file-classifier.ts   # classificação (via `classify` dos revisores)
+│   ├── file-classifier.ts   # classificação (via `classify` dos watchdogs)
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
-│   ├── commands/            # context · review · reviewer · setup · update · test
+│   ├── commands/            # context · review · watchdog · setup · update · test
 │   └── jev/                 # subsistema Jev (Passo 1.5)
 ├── skill/*.md           # assets markdown (embarcados no pacote)
 └── tests/               # suíte da lib (project-agnóstica, "project fake")
@@ -79,14 +85,14 @@ src/
 ### Projeto (consumidor — gerado por `houndsman setup`)
 
 ```
-houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
+houndsman.config.ts           # HoundsmanConfig (dados; descoberto em runtime)
 .houndsman/
 ├── .gitignore                # AUTO — ignora core/ e .runs/
 ├── core/                     # AUTO — sincronizado por `houndsman update`
 │   ├── types.ts              # snapshot dos tipos + helpers (autocontido)
 │   └── skill/*.md            # documentação do skill
-├── reviewers/                # USUÁRIO — 1 módulo .ts por revisor
-│   └── index.ts              # REVIEWER_DEFINITIONS + type ReviewerId
+├── watchdogs/                # USUÁRIO — 1 módulo .ts por watchdog
+│   └── index.ts              # WATCHDOG_DEFINITIONS + type WatchdogId
 ├── exclusions.ts             # USUÁRIO
 └── doc-mappings.ts           # USUÁRIO
 ```
@@ -101,9 +107,9 @@ houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
 > Regras devem ser **gerais/reutilizáveis** no domínio e declarar a **polaridade** no texto
 > (`Promover:` = deve acontecer; `Evitar:`/`Não`/`Nunca` = não deve acontecer).
 
-1. Novas regras/revisores → editar `.houndsman/reviewers/<id>.ts` (regras + escopo +
-   `classify`) ou `doc-mappings.ts`/`exclusions.ts`. Um revisor novo exige só o módulo em
-   `.houndsman/reviewers/<id>.ts` + entrada em `.houndsman/reviewers/index.ts`.
+1. Novas regras/watchdogs → editar `.houndsman/watchdogs/<id>.ts` (regras + escopo +
+   `classify`) ou `doc-mappings.ts`/`exclusions.ts`. Um watchdog novo exige só o módulo em
+   `.houndsman/watchdogs/<id>.ts` + entrada em `.houndsman/watchdogs/index.ts`.
 2. Rodar `bun run houndsman doctor` — valida a config (definições, classificação, specs Jev).
 
 > Para qualquer alteração de regra (pontual ou auditoria completa), use o skill
