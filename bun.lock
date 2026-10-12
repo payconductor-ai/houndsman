@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "houndsman",
+      "name": "@payconductor/houndsman",
       "dependencies": {
         "axios": "^1.12.2",
       },

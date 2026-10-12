@@ -35,8 +35,8 @@ especialista por domínio que audita o diff (antigo "revisor"); **review/revisã
 - **Fonte única de verdade do projeto:** `houndsman.config.ts` (`HoundsmanConfig`) +
   `.houndsman/` (`watchdogs/<id>.ts`: regras + escopo + foco + `classify`;
   `exclusions.ts`: filtros; `doc-mappings.ts`: docs).
-- **O motor genérico** vive no pacote `houndsman` (`core/` + `cli/`). O markdown do skill
-  vive em `src/skill/`.
+- **O motor genérico** vive no pacote `@payconductor/houndsman` (`core/` + `cli/`). O markdown
+  do skill vive em `src/skill/`.
 - **As regras refletem os padrões APLICADOS hoje** — não validar práticas que o projeto
   não adota. Regra sem aplicação real no código gera falso positivo.
 - Cada watchdog recebe apenas seus arquivos relevantes (brief pronto) — nunca o diff completo.

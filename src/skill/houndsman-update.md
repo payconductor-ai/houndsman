@@ -37,6 +37,13 @@ Rubrica única — o texto da regra é renderizado **literalmente** no brief do 
 (`renderBrief` em `src/core/brief.ts`), então toda ambiguidade vira ruído na revisão.
 Toda regra (nova ou alterada) deve passar por **todos** os itens:
 
+> **Prefixo de polaridade (obrigatório).** Toda regra começa com o sentido do que se espera:
+> `Promover:` → algo que **DEVE** acontecer (a presença do padrão); `Evitar:` → algo que
+> **NÃO DEVE** acontecer (a ausência do anti-padrão); `Não` e `Nunca` no início são
+> equivalentes aceitos de `Evitar:`. Regra sem prefixo explícito é ambígua e o
+> `houndsman doctor` emite um aviso. O prefixo define **um único sentido** por regra —
+> ver *Unipolar* (item 8).
+
 1. **Sujeito explícito** — diz qual artefato é verificado; sem pronome órfão ("o antigo", "isso").
 2. **Condição inequívoca** — duas IAs chegam à mesma conclusão sobre o que é violação.
 3. **Critério concreto** — limite/prazo/lista explícito ou referência a símbolo real do código.
@@ -53,8 +60,19 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 7. **Polaridade explícita** — a regra começa com o sentido inequívoco:
    - `Promover:` → algo que **DEVE** acontecer (ex.: `Promover: rotas validam a entrada com o schema do Elysia`).
    - `Evitar:` → algo que **NÃO DEVE** acontecer; `Não` / `Nunca` no início são **equivalentes aceitos** de `Evitar:`.
-8. **Escopo coerente** — a regra pertence ao domínio do watchdog.
-9. **Sem duplicata** — nenhuma regra repetida literalmente no mesmo watchdog.
+8. **Unipolar (um só sentido)** — a regra expressa **uma única direção**, a mesma do prefixo:
+   só afirmações de **promover** ou só afirmações de **evitar**. Não combine "faça X" **e**
+   "não faça Y" na mesma regra — são dois juízos independentes, com veredito e evidência
+   próprios. Regra que precisa dos dois sentidos **vira duas regras**: uma `Promover:` e
+   outra `Evitar:`.
+   - ❌ `Evitar: o handler valida a entrada e não acessa o banco direto` (afirmação + negação).
+   - ✅ `Promover: o handler valida a entrada com o schema do Elysia` **+**
+     `Evitar: o handler acessa o banco direto`.
+   - Exceção **aceitável**: quando os dois sentidos são **inseparáveis** (a negação é condição
+     direta da afirmação). Aí o prefixo lidera o sentido dominante e o outro entra como oração
+     subordinada — nunca como segundo juízo coordenado.
+9. **Escopo coerente** — a regra pertence ao domínio do watchdog.
+10. **Sem duplicata** — nenhuma regra repetida literalmente no mesmo watchdog.
 
 > O `houndsman doctor` emite um **aviso** (não bloqueante) para regra sem polaridade explícita
 > (`Promover:`, `Evitar:`, `Não` ou `Nunca`).
@@ -75,7 +93,7 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 ## Arquivos que definem a revisão
 
 > A primeira parte é a **camada de projeto** (muda por consumidor); a segunda é o **motor**
-> (o pacote `houndsman`).
+> (o pacote `@payconductor/houndsman`).
 
 | Arquivo | Papel |
 |---|---|
@@ -146,6 +164,7 @@ verificáveis por leitura local. Candidatos não confirmados pelo watchdog **nã
 4. **Editar `.houndsman/watchdogs/<id>.ts`** (`WATCHDOG_DEFINITIONS[<id>]`):
    - `rules`: uma entrada `{ severity, text }` por regra — o texto começa com `Promover:` (DEVE) ou
      `Evitar:`/`Não`/`Nunca` (NÃO DEVE), conforme as Convenções de escrita.
+   - Regra que mistura afirmação e negação (dois sentidos) → dividir em **duas entradas** (*Unipolar*, item 8).
    - `jev` (opcional): `{ kind: "noul" }`, com `instructions` e/ou `criteria` — ver seção acima.
    - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
    - Se a regra muda para outro domínio (paths), ajustar o `classify` do watchdog.
@@ -184,12 +203,14 @@ As regras são renderizadas **literalmente** nos briefs dos subagentes (`renderB
 
 A rubrica é a seção **Convenções de escrita das regras** (acima). Toda regra deve passar por
 todos os itens — em especial: **geral/reutilizável** (não regra de negócio pontual),
-**sem jargão abreviado** e **polaridade explícita** (`Promover:` / `Evitar:`/`Não`/`Nunca`).
+**sem jargão abreviado**, **polaridade explícita** (`Promover:` / `Evitar:`/`Não`/`Nunca`) e
+**unipolar** (um só sentido por regra — sem afirmar e negar no mesmo texto).
 
 ### Passos
 
 1. Inventariar todas as regras (`rules`) dos watchdogs alvo.
 2. Marcar cada regra contra a rubrica; propor reescrita **preservando semântica e severidade**.
+   Regra que mistura os dois sentidos → **dividir** em afirmativa e negativa (*Unipolar*, item 8).
 3. Se for regra **afirmativa** ambígua **e não houver evidência de aplicação** no código,
    tratá-la como `UTOPIAN`/`OUTDATED` (remover/rebaixar) conforme a Regra de Ouro.
    Para regra **negativa**, a ausência de ocorrências é o **esperado** — não remover por isso.
@@ -222,7 +243,7 @@ Checklist final:
 - [ ] Nenhuma regra **negativa** foi removida por "0 ocorrências" (Regra de Ouro).
 - [ ] Brief de amostra não contém regra removida (dry-run abaixo).
 - [ ] Toda regra passa nas convenções de escrita (geral/reutilizável, sem jargão abreviado,
-      sem qualificador vago, com polaridade explícita) — conferir via grep.
+      sem qualificador vago, com polaridade explícita e **unipolar**) — conferir via grep.
 
 ```bash
 # Dry-run: gerar briefs e conferir ausência de regras removidas

@@ -5,9 +5,9 @@
  * mapeamentos) + arquivos auto-gerados (tipos, skill, `.houndsman/.gitignore`,
  * ponteiros de harness). O `houndsman update` sincroniza só os auto-gerados.
  *
- * A camada é **autocontida** — não importa o pacote `houndsman` em runtime, o que
- * permite instalar o CLI **globalmente** e usar `bun run houndsman` sem
- * dependência local no projeto.
+ * A camada é **autocontida** — não importa o pacote `@payconductor/houndsman` em
+ * runtime, o que permite instalar o CLI **globalmente** e usar `bun run houndsman`
+ * sem dependência local no projeto.
  *
  * Idempotente: arquivos do usuário só são sobrescritos com `--force`.
  */

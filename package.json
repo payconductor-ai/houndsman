@@ -1,5 +1,5 @@
 {
-	"name": "houndsman",
+	"name": "@payconductor/houndsman",
 	"version": "0.1.0",
 	"description": "Orquestrador de revisão de Pull Requests: classifica o diff, despacha watchdogs especializados por domínio e consolida o relatório.",
 	"type": "module",
@@ -12,9 +12,19 @@
 	},
 	"files": [
 		"src",
+		"assets",
 		"README.md",
 		"LICENSE"
 	],
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/payconductor-ai/houndsman.git"
+	},
+	"bugs": {
+		"url": "https://github.com/payconductor-ai/houndsman/issues"
+	},
+	"homepage": "https://github.com/payconductor-ai/houndsman#readme",
+	"author": "PayConductor",
 	"keywords": [
 		"pull-request",
 		"code-review",

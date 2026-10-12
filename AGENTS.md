@@ -20,7 +20,7 @@ projeto **autocontida**), carregada em runtime.
 
 - **Runtime:** Bun (obrigatório). O `bin` usa shebang `#!/usr/bin/env bun`.
 - **Deps de produção:** apenas `axios` (cliente da pré-análise Jev).
-- **Publicação:** npm público, sem escopo (`houndsman`).
+- **Publicação:** npm público, escopo da org (`@payconductor/houndsman`).
 
 ## Comandos
 
@@ -78,9 +78,9 @@ src/
   por caminho relativo ao cwd.
 - A config do consumidor é carregada em **runtime** (`core/config-loader.ts`); nunca importada
   estaticamente.
-- O `setup` gera uma camada **autocontida** (não importa o pacote `houndsman` — só tipos
-  espelhados em `.houndsman/types.ts`). Mantenha assim: é o que permite instalação **global**
-  sem dependência local no projeto.
+- O `setup` gera uma camada **autocontida** (não importa o pacote `@payconductor/houndsman` —
+  só tipos espelhados em `.houndsman/core/types.ts`). Mantenha assim: é o que permite
+  instalação **global** sem dependência local no projeto.
 - **Jev é opcional e falha-aberto.** Sem `TYPESAFE_API_KEY` (ou com `--no-jev`), a revisão roda
   idêntica, sem chamadas de rede. Nunca torne o Jev obrigatório.
 - Comandos que produzem efeito (log/exit) ficam em `cli/`; `core/` devolve dados.
@@ -94,12 +94,12 @@ src/
 
 ## Publicação
 
-- Pacote **público sem escopo** (`houndsman`) — `publishConfig.access: "public"`.
-- Publica **TypeScript** (`files: ["src", ...]`); quem instala precisa do Bun.
-- Release automatizado por `.github/workflows/release.yml` (push em `stable`).
-  Validação de PR por `.github/workflows/ci.yml`.
-- Ao mudar a **API pública/tipos**, lembre: consumidores usam um snapshot em `.houndsman/types.ts`,
-  regenerado com `houndsman setup` (deletando o arquivo e rodando `setup` de novo).
+- Pacote **público** com escopo da org (`@payconductor/houndsman`) — `publishConfig.access: "public"`.
+- Publica **TypeScript** (`files: ["src", "assets"]`); quem instala precisa do Bun.
+- **Publish manual** (com 2FA), a partir da `main` — sem release automático no CI. Validação de
+  PR por `.github/workflows/ci.yml`; passo a passo em `NEXT-STEPS.md`.
+- Ao mudar a **API pública/tipos**, lembre: consumidores usam um snapshot em
+  `.houndsman/core/types.ts`, sincronizado com `houndsman update`.
 
 ## Contexto adicional
 

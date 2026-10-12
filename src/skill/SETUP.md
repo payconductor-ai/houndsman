@@ -13,7 +13,7 @@ no seu projeto é **autocontida** — não exige nenhuma dependência local do p
 ## Instalação (global)
 
 ```bash
-bun add -g houndsman
+bun add -g @payconductor/houndsman
 ```
 
 O comando `houndsman` fica disponível em qualquer diretório.
