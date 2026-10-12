@@ -46,16 +46,23 @@ src/
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext
-│   ├── orchestrator.ts      # prepare/finalize
+│   ├── orchestrator.ts      # prepare/finalize (+ state.json)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
+│   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
+│   ├── findings-state.ts    # estado de triagem (state.json) + store atômico
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── commands/            # context · review · watchdog · setup · update · test
+│   ├── commands/            # context · review · watchdog · findings · setup · update · test
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
+├── server/           # servidor local (Bun.serve) + UI Preact
+│   ├── index.ts             # rotas da API + shell HTML
+│   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
+│   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
+│   └── client/              # app Preact — index.tsx (entry) + App/RunList/Filters/FindingCard/...
 ├── skill/*.md        # assets markdown (copiados pelo `setup`)
 └── tests/            # suíte project-agnóstica
 ```
@@ -77,7 +84,7 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
       ↓
 [2] N subagentes     ─► findings/<watchdog>.json
       ↓
-[3] --finalize       ─► review.md
+[3] --finalize       ─► review.md + state.json
 ```
 
 - **Passo 0** — `context` coleta a PR via `gh`. Ausente/sem login/sem PR → `available:false`
@@ -90,10 +97,21 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 - **Passo 2** — um subagente por brief (despachados em **ondas**) grava
   `findings/<watchdog>.json` (schema em `src/skill/OUTPUT-FORMAT.md`).
 - **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, agrupa por severidade
-  **e por arquivo**, grava `review.md` + um `review.<watchdog>.md` por domínio com achados e
-  anexa a tabela de cobertura. **Falha** se faltar algum `findings/<watchdog>.json`.
+  **e por arquivo**, grava `review.md` + um `review.<watchdog>.md` por domínio com achados,
+  anexa a tabela de cobertura e grava o `state.json` da triagem (id + fingerprint de conteúdo
+  por finding). **Falha** se faltar algum `findings/<watchdog>.json`.
 
 > Por que comandos separados? Entre o Passo 1 e o 3 acontece trabalho de LLM (os subagentes).
+
+### Triagem (Passo 4) e servidor
+
+- **Identidade por conteúdo.** `finding-anchor.ts` define o `fingerprint` (arquivo + regra +
+  âncora normalizada). A `line` é **cache**, recalculada por `syncState` — nunca a identidade.
+  Ocorrências byte-idênticas compartilham o id (grupo; limitação conhecida).
+- `findings-state.ts` é o store do `state.json` (escrita atômica via tmp + rename).
+- `houndsman findings ...` (`commands/findings.ts`) é a interface do agente; `houndsman server`
+  (`src/server/`) é a UI (Bun.serve + Preact; bundle do cliente em memória por `Bun.build`).
+  O `server` faz bind em `127.0.0.1` — ferramenta local, sem autenticação.
 
 ### Setup / update (camada do projeto)
 

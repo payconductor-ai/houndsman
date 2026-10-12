@@ -7,6 +7,8 @@
 
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
+export type { FindingsCommandResult } from "./core/commands/findings";
+export { runFindingsCommand } from "./core/commands/findings";
 export type {
 	HoundsmanBudgets,
 	HoundsmanConcurrency,
@@ -44,6 +46,51 @@ export {
 	selectByBudget,
 	sortByRisk,
 } from "./core/file-classifier";
+export type {
+	AnchorLocation,
+	FindingAnchor,
+	ReanchorStatus,
+} from "./core/finding-anchor";
+export {
+	buildAnchor,
+	fingerprintOf,
+	hashKey,
+	locateAnchor,
+	normalizeLine,
+	reanchor,
+} from "./core/finding-anchor";
+export type {
+	BuildStateOptions,
+	FileReader,
+	FindingDecision,
+	FindingExecState,
+	FindingHistoryEntry,
+	FindingState,
+	FindingsFilter,
+	FindingsStateFile,
+	FindingsSummary,
+	FindingUpdate,
+	SyncResult,
+} from "./core/findings-state";
+export {
+	applyFindingUpdate,
+	buildStateFromFindings,
+	buildStateFromRunDir,
+	compareFindings,
+	emptyState,
+	FINDING_DECISIONS,
+	FINDING_EXEC_STATES,
+	FINDINGS_STATE_VERSION,
+	FindingsStateStore,
+	fileReader,
+	filterFindings,
+	newFindingId,
+	reorder,
+	runDir,
+	stateFile,
+	summarize,
+	syncState,
+} from "./core/findings-state";
 export {
 	ARTIFACT_DIR,
 	CORE_DIR,
@@ -51,6 +98,7 @@ export {
 	OUTPUT_FORMAT_PATH,
 	PROJECT_DIR,
 	relFromRoot,
+	STATE_FILE,
 } from "./core/paths";
 export { checkRegistry } from "./core/registry-check";
 export type { DomainReport } from "./core/report-builder";
@@ -80,3 +128,5 @@ export {
 	getWatchdog,
 	getWatchdogContext,
 } from "./core/watchdog-registry";
+export type { ServerOptions } from "./server";
+export { createRequestHandler, startServer } from "./server";

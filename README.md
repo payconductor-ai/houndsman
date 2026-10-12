@@ -86,7 +86,8 @@ Não precisa rodar nenhum script à mão.
    ├─ Passo 0  contexto da PR (gh, opcional)
    ├─ Passo 1  classifica o diff → briefs por watchdog
    ├─ Passo 2  N subagentes revisam em paralelo
-   └─ Passo 3  consolida em review.md
+   ├─ Passo 3  consolida em review.md + state.json
+   └─ Passo 4  triagem (UI local ou agente)
 ```
 
 - Revisão normal: só `/houndsman` (a branch é detectada; base default `main`).
@@ -94,6 +95,32 @@ Não precisa rodar nenhum script à mão.
 - Manual (sem skill): `houndsman context` → `houndsman --base main` → *(subagentes)* →
   `houndsman --finalize`.
 - CI: `houndsman --finalize --fail-on-blocking` (exit 1 se houver bloqueantes).
+
+---
+
+## Triando os findings (opcional)
+
+Depois do `--finalize`, cada finding tem um `id` curto e um `fingerprint` de **conteúdo**
+no `.houndsman/.runs/<branch-slug>/state.json`. Você decide o que fazer com cada um — pela
+**UI local** ou pelo **agente** (auto-fix) — sem abrir o JSON à mão:
+
+```bash
+bun run houndsman server --open     # UI: triar, comentar, marcar feito, ler artefatos
+```
+
+- **decision:** `pending` · `execute` · `ignore` (+ comentário).
+- **execState:** `pending` · `in_progress` · `done` · `stale`.
+
+**Auto-fix pelo agente** — as linhas mudam depois do fix, e o motor reancora por conteúdo:
+
+```bash
+bun run houndsman findings list --decision execute --json
+bun run houndsman findings sync
+bun run houndsman findings done <id>
+```
+
+> A identidade do finding é o **conteúdo** (fingerprint), não a linha: itens deslocados
+> pelo fix não se perdem. O estado é local e mora em `.runs/<slug>/state.json` (gitignored).
 
 ---
 

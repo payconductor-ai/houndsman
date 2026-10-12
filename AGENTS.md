@@ -19,7 +19,7 @@ aqui. O consumidor fornece a configuração em `houndsman.config.ts` + `.houndsm
 projeto **autocontida**), carregada em runtime.
 
 - **Runtime:** Bun (obrigatório). O `bin` usa shebang `#!/usr/bin/env bun`.
-- **Deps de produção:** apenas `axios` (cliente da pré-análise Jev).
+- **Deps de produção:** `axios` (cliente da pré-análise Jev) e `preact` (UI do `server`).
 - **Publicação:** npm público, escopo da org (`@payconductor/houndsman`).
 
 ## Comandos
@@ -33,6 +33,8 @@ projeto **autocontida**), carregada em runtime.
 | `bun run lint` / `bun run format` | Biome |
 | `bun run build` | `bun build` → `dist/` (bundle único) |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
+| `bun run houndsman -- findings <sub>` | Triagem dos findings (`list`/`set`/`done`/`sync`/...) |
+| `bun run houndsman -- server` | Sobe a UI local de triagem (Bun.serve + Preact) |
 | `bun publish --dry-run` | Confere o que vai no tarball |
 
 > Fluxo obrigatório: **`bun run ci:fix` → `bun run ci` → `bun run test`**.
@@ -51,22 +53,30 @@ src/
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
-│   ├── orchestrator.ts      # prepare/finalize
+│   ├── orchestrator.ts      # prepare/finalize (+ state.json no finalize)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
+│   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
+│   ├── findings-state.ts    # estado de triagem (state.json) + store atômico
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── commands/            # context · review · watchdog · setup · test
+│   ├── commands/            # context · review · watchdog · findings · setup · test
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
+├── server/           # servidor local (Bun.serve) + UI Preact
+│   ├── index.ts             # rotas da API + shell HTML
+│   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
+│   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
+│   └── client/              # app Preact — index.tsx (entry) + App/RunList/Filters/FindingCard/...
 ├── skill/*.md        # assets markdown (copiados pelo `setup` no consumidor)
 └── tests/            # suíte project-agnóstica
 ```
 
 **Camadas:** `cli/` = imperativo com efeitos colaterais (`process.argv`/`exit`);
 `core/` = funções/classes reutilizáveis (sem `process.argv`/`exit`, sem side-effect no import);
+`server/` = servidor local (rotas + UI; `Bun.serve`);
 `skill/` = markdown embarcado; `tests/` = suíte.
 
 ## Regras críticas
@@ -75,8 +85,9 @@ src/
   consumidor. Tudo chega por `HoundsmanConfig`.
 - **Nunca** importe caminhos de projeto (`scripts/`, `docs/.ai`, `packages/...`) nem cite
   projetos consumidores. O pacote deve poder ser copiado para um repositório zerado.
-- **Assets** (`src/skill/*.md`) são resolvidos por `core/assets.ts` (`import.meta.dir`) — nunca
-  por caminho relativo ao cwd.
+- **Assets** (`src/skill/*.md` e a mídia em `assets/`) são resolvidos por `core/assets.ts`
+  (`import.meta.dir`) — nunca por caminho relativo ao cwd. O `server` serve a logo em
+  `/assets/logo.png`.
 - A config do consumidor é carregada em **runtime** (`core/config-loader.ts`); nunca importada
   estaticamente.
 - O `setup` gera uma camada **autocontida** (não importa o pacote `@payconductor/houndsman` —
@@ -85,6 +96,11 @@ src/
 - **Jev é opcional e falha-aberto.** Sem `TYPESAFE_API_KEY` (ou com `--no-jev`), a revisão roda
   idêntica, sem chamadas de rede. Nunca torne o Jev obrigatório.
 - Comandos que produzem efeito (log/exit) ficam em `cli/`; `core/` devolve dados.
+- **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`
+  (arquivo + regra + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é cache,
+  recalculada por `syncState`. Não volte a chavear por `(file, line)`.
+- O estado de triagem (`state.json`) é **local** e vive na pasta da run (`.runs/<slug>/`) —
+  já coberto pelo `.gitignore` gerado. O `server` só vincula em `127.0.0.1` (sem auth).
 
 ## Convenções
 

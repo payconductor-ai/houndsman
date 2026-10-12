@@ -16,6 +16,8 @@ export type WatchdogNameResolver = (watchdogId: string) => string;
 const identityName: WatchdogNameResolver = (id) => id;
 
 export type Finding = {
+	/** Id curto do finding (preenchido no `--finalize`; usado pela triagem). */
+	id?: string;
 	rule: string;
 	severity: Severity;
 	file: string;
@@ -206,8 +208,9 @@ function watchdogName(nameOf: WatchdogNameResolver, id: string): string {
 function renderFinding(finding: MergedFinding, nameOf: WatchdogNameResolver): string[] {
 	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
 	const watchdogs = finding.watchdogs.map((r) => watchdogName(nameOf, r)).join(", ");
+	const id = finding.id ? ` · \`${finding.id}\`` : "";
 	const lines = [
-		`- **${finding.rule}** — \`${location}\` · _${watchdogs}_`,
+		`- **${finding.rule}** — \`${location}\` · _${watchdogs}_${id}`,
 		`  ${finding.message}`,
 		`  **Ação:** ${finding.action}`,
 	];

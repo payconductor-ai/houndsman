@@ -28,3 +28,6 @@ export const ARTIFACT_DIR = `${PROJECT_DIR}/.runs`;
 
 /** Schema de output dos watchdogs, citado nos briefs. */
 export const OUTPUT_FORMAT_PATH = `${CORE_SKILL_DIR}/${OUTPUT_FORMAT_FILE}`;
+
+/** Estado de triagem dos findings, dentro da pasta da run (`<slug>/state.json`). */
+export const STATE_FILE = "state.json";

@@ -52,6 +52,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
+| **`state.json`** | Estado de triagem dos findings da run (ids, decisão, execução, histórico) — ver seção 11. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
 | **`context-brief.md`** | Instruções para o subagente que resume o contexto. |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
@@ -162,11 +163,28 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`houndsman watchdog <id>`** | Contexto de um watchdog (`--rules`, `--json`). |
 | **`houndsman setup` / `update`** | Cria / sincroniza a camada do projeto. |
 | **`houndsman test`** | Roda a suíte da lib. |
+| **`houndsman findings <sub>`** | Triagem dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`path`). |
+| **`houndsman server`** | UI local de triagem e leitura de artefatos (`--port`, `--host`, `--open`). |
 | **`--base` / `--head`** | Extremos do diff (default `main` / `HEAD`). |
 | **`--branch` / `--dir`** | Branch alvo / pasta de artefatos. |
 | **`--clean`** | Descarta findings anteriores antes de preparar. |
 | **`--fail-on-blocking`** | Exit `1` se houver `blocking` no `--finalize`. |
 | **`--config <path>`** | Sobrepõe a descoberta do `houndsman.config.*`. |
+
+## 11. Triagem e servidor (UI)
+
+| Termo | Significado |
+| --- | --- |
+| **finding id** | Id curto aleatório de um finding, persistido no `state.json` e exibido no `review.md`. |
+| **fingerprint** | Hash de `arquivo + regra + âncora` — identidade **estável** entre re-execuções do `--finalize`. |
+| **âncora (anchor)** | Linha ofensora normalizada + contexto (linha anterior/seguinte). A `line` é **cache**, não identidade. |
+| **line drift** | Deslocamento de linhas após um auto-fix; resolvido reancorando por conteúdo (`findings sync`). |
+| **decision** | O que fazer: `pending` \| `execute` \| `ignore` (+ `comment` opcional). |
+| **execState** | Em que pé está: `pending` \| `in_progress` \| `done` \| `stale`. |
+| **stale** | Finding cuja âncora sumiu (fix aplicado/arquivo mudou); vira `done` se a decisão era `execute`. |
+| **ausente (`present:false`)** | Finding que sumiu do último `--finalize`; o estado de triagem é preservado. |
+| **grupo (`count`)** | Ocorrências byte-idênticas (mesmo trecho E mesmo contexto) compartilham id — limitação conhecida. |
+| **reancoragem (reanchor)** | Recalcular a linha de cada finding lendo o arquivo atual (`core/finding-anchor.ts`). |
 
 ---
 

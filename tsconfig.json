@@ -3,8 +3,10 @@
 		"target": "ES2022",
 		"module": "ESNext",
 		"moduleResolution": "bundler",
-		"lib": ["ES2022"],
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
 		"types": ["bun-types"],
+		"jsx": "react-jsx",
+		"jsxImportSource": "preact",
 		"allowJs": true,
 		"skipLibCheck": true,
 		"strict": true,
@@ -18,5 +20,5 @@
 		"esModuleInterop": true,
 		"resolveJsonModule": true
 	},
-	"include": ["src/**/*.ts"]
+	"include": ["src/**/*.ts", "src/**/*.tsx"]
 }

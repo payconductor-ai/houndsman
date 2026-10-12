@@ -76,6 +76,8 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 | `exclusions` | Arquivos que nunca entram na revisão. |
 | `docMappings` | Path → documentação de contexto. |
 | `alwaysIncludeDocs` | Docs sempre presentes nos briefs (default `["AGENTS.md"]`). |
+| `budgets` | **Opcional** — teto de arquivos por brief (`maxFilesPerBrief`, default `40`); o excedente vira "fora do orçamento" (registrar em `skipped`). |
+| `concurrency` | **Opcional** — chamadas Jev simultâneas (`jev`, default `5`). |
 
 > O motor **não contém** ids, paths ou regras do projeto — tudo chega por `HoundsmanConfig`,
 > carregado em runtime a partir de `houndsman.config.ts` (ou `--config <path>`).

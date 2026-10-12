@@ -67,9 +67,15 @@ flowchart TD
    (`OUTPUT-FORMAT.md`) — markdown livre não consolida.
 6. **Consolidação.** `houndsman --finalize` valida os JSONs, deduplica por `(file, line, rule)`
    (watchdogs sobrepostos não geram achado duplicado), agrupa por severidade **e por arquivo** e
-   grava um `review.<watchdog>.md` por domínio com achados.
+   grava um `review.<watchdog>.md` por domínio com achados. Também grava
+   `.houndsman/.runs/<slug>/state.json` — cada finding ganha um `id` e um **fingerprint de
+   conteúdo** (a linha é cache, não identidade), base da triagem (Passo 4).
 7. **Leitura final.** O agente principal lê o `review.md` consolidado e produz o resumo de
    violações e problemas.
+8. **Triagem (opcional).** `houndsman server` abre a UI local para marcar cada finding como
+   `pending`/`execute`/`ignore` e acompanhar a execução; o agente usa
+   `houndsman findings list/set/done/sync` para o auto-fix (as linhas mudam — o motor reancora
+   por conteúdo).
 
 ### Orçamento por brief (PRs grandes)
 
@@ -125,6 +131,8 @@ Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consol
 | `houndsman --base main` | Passo 1 — prepara os briefs |
 | `houndsman --finalize` | Passo 3 — gera o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--rules`, `--json`) |
+| `houndsman findings <sub>` | Triagem dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`path`) |
+| `houndsman server` | UI local de triagem + leitura de artefatos (`--port`, `--host`, `--open`) |
 
 Flags: `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
 `--branch <nome>` · `--dir <dir>` · `--config <path>` · `--clean` · `--no-jev` ·

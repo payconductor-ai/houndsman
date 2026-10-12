@@ -11,10 +11,18 @@ import { join } from "node:path";
 /** Diretório de assets markdown embarcados no pacote. */
 export const SKILL_DIR = join(import.meta.dir, "..", "skill");
 
+/** Diretório de assets de mídia do pacote (root `assets/` — logo etc.). */
+export const MEDIA_DIR = join(import.meta.dir, "..", "..", "assets");
+
 /** Nome do arquivo de schema de output dos watchdogs. */
 export const OUTPUT_FORMAT_FILE = "OUTPUT-FORMAT.md";
 
 /** Caminho absoluto de um asset embarcado em `src/skill/`. */
 export function assetPath(fileName: string): string {
 	return join(SKILL_DIR, fileName);
+}
+
+/** Caminho absoluto de um asset de mídia em `assets/` (ex.: a logo). */
+export function mediaPath(fileName: string): string {
+	return join(MEDIA_DIR, fileName);
 }

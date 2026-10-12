@@ -11,6 +11,8 @@
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
+ *   findings <sub>       Triagem dos findings (list/set/done/sync/...)
+ *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
  *   doctor               Valida a configuração, o ambiente e a credencial Jev (anti-drift)
@@ -22,6 +24,7 @@
  */
 
 import { runContextCommand } from "../core/commands/context";
+import { runFindingsCommand } from "../core/commands/findings";
 import { parseReviewArgs } from "../core/commands/review";
 import { runSetupCommand } from "../core/commands/setup";
 import { runLibTests } from "../core/commands/test";
@@ -33,6 +36,7 @@ import { JevClient } from "../core/jev";
 import { finalize, prepare, resolveBranch } from "../core/orchestrator";
 import { relFromRoot } from "../core/paths";
 import { checkRegistry } from "../core/registry-check";
+import { startServer } from "../server";
 
 const HELP = `Uso: houndsman [comando] [flags]
 
@@ -40,6 +44,8 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
+  findings <sub>      Triagem dos findings (list · show · set · done · reset · sync · summary · path)
+  server              Sobe a UI local de triagem (--port, --host, --open)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
   doctor              Valida a configuração, o ambiente e a credencial Jev
@@ -54,7 +60,18 @@ Flags:
   --dir <dir>         Diretório dos artefatos
   --clean             Descarta findings anteriores
   --no-jev            Desativa a pré-análise Jev
-  --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)`;
+  --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
+
+Flags de findings:
+  --decision <d>      pending | execute | ignore
+  --exec <e>          pending | in_progress | done | stale
+  --comment <text>    Comentário/instrução adicional
+  --watchdog <id>     Filtra por watchdog (list)
+  --severity <s>      Filtra por severidade (list)
+  --file <text>       Filtra por trecho do caminho (list)
+  --all               Inclui findings ausentes do último relatório
+  --json              Saída JSON
+  --limit <n>         Limita o nº de itens (list)`;
 
 function readFlag(args: string[], flag: string): string | undefined {
 	const index = args.indexOf(flag);
@@ -156,6 +173,44 @@ function runWatchdog(config: HoundsmanConfig, args: string[]): void {
 	);
 }
 
+/**
+ * Subcomando `findings` — triagem dos findings (list/show/set/done/reset/
+ * sync/summary/path). Deixa o agente interagir com o estado sem abrir o JSON.
+ */
+function runFindings(config: HoundsmanConfig, args: string[]): void {
+	const result = runFindingsCommand(config, args);
+	if (result.exitCode !== 0) {
+		console.error(result.output);
+		process.exit(result.exitCode);
+	}
+	console.log(result.output);
+}
+
+/** Abre a URL no navegador padrão (best-effort, por plataforma). */
+function openBrowser(url: string): void {
+	try {
+		const command =
+			process.platform === "win32"
+				? ["cmd", "/c", "start", "", url]
+				: process.platform === "darwin"
+					? ["open", url]
+					: ["xdg-open", url];
+		Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+	} catch {
+		// best-effort — se não abrir, o usuário copia a URL.
+	}
+}
+
+/** Subcomando `server` — sobe a UI local de triagem. */
+function runServer(config: HoundsmanConfig, args: string[]): void {
+	const port = Number(readFlag(args, "--port")) || 7331;
+	const host = readFlag(args, "--host") ?? "127.0.0.1";
+	const { url } = startServer({ config, port, host });
+	console.log(`[houndsman] servidor em ${url}`);
+	console.log("[houndsman] Ctrl+C para encerrar.");
+	if (args.includes("--open")) openBrowser(url);
+}
+
 /** Passo 1/3 — preparar ou finalizar. */
 async function runReview(config: HoundsmanConfig, args: string[]): Promise<void> {
 	const opts = parseReviewArgs(args, resolveArtifactDir(config));
@@ -210,6 +265,12 @@ export async function main(): Promise<void> {
 			return;
 		case "watchdog":
 			runWatchdog(config, rest);
+			return;
+		case "findings":
+			runFindings(config, rest);
+			return;
+		case "server":
+			runServer(config, rest);
 			return;
 		case undefined:
 			await runReview(config, rest);

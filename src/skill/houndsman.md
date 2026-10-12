@@ -150,8 +150,47 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todo
 6. Agrupa os achados **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
 7. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
    (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
+8. Grava `.houndsman/.runs/<branch-slug>/state.json` — a **triagem**: um `id` curto e um
+   `fingerprint` de conteúdo por finding (Passo 4), preservados entre execuções
 
 > Compatível com `classification.json` antigo: se faltar o churn, o orçamento não é aplicado.
+
+---
+
+## Passo 4 — Triagem (opcional)
+
+Cada finding recebe um `id` curto e um `fingerprint` de **conteúdo** no `--finalize`,
+gravados em `.houndsman/.runs/<branch-slug>/state.json`. A triagem é feita pela UI ou
+pelo agente — sem editar o JSON à mão. Duas dimensões independentes:
+
+- **decision:** `pending` · `execute` · `ignore` (+ `comment` opcional).
+- **execState:** `pending` · `in_progress` · `done` · `stale`.
+
+### UI local
+
+```bash
+houndsman server --open
+```
+
+Abre a UI (Bun.serve + Preact): lista as runs, triar os findings por severidade, comentar,
+marcar como feito e ler os artefatos (`manifest.json`, `classification.json`, `review.md`).
+Bind em `127.0.0.1` (ferramenta local, sem auth).
+
+### Auto-fix pelo agente
+
+```bash
+houndsman findings list --decision execute --json   # pendentes marcados p/ corrigir
+# ... o agente aplica as correções ...
+houndsman findings sync                             # reancora por conteúdo
+houndsman findings done <id>                        # confirma os concluídos
+```
+
+> **A linha não é a identidade.** O auto-fix desloca linhas; o motor reancora cada finding
+> pelo **conteúdo** (trecho + contexto) e não perde itens que se movem. Se a âncora some
+> (o trecho foi corrigido), o finding vira `done` automaticamente quando a decisão era
+> `execute`, ou `stale` caso contrário.
+> Ocorrências byte-idênticas (mesmo trecho E mesmo contexto) compartilham o id — são
+> tratadas como um grupo (`×N`); limitação conhecida.
 
 ---
 
@@ -204,7 +243,9 @@ git diff --name-status (base...head)
         ↓
 [2] N subagentes em paralelo   ──►  findings/<watchdog>.json
         ↓
-[3] houndsman --finalize       ──►  review.md
+[3] houndsman --finalize       ──►  review.md + state.json
+        ↓
+[4] triagem (UI ou agente)     ──►  state.json (decision/execState)
 ```
 
 ---
@@ -226,6 +267,8 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman` | Passo 1 — preparar (briefs + manifesto) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
+| `houndsman findings <sub>` | Triagem dos findings (list/show/set/done/reset/sync/summary/path) |
+| `houndsman server` | UI local de triagem + leitura de artefatos (`--port`, `--host`, `--open`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev |

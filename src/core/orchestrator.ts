@@ -30,6 +30,7 @@ import {
 	classifyRange,
 	selectByBudget,
 } from "./file-classifier";
+import { buildStateFromFindings, FindingsStateStore, fileReader } from "./findings-state";
 import {
 	type JevCandidate,
 	type JevCandidatesFile,
@@ -542,6 +543,21 @@ export function finalize(
 	}
 
 	const merged = dedupeFindings(reports);
+
+	// Estado de triagem: preserva o que já existia (casando por fingerprint) e
+	// anexa o `id` de cada finding aos itens do relatório. A linha é cache —
+	// recalculada por `houndsman findings sync` após edições.
+	const store = FindingsStateStore.at(opts.dir, branch);
+	const state = buildStateFromFindings(merged, {
+		branch,
+		readFile: fileReader(process.cwd()),
+		previous: store.read(),
+	});
+	store.write(state);
+	console.log(
+		`Triagem: ${relFromRoot(store.filePath)} — ${Object.keys(state.findings).length} finding(s).`,
+	);
+
 	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
 	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;
 	const domains = writeDomainReports(
