@@ -98,12 +98,11 @@ src/
 - Pacote **público** com escopo da org (`@payconductor/houndsman`) — `publishConfig.access: "public"`.
 - Publica **TypeScript** (`files: ["src", "assets"]`); quem instala precisa do Bun.
 - **Publish manual** (com 2FA), a partir da `main` — sem release automático no CI. Validação de
-  PR por `.github/workflows/ci.yml`; passo a passo em `NEXT-STEPS.md`.
+  PR por `.github/workflows/ci.yml`.
 - Ao mudar a **API pública/tipos**, lembre: consumidores usam um snapshot em
   `.houndsman/core/types.ts`, sincronizado com `houndsman update`.
 
 ## Contexto adicional
 
-- Passo a passo de publicação e operação: `NEXT-STEPS.md`.
 - Vocabulário do projeto — o que é brief, findings, manifest, budget, churn, candidato, Jev
   e outros termos com sentido de domínio: `docs/GLOSSARY.md`.

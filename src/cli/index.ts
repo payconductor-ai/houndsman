@@ -13,7 +13,7 @@
  *   context              Passo 0 — coletar o contexto da PR via `gh`
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
- *   doctor               Valida a configuração e o ambiente (anti-drift)
+ *   doctor               Valida a configuração, o ambiente e a credencial Jev (anti-drift)
  *   test                 Roda a suíte de testes da lib
  *   watchdog <id>        Contexto de um watchdog (`--rules`, `--json`)
  *
@@ -29,6 +29,7 @@ import { runUpdateCommand } from "../core/commands/update";
 import { renderWatchdogContext } from "../core/commands/watchdog";
 import { type HoundsmanConfig, resolveArtifactDir } from "../core/config";
 import { loadConfig } from "../core/config-loader";
+import { JevClient } from "../core/jev";
 import { finalize, prepare, resolveBranch } from "../core/orchestrator";
 import { relFromRoot } from "../core/paths";
 import { checkRegistry } from "../core/registry-check";
@@ -41,7 +42,7 @@ Comandos:
   context             Coleta o contexto da PR via gh (Passo 0)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
-  doctor              Valida a configuração e o ambiente (anti-drift)
+  doctor              Valida a configuração, o ambiente e a credencial Jev
   test                Roda a suíte de testes da lib
   watchdog <id>       Contexto de um watchdog (--rules, --json)
 
@@ -88,8 +89,8 @@ function runContext(config: HoundsmanConfig, args: string[]): void {
 	}
 }
 
-/** Valida a configuração do projeto e o ambiente (anti-drift). */
-function runDoctor(config: HoundsmanConfig): void {
+/** Valida a configuração do projeto e o ambiente. */
+async function runDoctor(config: HoundsmanConfig): Promise<void> {
 	console.log("→ Validando configuração do projeto...");
 	const { problems, warnings, jevQuestions } = checkRegistry(config);
 
@@ -110,9 +111,27 @@ function runDoctor(config: HoundsmanConfig): void {
 	console.log("\n→ Ambiente:");
 	console.log(`  ${Bun.which("git") ? "✅" : "❌"} git`);
 	console.log(`  ${Bun.which("gh") ? "✅" : "⚠️ "} gh (opcional — contexto da PR)`);
-	console.log(
-		`  ${process.env.TYPESAFE_API_KEY ? "✅" : "⚠️ "} TYPESAFE_API_KEY (opcional — pré-análise Jev)`,
-	);
+	await reportJevCredential();
+}
+
+/**
+ * Reporta o estado da credencial Jev: presença e validade (chamada mínima).
+ * Fail-open — nunca altera o exit code (`doctor` é diagnóstico).
+ */
+async function reportJevCredential(): Promise<void> {
+	const client = new JevClient();
+	if (!client.isConfigured()) {
+		console.log("  ⚠️  TYPESAFE_API_KEY (opcional — pré-análise Jev)");
+		return;
+	}
+	const check = await client.validateCredential();
+	if (check.ok) {
+		console.log(`  ✅ Jev: credencial válida (modelo ${check.model}).`);
+	} else if (check.kind === "invalid") {
+		console.log(`  ❌ Jev: credencial inválida — ${check.detail}`);
+	} else {
+		console.log(`  ⚠️  Jev: não foi possível validar — ${check.detail}`);
+	}
 }
 
 /** Contexto de um watchdog. */
@@ -187,7 +206,7 @@ export async function main(): Promise<void> {
 			return;
 		case "doctor":
 		case "check":
-			runDoctor(config);
+			await runDoctor(config);
 			return;
 		case "watchdog":
 			runWatchdog(config, rest);

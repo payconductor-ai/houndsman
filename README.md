@@ -27,7 +27,7 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 - **Bun** — runtime obrigatório.
 - **git** — o diff usa `git diff <base>...<head>`.
 - Opcionais: **`gh`** (contexto da PR) e **`TYPESAFE_API_KEY`** (pré-análise Jev). A revisão
-  funciona normalmente sem eles.
+  funciona normalmente sem eles; o `houndsman doctor` valida a credencial Jev quando presente.
 
 ### 2. Instale o CLI (global)
 

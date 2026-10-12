@@ -101,7 +101,7 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
   ponteiros de skill) e **usuário** (`watchdogs/`, `exclusions.ts`, `doc-mappings.ts`,
   `houndsman.config.ts`).
 - `update` reescreve **só** o auto-gerado — nunca toca nas regras do usuário.
-- `doctor` (`registry-check.ts`) valida ids, `classify`, specs Jev e ambiente.
+- `doctor` (`registry-check.ts` + `cli/index.ts`) valida ids, `classify`, specs Jev, ambiente e a credencial Jev (chamada mínima).
 
 Detalhe: `src/skill/*.md` são copiados para `.houndsman/core/skill/` com `{{projectName}}`
 resolvido no momento da geração.
@@ -204,4 +204,4 @@ Ver também `src/skill/AUDIT-PROTOCOL.md` (taxonomia de veredito da auditoria).
 - Pacote **público** com escopo da org (`@payconductor/houndsman`), `publishConfig.access: "public"`.
 - Publica **TypeScript** (`files: ["src", "assets", ...]`); quem instala precisa do Bun.
 - **Publish manual** (com 2FA) a partir da `main` — sem release automático. Validação de PR por
-  `.github/workflows/ci.yml`; passo a passo em `NEXT-STEPS.md`.
+  `.github/workflows/ci.yml`.

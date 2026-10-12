@@ -17,15 +17,26 @@ import type { JevEvaluateRequest, JevEvaluateResponse } from "./jev-types";
 const DEFAULT_BASE_URL = "https://api.typesafe.ai";
 const DEFAULT_MODEL = "jev-latest";
 const DEFAULT_TIMEOUT_MS = 20_000;
-/** Caminho fixo do endpoint System One. */
+/** Timeout da verificação de credencial do `doctor` (mais curto que o de review). */
+const DEFAULT_PING_TIMEOUT_MS = 10_000;
+/** Caminho fixo do endpoinft System One. */
 const JEV_PATH = "/v1/systemone";
 
 export class JevError extends Error {
-	constructor(message: string) {
+	/** Status HTTP da resposta, quando houver (indefinido em falha de rede). */
+	readonly status?: number;
+
+	constructor(message: string, status?: number) {
 		super(message);
 		this.name = "JevError";
+		this.status = status;
 	}
 }
+
+/** Resultado da verificação de credencial (`doctor`) — não lança, devolve dados. */
+export type JevCredentialCheck =
+	| { ok: true; model: string }
+	| { ok: false; kind: "invalid" | "unreachable"; detail: string };
 
 export type JevClientOptions = {
 	/** Chave de API (default: `process.env.TYPESAFE_API_KEY`). */
@@ -78,12 +89,53 @@ export class JevClient {
 			);
 			return data;
 		} catch (error) {
-			throw new JevError(JevClient.describeError(error));
+			const { message, status } = JevClient.parseError(error);
+			throw new JevError(message, status);
 		}
 	}
 
-	/** Normaliza o erro do axios em mensagem legível (sem expor o payload bruto). */
-	private static describeError(error: unknown): string {
+	/**
+	 * Verifica a credencial com uma chamada mínima (usada pelo `doctor`).
+	 *
+	 * Não lança: devolve o resultado tipado para o chamador decidir (fail-open).
+	 * 2xx → válida; 401/403 → inválida; demais → indeterminada (rede/timeout).
+	 */
+	async validateCredential(): Promise<JevCredentialCheck> {
+		if (!this.apiKey) {
+			return {
+				ok: false,
+				kind: "unreachable",
+				detail: "TYPESAFE_API_KEY não configurada.",
+			};
+		}
+		const request: JevEvaluateRequest = {
+			state: "Ping de verificação de credencial do houndsman.",
+			questions: {
+				ping: {
+					type: "noul",
+					instructions: 'A seguinte afirmação é verdadeira? "Este é um ping."',
+				},
+			},
+		};
+		try {
+			const { data } = await this.http.post<JevEvaluateResponse>(
+				JEV_PATH,
+				{ ...request, model: this.model },
+				{
+					headers: { Authorization: `Bearer ${this.apiKey}` },
+					timeout: DEFAULT_PING_TIMEOUT_MS,
+				},
+			);
+			return { ok: true, model: data.model ?? this.model };
+		} catch (error) {
+			const { message, status } = JevClient.parseError(error);
+			const kind = status === 401 || status === 403 ? "invalid" : "unreachable";
+			return { ok: false, kind, detail: message };
+		}
+	}
+
+	/** Normaliza o erro do axios em `{ message, status }` (sem expor o payload bruto). */
+	private static parseError(error: unknown): { message: string; status?: number } {
 		if (isAxiosError(error)) {
 			const status = error.response?.status;
 			const detail =
@@ -92,8 +144,8 @@ export class JevClient {
 					: error.response?.data
 						? JSON.stringify(error.response.data)
 						: error.message;
-			return status ? `HTTP ${status}: ${detail}` : detail;
+			return { message: status ? `HTTP ${status}: ${detail}` : detail, status };
 		}
-		return error instanceof Error ? error.message : String(error);
+		return { message: error instanceof Error ? error.message : String(error) };
 	}
 }

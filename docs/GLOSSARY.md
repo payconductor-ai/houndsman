@@ -120,7 +120,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`threshold`** | Confiança mínima (**0.6**) para um indício virar candidato. |
 | **`questionKey`** | Chave estável da pergunta: `<watchdogId>::rule-<índice>`. |
 | **falha-aberto (fail-open)** | Sem chave / erro / timeout → `available:false`; a revisão segue idêntica. |
-| **`TYPESAFE_API_KEY`** | Variável de ambiente que liga o Jev. |
+| **`TYPESAFE_API_KEY`** | Variável de ambiente que liga o Jev. O `doctor` valida a credencial com uma chamada mínima. |
 | **`--no-jev`** | Desliga o Jev na execução. |
 
 ## 8. Diff, churn e orçamento
@@ -158,7 +158,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`houndsman`** (sem comando) | Passo 1 — preparar (briefs + manifesto). |
 | **`houndsman --finalize`** | Passo 3 — consolidar o relatório (`--report-only` é alias). |
 | **`houndsman context`** | Passo 0 — contexto da PR via `gh`. |
-| **`houndsman doctor`** | Anti-drift: valida config e ambiente (`check` é alias). |
+| **`houndsman doctor`** | Anti-drift: valida config, ambiente e a credencial Jev via chamada mínima (`check` é alias). |
 | **`houndsman watchdog <id>`** | Contexto de um watchdog (`--rules`, `--json`). |
 | **`houndsman setup` / `update`** | Cria / sincroniza a camada do projeto. |
 | **`houndsman test`** | Roda a suíte da lib. |

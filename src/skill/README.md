@@ -37,7 +37,7 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
-| `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
+| `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev (anti-drift) |
 | `houndsman test` | Roda a suíte de testes da lib |
 
 ### Flags

@@ -225,7 +225,7 @@ todos os itens — em especial: **geral/reutilizável** (não regra de negócio 
 ## Verificação (obrigatória)
 
 ```bash
-bun run houndsman doctor     # config sem drift + ambiente
+bun run houndsman doctor     # config sem drift + ambiente + credencial Jev
 bun run houndsman test       # suíte da lib (project-agnóstica)
 bun run ci:fix               # formatação/imports/lint (no repo da lib)
 bun run ci:check             # tipagem (no repo da lib)

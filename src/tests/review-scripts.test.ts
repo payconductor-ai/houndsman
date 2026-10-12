@@ -923,6 +923,72 @@ describe("jev-client", () => {
 	});
 });
 
+describe("jev-client — validateCredential", () => {
+	/** Erro no formato do axios (isAxiosError + response.status). */
+	function axiosError(status: number): Error {
+		return Object.assign(new Error(`HTTP ${status}`), {
+			isAxiosError: true,
+			response: { status, data: "unauthorized" },
+		});
+	}
+
+	test("sem chave → unreachable e não faz chamada", async () => {
+		let called = false;
+		const http = {
+			post: async () => {
+				called = true;
+				return { data: { model: "x", answers: {} } };
+			},
+		} as unknown as AxiosInstance;
+		const check = await new JevClient({ apiKey: "", http }).validateCredential();
+		expect(check.ok).toBe(false);
+		if (!check.ok) expect(check.kind).toBe("unreachable");
+		expect(called).toBe(false);
+	});
+
+	test("2xx → credencial válida com o modelo", async () => {
+		const http = {
+			post: async () => ({ data: { model: "jev-test", answers: {} } }),
+		} as unknown as AxiosInstance;
+		const check = await new JevClient({ apiKey: "k", http }).validateCredential();
+		expect(check).toEqual({ ok: true, model: "jev-test" });
+	});
+
+	test("401 → credencial inválida", async () => {
+		const http = {
+			post: async () => {
+				throw axiosError(401);
+			},
+		} as unknown as AxiosInstance;
+		const check = await new JevClient({ apiKey: "k", http }).validateCredential();
+		expect(check.ok).toBe(false);
+		if (!check.ok) expect(check.kind).toBe("invalid");
+	});
+
+	test("falha de rede → indeterminada (unreachable)", async () => {
+		const http = {
+			post: async () => {
+				throw new Error("network down");
+			},
+		} as unknown as AxiosInstance;
+		const check = await new JevClient({ apiKey: "k", http }).validateCredential();
+		expect(check.ok).toBe(false);
+		if (!check.ok) expect(check.kind).toBe("unreachable");
+	});
+
+	test("evaluate preserva o status HTTP no JevError", async () => {
+		const http = {
+			post: async () => {
+				throw axiosError(403);
+			},
+		} as unknown as AxiosInstance;
+		const client = new JevClient({ apiKey: "k", http });
+		await expect(
+			client.evaluate({ state: "s", questions: {} }),
+		).rejects.toMatchObject({ status: 403 });
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Jev — detector (fail-open)
 // ---------------------------------------------------------------------------

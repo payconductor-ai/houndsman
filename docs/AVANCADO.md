@@ -120,7 +120,7 @@ Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consol
 |---|---|
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
-| `houndsman doctor` | Valida a configuração e o ambiente (anti-drift) |
+| `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev |
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman --base main` | Passo 1 — prepara os briefs |
 | `houndsman --finalize` | Passo 3 — gera o relatório |
