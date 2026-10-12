@@ -135,17 +135,26 @@ export class JevClient {
 	}
 
 	/** Normaliza o erro do axios em `{ message, status }` (sem expor o payload bruto). */
-	private static parseError(error: unknown): { message: string; status?: number } {
+	private static parseError(error: unknown): {
+		message: string;
+		status?: number;
+	} {
 		if (isAxiosError(error)) {
 			const status = error.response?.status;
+			const responseData = error.response?.data;
 			const detail =
-				typeof error.response?.data === "string"
-					? error.response.data
-					: error.response?.data
-						? JSON.stringify(error.response.data)
+				typeof responseData === "string"
+					? responseData
+					: responseData
+						? responseData?.detail?.message || JSON.stringify(responseData)
 						: error.message;
-			return { message: status ? `HTTP ${status}: ${detail}` : detail, status };
+			return {
+				message: status ? `HTTP ${status}: ${detail}` : detail,
+				status,
+			};
 		}
-		return { message: error instanceof Error ? error.message : String(error) };
+		return {
+			message: error instanceof Error ? error.message : String(error),
+		};
 	}
 }
