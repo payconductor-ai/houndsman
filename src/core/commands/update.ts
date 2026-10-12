@@ -1,7 +1,7 @@
 /**
  * Subcomando `update` — sincroniza os arquivos **auto-gerados** da camada `.houndsman/`.
  *
- * Reescreve `core/types.ts`, `core/skill/*.md`, `.houndsman/.runs/.gitignore` e os
+ * Reescreve `core/types.ts`, `core/skill/*.md`, `.houndsman/.gitignore` e os
  * ponteiros de skill dos harnesses. Nunca toca nos arquivos do usuário
  * (`reviewers/`, `doc-mappings.ts`, `exclusions.ts`, `houndsman.config.ts`).
  */

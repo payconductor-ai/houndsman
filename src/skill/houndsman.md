@@ -218,8 +218,9 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 ## Manutenção das Regras
 
 > Alterar qualquer regra (adicionar, ajustar severidade, remover, corrigir escopo) → usar o
-> skill **`update-houndsman`** (`src/skill/update-houndsman.md`).
-> Regra de ouro: só é regra o que o projeto **aplica hoje** — prove com evidência no código.
+> skill **`houndsman-update`** (`src/skill/houndsman-update.md`).
+> Regra de ouro: só é regra o que o projeto **aplica hoje** — prove com evidência no código
+> (regra negativa com 0 ocorrências = seguida → **manter**).
 > Após qualquer alteração, rodar `houndsman doctor` (anti-drift) + `houndsman test` + `ci:fix` + `ci:check`.
 
 ---

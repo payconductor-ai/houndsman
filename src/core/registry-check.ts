@@ -106,16 +106,40 @@ function checkJevSpecs(config: ReviewConfig, problems: string[]): number {
 	return generated;
 }
 
+/** Prefixos de polaridade aceitos no texto da regra (§ Convenções de escrita). */
+const POLARITY_PREFIX = /^(promover|evitar|não|nao|nunca)\b/i;
+
+/**
+ * Aviso **não bloqueante** para regra sem polaridade explícita: o texto deve
+ * começar com `Promover:` (DEVE acontecer) ou `Evitar:`/`Não`/`Nunca` (NÃO DEVE).
+ */
+function checkRulePolarity(config: ReviewConfig, warnings: string[]): void {
+	for (const id of config.reviewerIds) {
+		const def = config.reviewers[id];
+		if (!def) continue;
+		def.rules.forEach((rule, index) => {
+			const text = rule.text.trim();
+			if (!text || POLARITY_PREFIX.test(text)) return;
+			warnings.push(
+				`Regra sem polaridade explícita em ${id} (rule-${index}): ${rule.text}`,
+			);
+		});
+	}
+}
+
 export function checkRegistry(config: ReviewConfig): {
 	problems: string[];
+	warnings: string[];
 	jevQuestions: number;
 } {
 	const problems: string[] = [];
+	const warnings: string[] = [];
 
 	checkDefinitions(config, problems);
 	checkClassification(config, problems);
 	checkRendering(config, problems);
+	checkRulePolarity(config, warnings);
 	const jevQuestions = checkJevSpecs(config, problems);
 
-	return { problems, jevQuestions };
+	return { problems, warnings, jevQuestions };
 }

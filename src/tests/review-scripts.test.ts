@@ -95,6 +95,39 @@ describe("registry-check", () => {
 		const { problems } = checkRegistry(config as typeof fakeReviewConfig);
 		expect(problems.some((p) => p.includes("'alpha'"))).toBe(true);
 	});
+
+	test("regra sem polaridade explícita gera aviso (não problema)", () => {
+		const { problems, warnings } = checkRegistry(fakeReviewConfig);
+		expect(problems).toEqual([]);
+		expect(warnings.length).toBeGreaterThan(0);
+		expect(warnings.some((w) => w.includes("polaridade"))).toBe(true);
+	});
+
+	test("regras com 'Promover:'/'Evitar:'/'Não'/'Nunca' não geram aviso", () => {
+		const config = {
+			...fakeReviewConfig,
+			reviewers: {
+				...fakeReviewConfig.reviewers,
+				alpha: {
+					...alphaReviewer,
+					rules: [
+						{
+							severity: "blocking" as const,
+							text: "Promover: validar a entrada.",
+						},
+						{ severity: "attention" as const, text: "Evitar console.log." },
+						{
+							severity: "nit" as const,
+							text: "Não acessar o banco em rotas.",
+						},
+						{ severity: "nit" as const, text: "Nunca usar `any`." },
+					],
+				},
+			},
+		};
+		const { warnings } = checkRegistry(config as typeof fakeReviewConfig);
+		expect(warnings).toEqual([]);
+	});
 });
 
 // ---------------------------------------------------------------------------

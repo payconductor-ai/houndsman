@@ -5,7 +5,7 @@
  * **do usuário**:
  *
  *   .houndsman/
- *   ├── .runs/.gitignore    AUTO — ignora os artefatos (mantém só o .gitignore)
+ *   ├── .gitignore          AUTO — ignora core/ e .runs/ (gerados/temporários)
  *   ├── core/types.ts       AUTO — snapshot dos tipos + helpers
  *   ├── core/skill/*.md     AUTO — docs do skill (com {{projectName}} resolvido)
  *   ├── reviewers/*.ts      USUÁRIO
@@ -13,7 +13,13 @@
  *   └── exclusions.ts       USUÁRIO
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import { SKILL_DIR } from "../assets";
 import {
@@ -123,7 +129,8 @@ export type JevRuleSpec = {
 	criteria?: string[] | Record<string, string>;
 };
 
-/** Regra do revisor: severidade + texto (verificar/evitar é implícito no texto). */
+/** Regra do revisor: severidade + texto — o texto declara a polaridade
+ *  (\`Promover:\` = deve acontecer; \`Evitar:\`/\`Não\`/\`Nunca\` = não deve acontecer). */
 export type Rule = {
 	severity: Severity;
 	text: string;
@@ -192,6 +199,8 @@ const REVIEWER_EXAMPLE = `import { defineReviewer } from "../core/types";
 /**
  * Revisor de exemplo — substitua pelas regras reais do projeto.
  * Um revisor declara seus arquivos via \`classify\` (regex de path ou conteúdo).
+ * O texto de cada regra começa com a polaridade: \`Promover:\` (DEVE acontecer)
+ * ou \`Evitar:\`/\`Não\`/\`Nunca\` (NÃO DEVE acontecer).
  */
 export const exampleReviewer = defineReviewer({
 	id: "example",
@@ -202,10 +211,13 @@ export const exampleReviewer = defineReviewer({
 	rules: [
 		{
 			severity: "attention",
-			text: "Descreva aqui uma regra do projeto.",
+			text: "Promover: descreva aqui um padrão do projeto (algo que DEVE acontecer).",
 			jev: { kind: "noul" },
 		},
-		{ severity: "nit", text: "Descreva um detalhe de estilo/observação." },
+		{
+			severity: "nit",
+			text: "Evitar: descreva aqui um anti-padrão (algo que NÃO DEVE acontecer).",
+		},
 	],
 	contextFiles: ["AGENTS.md"],
 });
@@ -247,9 +259,10 @@ export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
 ];
 `;
 
-const RUNS_GITIGNORE = `# Ignora os artefatos de revisão (mantém apenas este .gitignore).
-*
-!.gitignore
+const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`
+# e \`.runs/\` guarda os artefatos de revisão.
+core/
+.runs/
 `;
 
 const SKILL_POINTER = (
@@ -303,6 +316,36 @@ function writeGeneratedFile(
 	ctx.generated.push(relativePath);
 }
 
+/** Remove ponteiros e markdown canônico de skills renomeadas (migração). */
+function removeDeprecatedSkills(ctx: ScaffoldContext): void {
+	for (const name of DEPRECATED_SKILLS) {
+		const targets = [
+			join(CORE_SKILL_DIR, `${name}.md`),
+			...ctx.harnesses.map((harness) => join(`.${harness}`, "skills", name)),
+		];
+		for (const relativePath of targets) {
+			if (!existsSync(join(ctx.cwd, relativePath))) continue;
+			rmSync(join(ctx.cwd, relativePath), { recursive: true, force: true });
+			ctx.removed.push(relativePath);
+		}
+	}
+}
+
+/** Remove ponteiros e markdown canônico de skills renomeadas (migração). */
+function removeDeprecatedSkills(ctx: ScaffoldContext): void {
+	for (const name of DEPRECATED_SKILLS) {
+		const targets = [
+			join(CORE_SKILL_DIR, `${name}.md`),
+			...ctx.harnesses.map((harness) => join(`.${harness}`, "skills", name)),
+		];
+		for (const relativePath of targets) {
+			if (!existsSync(join(ctx.cwd, relativePath))) continue;
+			rmSync(join(ctx.cwd, relativePath), { recursive: true, force: true });
+			ctx.removed.push(relativePath);
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Camadas
 // ---------------------------------------------------------------------------
@@ -317,12 +360,13 @@ export function writeUserLayer(ctx: ScaffoldContext): void {
 }
 
 /**
- * Arquivos auto-gerados: tipos, docs do skill, `.gitignore` dos artefatos e os
- * ponteiros de skill dos harnesses. Sempre sobrescritos (é o alvo do `update`).
+ * Arquivos auto-gerados: tipos, docs do skill, `.gitignore` (ignora `core/` e
+ * `.runs/`) e os ponteiros de skill dos harnesses. Sempre sobrescritos (é o
+ * alvo do `update`).
  */
 export function syncGeneratedFiles(ctx: ScaffoldContext): void {
 	writeGeneratedFile(ctx, join(CORE_DIR, "types.ts"), TYPES_TEMPLATE);
-	writeGeneratedFile(ctx, join(ARTIFACT_DIR, ".gitignore"), RUNS_GITIGNORE);
+	writeGeneratedFile(ctx, join(PROJECT_DIR, ".gitignore"), PROJECT_GITIGNORE);
 
 	for (const name of readdirSync(SKILL_DIR)) {
 		if (!name.endsWith(".md")) continue;
@@ -353,11 +397,11 @@ function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
 	);
 	writeGeneratedFile(
 		ctx,
-		join(pointerDir, "update-houndsman", "SKILL.md"),
+		join(pointerDir, "houndsman-update", "SKILL.md"),
 		SKILL_POINTER(
-			"update-houndsman",
+			"houndsman-update",
 			ctx.projectName,
-			`${CORE_SKILL_DIR}/update-houndsman.md`,
+			`${CORE_SKILL_DIR}/houndsman-update.md`,
 			"Atualiza as regras e protocolos do skill houndsman (revisores, exclusões, mapeamentos de docs).",
 			"Revisor alvo (opcional)",
 		),

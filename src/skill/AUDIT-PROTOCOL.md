@@ -1,6 +1,6 @@
 # Protocolo de Auditoria dos Revisores — houndsman
 
-Referência do Modo B do skill `update-houndsman`. Objetivo: garantir que as regras dos
+Referência do Modo B do skill `houndsman-update`. Objetivo: garantir que as regras dos
 revisores validam **apenas padrões que o projeto aplica hoje**. Regras "utópicas" (não
 aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas rebaixadas.
 
@@ -19,8 +19,15 @@ aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas reba
 
 ## Regra de ouro
 
-> A **ausência** de um padrão no código é evidência de que ele **não é aplicado**.
-> Não inferir intenção aspiracional. Se não existe hoje, a regra é `UTOPIAN`.
+> Só é regra o que o projeto **aplica hoje** — mas como provar depende da **polaridade**:
+>
+> - Regra **afirmativa** (`Promover:`): a **ausência** do padrão no código prova que ele **não é
+>   aplicado** → `UTOPIAN` (remover/rebaixar). Não inferir intenção aspiracional.
+> - Regra **negativa** (`Evitar:`, `Não`, `Nunca`): a **ausência** do anti-padrão prova que a regra
+>   **é seguida** → `ALIGNED` (**manter**). Nunca remover uma regra negativa por "0 ocorrências".
+
+Use regra **geral e reutilizável** (padrão do domínio), nunca regra de negócio pontual amarrada a
+uma classe/use-case — isso é papel de teste automatizado.
 
 Use `grep_search`/`file_search`/`read_file` para **provar** cada veredito. Nunca
 classifique sem evidência (caminho de arquivo, linha, ou "0 ocorrências via grep X").
@@ -29,8 +36,8 @@ classifique sem evidência (caminho de arquivo, linha, ou "0 ocorrências via gr
 
 | Veredito | Significado | Ação proposta |
 |---|---|---|
-| `ALIGNED` | Padrão documentado E aplicado no código | Manter |
-| `UTOPIAN` | Não aplicado em lugar nenhum hoje | **Remover** |
+| `ALIGNED` | Padrão documentado E aplicado no código (regra negativa: anti-padrão **ausente**) | Manter |
+| `UTOPIAN` | Regra **afirmativa** cujo padrão não existe em lugar nenhum hoje | **Remover** |
 | `OUTDATED` | Já foi aplicado, mas o código mudou | Remover ou reescrever |
 | `MISCALIBRATED` | Regra válida, mas severidade errada | Ajustar severidade |
 | `DEAD-PATH` | `scope`/`contextFiles`/`classify` apontam para caminho/arquivo inexistente | Corrigir ou remover |
@@ -48,9 +55,10 @@ Gravar `.houndsman-audit/<reviewer-id>.md`:
 
 ## Veredito por regra
 
-| # | Severidade atual | Regra | Veredito | Evidência | Ação proposta |
-|---|---|---|---|---|---|
-| 1 | blocking | <texto da regra> | UTOPIAN | 0 matches em `src/...` | Remover |
+| # | Severidade atual | Polaridade | Regra | Veredito | Evidência | Ação proposta |
+|---|---|---|---|---|---|---|
+| 1 | blocking | afirmativa | <texto da regra> | UTOPIAN | 0 matches em `src/...` | Remover |
+| 2 | attention | negativa | <texto da regra> | ALIGNED | 0 ocorrências do anti-padrão | Manter |
 | ... |
 
 ## Correções de metadados

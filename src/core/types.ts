@@ -28,8 +28,9 @@ export const SEVERITY_EMOJI: Record<Severity, string> = {
 };
 
 /**
- * Regra do revisor: severidade + texto. O que "verificar" ou "evitar" é
- * implícito no texto da regra.
+ * Regra do revisor: severidade + texto. O texto declara a polaridade de forma
+ * explícita — `Promover:` (algo que DEVE acontecer) ou `Evitar:`/`Não`/`Nunca`
+ * (algo que NÃO DEVE acontecer).
  *
  * `jev` (opcional) é a spec de pré-análise: quando presente, a regra vira uma
  * pergunta tipada enviada ao modelo no Passo 1.5.
@@ -60,7 +61,7 @@ export type ReviewerMeta = {
 	scope: string;
 	/** Arquivos que este revisor cobre (classificação). */
 	classify?: readonly ClassifyRule[];
-	/** Regras do revisor (verificar/evitar — implícito no texto). */
+	/** Regras do revisor (texto com polaridade explícita: `Promover:`/`Evitar:`). */
 	rules: readonly Rule[];
 	/** Arquivos de documentação de contexto (caminhos relativos à raiz) */
 	contextFiles: string[];

@@ -81,7 +81,7 @@ src/
 ```
 houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
 .houndsman/
-├── .runs/.gitignore          # AUTO — ignora os artefatos de revisão
+├── .gitignore                # AUTO — ignora core/ e .runs/
 ├── core/                     # AUTO — sincronizado por `houndsman update`
 │   ├── types.ts              # snapshot dos tipos + helpers (autocontido)
 │   └── skill/*.md            # documentação do skill
@@ -97,7 +97,9 @@ houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
 ## Manutenção
 
 > As regras devem refletir os padrões **aplicados hoje**. Antes de adicionar uma regra,
-> prove que o padrão existe no código; regras não aplicadas geram falsos positivos.
+> prove que o padrão existe no código (regra negativa: prove que o anti-padrão **não** existe).
+> Regras devem ser **gerais/reutilizáveis** no domínio e declarar a **polaridade** no texto
+> (`Promover:` = deve acontecer; `Evitar:`/`Não`/`Nunca` = não deve acontecer).
 
 1. Novas regras/revisores → editar `.houndsman/reviewers/<id>.ts` (regras + escopo +
    `classify`) ou `doc-mappings.ts`/`exclusions.ts`. Um revisor novo exige só o módulo em
@@ -105,4 +107,4 @@ houndsman.config.ts           # ReviewConfig (dados; descoberto em runtime)
 2. Rodar `bun run houndsman doctor` — valida a config (definições, classificação, specs Jev).
 
 > Para qualquer alteração de regra (pontual ou auditoria completa), use o skill
-> **`update-houndsman`**: `.houndsman/core/skill/update-houndsman.md`.
+> **`houndsman-update`**: `.houndsman/core/skill/houndsman-update.md`.

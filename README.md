@@ -78,7 +78,7 @@ export default reviewConfig;
 > `artifactDir` é **opcional** (default `.houndsman/.runs`); o schema de output é
 > derivado da camada (`.houndsman/core/skill/OUTPUT-FORMAT.md`).
 >
-> A camada separa **auto-gerado** (`.houndsman/core/**`, `.houndsman/.runs/.gitignore`,
+> A camada separa **auto-gerado** (`.houndsman/core/**`, `.houndsman/.gitignore`,
 > ponteiros de skill) do **usuário** (`.houndsman/reviewers/`, `exclusions.ts`,
 > `doc-mappings.ts`, `houndsman.config.ts`). O `houndsman update` reescreve só os auto-gerados.
 
@@ -86,4 +86,4 @@ export default reviewConfig;
 
 - `src/skill/SETUP.md` — instalação e configuração passo a passo.
 - `src/skill/houndsman.md` — orquestração do skill (`/houndsman`).
-- `src/skill/update-houndsman.md` — manutenção das regras dos revisores.
+- `src/skill/houndsman-update.md` — manutenção das regras dos revisores.

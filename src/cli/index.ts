@@ -91,7 +91,7 @@ function runContext(config: ReviewConfig, args: string[]): void {
 /** Valida a configuração do projeto e o ambiente (anti-drift). */
 function runDoctor(config: ReviewConfig): void {
 	console.log("→ Validando configuração do projeto...");
-	const { problems, jevQuestions } = checkRegistry(config);
+	const { problems, warnings, jevQuestions } = checkRegistry(config);
 
 	if (problems.length > 0) {
 		console.error("\n❌ Problemas na configuração de revisão:\n");
@@ -101,6 +101,11 @@ function runDoctor(config: ReviewConfig): void {
 	console.log(
 		`  ✅ ${config.reviewerIds.length} revisores, ${jevQuestions} pergunta(s) Jev.`,
 	);
+
+	if (warnings.length > 0) {
+		console.log(`\n⚠️  ${warnings.length} aviso(s) (não bloqueantes):`);
+		for (const warning of warnings) console.log(`  - ${warning}`);
+	}
 
 	console.log("\n→ Ambiente:");
 	console.log(`  ${Bun.which("git") ? "✅" : "❌"} git`);

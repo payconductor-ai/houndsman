@@ -38,7 +38,7 @@ A camada separa o que é **auto-gerado** do que é **do usuário**:
 | `.houndsman/doc-mappings.ts` | usuário | path → documentação de contexto |
 | `.houndsman/core/types.ts` | **auto** | Snapshot dos tipos + helpers (tipagem sem install) |
 | `.houndsman/core/skill/*.md` | **auto** | Documentação do skill |
-| `.houndsman/.runs/.gitignore` | **auto** | Ignora os artefatos (mantém só o `.gitignore`) |
+| `.houndsman/.gitignore` | **auto** | Ignora `core/` e `.runs/` (gerados/temporários) |
 | `.agents/skills/houndsman/SKILL.md` etc. | **auto** | Ponteiros de skill dos harnesses |
 
 Além disso, adiciona o script `"houndsman": "houndsman"` ao `package.json` — assim
@@ -53,7 +53,7 @@ arquivos do usuário). É **idempotente** — arquivos do usuário existentes s�
 Depois de atualizar a lib, sincronize os arquivos auto-gerados **sem tocar** nas suas regras:
 
 ```bash
-bun run houndsman update      # reescreve .houndsman/core/** e .runs/.gitignore
+bun run houndsman update      # reescreve .houndsman/core/** e .houndsman/.gitignore
 ```
 
 ## Verificar
