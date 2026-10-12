@@ -53,7 +53,8 @@ src/
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
 │   ├── orchestrator.ts      # prepare/finalize
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
-│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs
+│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
+│   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
@@ -104,3 +105,5 @@ src/
 ## Contexto adicional
 
 - Passo a passo de publicação e operação: `NEXT-STEPS.md`.
+- Vocabulário do projeto — o que é brief, findings, manifest, budget, churn, candidato, Jev
+  e outros termos com sentido de domínio: `docs/GLOSSARY.md`.

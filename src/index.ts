@@ -7,8 +7,20 @@
 
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
-export type { HoundsmanConfig, HoundsmanConfigInput } from "./core/config";
-export { DEFAULT_ALWAYS_INCLUDE_DOCS, defineHoundsmanConfig } from "./core/config";
+export type {
+	HoundsmanBudgets,
+	HoundsmanConcurrency,
+	HoundsmanConfig,
+	HoundsmanConfigInput,
+} from "./core/config";
+export {
+	DEFAULT_ALWAYS_INCLUDE_DOCS,
+	DEFAULT_JEV_CONCURRENCY,
+	DEFAULT_MAX_FILES_PER_BRIEF,
+	defineHoundsmanConfig,
+	resolveJevConcurrency,
+	resolveMaxFilesPerBrief,
+} from "./core/config";
 export type { LoadedConfig } from "./core/config-loader";
 export {
 	CONFIG_FILE_CANDIDATES,
@@ -16,11 +28,21 @@ export {
 	resolveConfigPath,
 } from "./core/config-loader";
 export {
+	collectChurn,
+	collectDiff,
+	type DiffSource,
+	parseDiffIndex,
+	parseNumstat,
+} from "./core/diff-source";
+export {
+	churnOf,
 	classifyEntries,
 	classifyRange,
 	isExcludedPath,
 	matchWatchdogs,
 	parseEntries,
+	selectByBudget,
+	sortByRisk,
 } from "./core/file-classifier";
 export {
 	ARTIFACT_DIR,
@@ -31,8 +53,12 @@ export {
 	relFromRoot,
 } from "./core/paths";
 export { checkRegistry } from "./core/registry-check";
+export type { DomainReport } from "./core/report-builder";
+export { renderDomainReport } from "./core/report-builder";
 export type {
+	ChurnMap,
 	ClassifyRule,
+	FileChurn,
 	FileStatus,
 	FileStatusMap,
 	Rule,

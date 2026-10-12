@@ -127,6 +127,20 @@ function checkRulePolarity(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
+/** Aviso para orçamento/concorrência inválidos — o motor cai no default. */
+function checkBudgets(config: HoundsmanConfig, warnings: string[]): void {
+	const maxFiles = config.budgets?.maxFilesPerBrief;
+	if (maxFiles !== undefined && maxFiles <= 0) {
+		warnings.push(
+			`budgets.maxFilesPerBrief = ${maxFiles} — não-positivo; usando o default.`,
+		);
+	}
+	const jev = config.concurrency?.jev;
+	if (jev !== undefined && jev <= 0) {
+		warnings.push(`concurrency.jev = ${jev} — não-positivo; usando o default.`);
+	}
+}
+
 export function checkRegistry(config: HoundsmanConfig): {
 	problems: string[];
 	warnings: string[];
@@ -139,6 +153,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkClassification(config, problems);
 	checkRendering(config, problems);
 	checkRulePolarity(config, warnings);
+	checkBudgets(config, warnings);
 	const jevQuestions = checkJevSpecs(config, problems);
 
 	return { problems, warnings, jevQuestions };

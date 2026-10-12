@@ -79,6 +79,12 @@ export type FileStatus =
 /** Status por arquivo, conforme o `classification.json`. */
 export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: string }>;
 
+/** Linhas adicionadas/removidas de um arquivo no diff (churn). */
+export type FileChurn = { additions: number; deletions: number };
+
+/** Churn por caminho de arquivo (chave = caminho novo). */
+export type ChurnMap = Record<string, FileChurn>;
+
 /** Contexto da PR injetado no brief (estrutural — sem dependência de runtime). */
 export type WatchdogRenderContext = {
 	objective?: string;
@@ -99,6 +105,10 @@ export type WatchdogRenderArgs = {
 	watchdogId: string;
 	files: readonly string[];
 	statuses: FileStatusMap;
+	/** Churn por arquivo — insumo para priorizar a leitura (PRs grandes). */
+	churn?: ChurnMap;
+	/** Arquivos do domínio fora do orçamento — NÃO revisar (registrar em `skipped`). */
+	overflow?: readonly string[];
 	deleted: readonly string[];
 	branch: string;
 	outputPath: string;

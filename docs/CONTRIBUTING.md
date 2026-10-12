@@ -48,7 +48,8 @@ src/
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext
 │   ├── orchestrator.ts      # prepare/finalize
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
-│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs
+│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
+│   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
@@ -81,12 +82,16 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 
 - **Passo 0** — `context` coleta a PR via `gh`. Ausente/sem login/sem PR → `available:false`
   e exit 0 (a revisão segue sem a seção de contexto).
-- **Passo 1** — classifica o diff (`file-classifier` conforme o `classify` de cada watchdog),
-  aplica exclusões, roda a pré-análise Jev (se houver chave) e gera um brief por watchdog.
-- **Passo 2** — um subagente por brief grava `findings/<watchdog>.json`
-  (schema em `src/skill/OUTPUT-FORMAT.md`).
-- **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, agrupa por severidade e
-  renderiza `review.md`. **Falha** se faltar algum `findings/<watchdog>.json`.
+- **Passo 1** — coleta o diff **uma única vez** (`diff-source`: `git diff` + `--numstat`),
+  classifica conforme o `classify` de cada watchdog, aplica exclusões, roda a pré-análise Jev
+  (se houver chave) e gera um brief por watchdog. Cada brief é **priorizado por churn** e
+  limitado pelo **orçamento** (`budgets.maxFilesPerBrief`, default 40); o excedente vira
+  "fora do orçamento" e deve ser registrado em `skipped`.
+- **Passo 2** — um subagente por brief (despachados em **ondas**) grava
+  `findings/<watchdog>.json` (schema em `src/skill/OUTPUT-FORMAT.md`).
+- **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, agrupa por severidade
+  **e por arquivo**, grava `review.md` + um `review.<watchdog>.md` por domínio com achados e
+  anexa a tabela de cobertura. **Falha** se faltar algum `findings/<watchdog>.json`.
 
 > Por que comandos separados? Entre o Passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 
@@ -137,6 +142,18 @@ bun run houndsman doctor   # config sem drift + ambiente
 bun run houndsman test     # suíte da lib
 bun run ci:fix && bun run ci
 ```
+
+---
+
+## Vocabulário
+
+Vários termos do domínio têm aqui um sentido **específico** (não o usual da indústria):
+*brief*, *manifest*, *budget*, *overflow*, *findings*, *candidate*, *churn*.
+
+A tabela completa — com o significado e onde cada termo vive — está em
+[`GLOSSARY.md`](./GLOSSARY.md). Consulte antes de nomear código, variáveis de config ou
+seções de relatório; se um conceito for renomeado, atualize **código + `AGENTS.md` +
+`GLOSSARY.md`** no mesmo PR.
 
 ---
 

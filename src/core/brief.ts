@@ -78,12 +78,33 @@ function optionalList(title: string, items: readonly string[] | undefined): stri
 	return [`## ${title}`, "", ...items.map((item) => `- ${item}`), ""];
 }
 
-/** Lista de arquivos do domínio com status. */
+/** Lista de arquivos do domínio com status (e churn, quando disponível). */
 function fileItems(args: WatchdogRenderArgs): string[] {
 	return args.files.map((file) => {
 		const status = args.statuses[file]?.status ?? "modified";
-		return `- \`${file}\` (${status})`;
+		const churn = args.churn?.[file];
+		const delta = churn ? `, +${churn.additions}/−${churn.deletions}` : "";
+		return `- \`${file}\` (${status}${delta})`;
 	});
+}
+
+/**
+ * Arquivos do domínio fora do orçamento (triage de PRs grandes): o watchdog NÃO
+ * deve lê-los, mas precisa registrá-los em `skipped` — cobertura honesta.
+ */
+function overflowSection(args: WatchdogRenderArgs): string[] {
+	const overflow = args.overflow ?? [];
+	if (overflow.length === 0) return [];
+	return [
+		"## Fora do orçamento (NÃO revisar)",
+		"",
+		`> ${overflow.length} arquivo(s) do seu domínio ficaram fora do orçamento`,
+		"> (menor churn). Não os leia: registre-os em `skipped` com o motivo",
+		'> "budget" para que a cobertura do relatório fique honesta.',
+		"",
+		...overflow.map(codeItem),
+		"",
+	];
 }
 
 /** Seção de deletados (breaking change) — só p/ watchdogs com `breakingChange`. */
@@ -140,6 +161,8 @@ export function defaultRenderBrief(
 		...fileItems(args),
 		"",
 	);
+
+	lines.push(...overflowSection(args));
 
 	if (args.candidates && args.candidates.length > 0) {
 		lines.push(...renderBriefCandidates(args.candidates));

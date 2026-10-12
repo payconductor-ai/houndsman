@@ -17,9 +17,19 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { renderBrief } from "./brief";
-import type { HoundsmanConfig } from "./config";
+import {
+	type HoundsmanConfig,
+	resolveJevConcurrency,
+	resolveMaxFilesPerBrief,
+} from "./config";
+import { collectDiff, type DiffSource } from "./diff-source";
 import { discoverDocs } from "./doc-discoverer";
-import { type ClassificationResult, classifyRange } from "./file-classifier";
+import {
+	type BudgetSelection,
+	type ClassificationResult,
+	classifyRange,
+	selectByBudget,
+} from "./file-classifier";
 import {
 	type JevCandidate,
 	type JevCandidatesFile,
@@ -31,8 +41,10 @@ import { ARTIFACT_DIR, OUTPUT_FORMAT_PATH } from "./paths";
 import { contextPaths, currentBranch, readContextSummary } from "./pr-context";
 import {
 	type ContextSummary,
+	type DomainReport,
 	dedupeFindings,
 	parseWatchdogReport,
+	renderDomainReport,
 	renderReport,
 	sanitizeBranch,
 	type WatchdogReport,
@@ -150,6 +162,22 @@ function writeManifest(
 	jev: JevCandidatesFile,
 	config: HoundsmanConfig,
 ): void {
+	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
+	let filesOverBudget = 0;
+	const watchdogs = activeIds.map((id) => {
+		const selection = budgetFor(classification, id, maxFilesPerBrief);
+		filesOverBudget += selection.overflow.length;
+		return {
+			id,
+			name: findWatchdog(config, id)?.name ?? id,
+			files: selection.selected,
+			overflow: selection.overflow.length,
+			brief: relFromRoot(join(outDir, "briefs", `${id}.md`)),
+			findings: relFromRoot(join(outDir, "findings", `${id}.json`)),
+			status: pending.includes(id) ? "pending" : "done",
+		};
+	});
+
 	const manifest = {
 		branch,
 		slug: sanitizeBranch(branch),
@@ -157,14 +185,9 @@ function writeManifest(
 		head: opts.head,
 		generatedAt: new Date().toISOString(),
 		outputFormat: OUTPUT_FORMAT_PATH,
-		watchdogs: activeIds.map((id) => ({
-			id,
-			name: findWatchdog(config, id)?.name ?? id,
-			files: classification.watchdogs[id] ?? [],
-			brief: relFromRoot(join(outDir, "briefs", `${id}.md`)),
-			findings: relFromRoot(join(outDir, "findings", `${id}.json`)),
-			status: pending.includes(id) ? "pending" : "done",
-		})),
+		budget: { maxFilesPerBrief, filesOverBudget },
+		churn: churnTotals(classification),
+		watchdogs,
 		context: contextManifest(opts, branch),
 		jev: jev.available
 			? {
@@ -187,6 +210,37 @@ function writeManifest(
 }
 
 // ---------------------------------------------------------------------------
+// Orçamento (triage de PRs grandes)
+// ---------------------------------------------------------------------------
+
+/** Aplica o orçamento aos arquivos de um watchdog. */
+function budgetFor(
+	classification: ClassificationResult,
+	id: string,
+	maxFiles: number,
+): BudgetSelection {
+	return selectByBudget(
+		classification.watchdogs[id] ?? [],
+		classification.churn,
+		maxFiles,
+	);
+}
+
+/** Totais de churn do diff (métricas do manifesto). */
+function churnTotals(classification: ClassificationResult): {
+	additions: number;
+	deletions: number;
+} {
+	let additions = 0;
+	let deletions = 0;
+	for (const entry of Object.values(classification.churn ?? {})) {
+		additions += entry.additions;
+		deletions += entry.deletions;
+	}
+	return { additions, deletions };
+}
+
+// ---------------------------------------------------------------------------
 // Briefs
 // ---------------------------------------------------------------------------
 
@@ -200,14 +254,17 @@ function writeBriefs(
 	config: HoundsmanConfig,
 ): void {
 	const docs = discoverDocs(Object.keys(classification.files), config);
+	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
 	for (const id of activeIds) {
 		const def = findWatchdog(config, id);
 		if (!def) continue;
-		const files = classification.watchdogs[id] ?? [];
+		const { selected, overflow } = budgetFor(classification, id, maxFilesPerBrief);
 		const brief = renderBrief(def, {
 			watchdogId: id,
-			files,
+			files: selected,
 			statuses: classification.files,
+			churn: classification.churn,
+			overflow,
 			deleted: classification.deleted,
 			branch,
 			outputPath: relFromRoot(join(dirs.findingsDir, `${id}.json`)),
@@ -233,6 +290,7 @@ async function resolveCandidates(
 	classification: ClassificationResult,
 	dirs: Paths,
 	config: HoundsmanConfig,
+	diff: DiffSource,
 ): Promise<JevCandidatesFile> {
 	const store = new JevCandidatesStore(
 		join(dirs.outDir, "candidates.json"),
@@ -257,7 +315,10 @@ async function resolveCandidates(
 			client,
 			config.watchdogs as Record<string, WatchdogMeta>,
 		);
-		const result = await detector.detect(classification, opts.base, opts.head);
+		const result = await detector.detect(classification, opts.base, opts.head, {
+			diff,
+			concurrency: resolveJevConcurrency(config),
+		});
 		return save({
 			available: true,
 			model: result.model,
@@ -301,6 +362,22 @@ function printDiscovery(
 	}
 }
 
+/** Resumo do orçamento — só quando algum arquivo ficou de fora (PR grande). */
+function printBudget(
+	classification: ClassificationResult,
+	config: HoundsmanConfig,
+): void {
+	const maxFiles = resolveMaxFilesPerBrief(config);
+	let overflow = 0;
+	for (const id of Object.keys(classification.watchdogs)) {
+		overflow += budgetFor(classification, id, maxFiles).overflow.length;
+	}
+	if (overflow === 0) return;
+	console.log(
+		`Orçamento: ${maxFiles} arquivo(s)/brief — ${overflow} fora do orçamento (menor churn; registrar em skipped).`,
+	);
+}
+
 /** Passo 1 — descobre os arquivos e grava briefs + manifesto. */
 export async function prepare(
 	opts: ReviewOptions,
@@ -310,13 +387,15 @@ export async function prepare(
 ): Promise<void> {
 	prepareDirs(dirs, opts.clean);
 
-	const classification = classifyRange(opts.base, opts.head, config);
+	// Um único diff para toda a execução (churn + patch) — antes: 1 spawn por arquivo.
+	const diff = collectDiff(opts.base, opts.head);
+	const classification = classifyRange(opts.base, opts.head, config, diff);
 	writeFileSync(
 		join(dirs.outDir, "classification.json"),
 		`${JSON.stringify(classification, null, 2)}\n`,
 	);
 
-	const jev = await resolveCandidates(opts, classification, dirs, config);
+	const jev = await resolveCandidates(opts, classification, dirs, config, diff);
 
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
@@ -342,6 +421,7 @@ export async function prepare(
 		config,
 	);
 	printDiscovery(activeIds, classification, dirs.briefsDir);
+	printBudget(classification, config);
 	printJevSummary(jev);
 
 	if (context) {
@@ -369,7 +449,53 @@ function readClassification(classificationPath: string): ClassificationResult {
 			`Não encontrei ${relFromRoot(classificationPath)}. Rode \`bun run houndsman\` (preparar) primeiro.`,
 		);
 	}
-	return JSON.parse(readFileSync(classificationPath, "utf8"));
+	const parsed = JSON.parse(
+		readFileSync(classificationPath, "utf8"),
+	) as ClassificationResult;
+	// Compatível com classification.json gerado antes do churn existir.
+	parsed.churn ??= {};
+	return parsed;
+}
+
+/**
+ * Grava um `review.<watchdog>.md` por watchdog com achados e devolve o índice.
+ * Mantém o `review.md` consolidado navegável em PRs grandes (centenas de achados).
+ */
+function writeDomainReports(
+	outDir: string,
+	branch: string,
+	reports: WatchdogReport[],
+	classification: ClassificationResult,
+	context: ContextSummary | null,
+	nameOf: (id: string) => string,
+): DomainReport[] {
+	const domains: DomainReport[] = [];
+	for (const report of reports) {
+		const findings = dedupeFindings([report]);
+		if (findings.length === 0) continue;
+		const file = `review.${sanitizeBranch(report.watchdogId)}.md`;
+		const expected = classification.watchdogs[report.watchdogId] ?? [];
+		writeFileSync(
+			join(outDir, file),
+			`${renderDomainReport(
+				branch,
+				report,
+				findings,
+				expected.length,
+				context,
+				nameOf,
+			)}\n`,
+		);
+		domains.push({
+			id: report.watchdogId,
+			name: nameOf(report.watchdogId),
+			file,
+			findings: findings.length,
+			reviewedFiles: report.reviewedFiles.length,
+			expectedFiles: expected.length,
+		});
+	}
+	return domains;
 }
 
 export type FinalizeResult = {
@@ -417,6 +543,15 @@ export function finalize(
 
 	const merged = dedupeFindings(reports);
 	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
+	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;
+	const domains = writeDomainReports(
+		dirs.outDir,
+		branch,
+		reports,
+		classification,
+		context,
+		nameOf,
+	);
 	const markdown = renderReport(
 		branch,
 		reports,
@@ -424,7 +559,8 @@ export function finalize(
 		{ classified: classification.watchdogs },
 		context,
 		jev.available ? jev.candidates : undefined,
-		(id) => findWatchdog(config, id)?.name ?? id,
+		nameOf,
+		domains,
 	);
 	const reportPath = join(dirs.outDir, "review.md");
 	writeFileSync(reportPath, `${markdown}\n`);

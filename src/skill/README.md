@@ -6,6 +6,12 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 
 - **houndsman** — o orquestrador/treinador (CLI + motor).
 - **watchdog** — cada agente especialista por domínio que audita o diff.
+- **brief** — instruções prontas para um watchdog (o prompt do subagente).
+- **findings** — os achados que o subagente grava em JSON (único output consumido).
+- **candidato (Jev)** — indício automático; **não** é achado (o watchdog confirma ou refuta).
+- **churn** — linhas adicionadas/removidas por arquivo; usado para priorizar a leitura.
+- **budget / orçamento** — teto de arquivos por brief; o excedente ("fora do orçamento")
+  não é revisado, mas fica registrado em `skipped`.
 - **review/revisão** — o processo de revisão.
 
 ## Quem executa o quê
@@ -45,14 +51,15 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman
 
 | Arquivo | Conteúdo |
 |---|---|
-| `classification.json` | Watchdogs ativados + status (A/M/D/R) |
+| `classification.json` | Watchdogs ativados + status (A/M/D/R) + churn |
 | `candidates.json` | Candidatos da pré-análise Jev |
 | `context.json` | Payload bruto da PR via `gh` (ou marcador de indisponível) |
 | `context-summary.json` | Resumo do subagente (objetivo/motivação/alterações) |
-| `briefs/<watchdog>.md` | Instruções prontas para cada sub-agente |
-| `manifest.json` | Resumo (watchdogs, arquivos, deletados, status, contexto) |
+| `briefs/<watchdog>.md` | Instruções prontas para cada sub-agente (arquivos por risco) |
+| `manifest.json` | Resumo (watchdogs, arquivos, deletados, status, contexto, orçamento, churn) |
 | `findings/<watchdog>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
-| `review.md` | Relatório final |
+| `review.md` | Relatório final (achados agrupados por arquivo) |
+| `review.<watchdog>.md` | Relatório por domínio (só quando há achados) |
 
 ## Estrutura
 
@@ -72,7 +79,8 @@ src/
 │   ├── orchestrator.ts      # preparar/finalizar
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── pr-context.ts        # contexto da PR via gh
-│   ├── file-classifier.ts   # classificação (via `classify` dos watchdogs)
+│   ├── file-classifier.ts   # classificação (via `classify` dos watchdogs) + churn
+│   ├── diff-source.ts       # diff único (patch + --numstat) p/ churn/orçamento
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── registry-check.ts    # validações anti-drift (config-driven)

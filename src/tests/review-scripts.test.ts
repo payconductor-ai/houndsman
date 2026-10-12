@@ -6,13 +6,23 @@ import type { AxiosInstance } from "axios";
 import { renderBrief } from "../core/brief";
 import { parseReviewArgs } from "../core/commands/review";
 import { renderWatchdogContext } from "../core/commands/watchdog";
+import {
+	DEFAULT_JEV_CONCURRENCY,
+	DEFAULT_MAX_FILES_PER_BRIEF,
+	resolveJevConcurrency,
+	resolveMaxFilesPerBrief,
+} from "../core/config";
+import { parseDiffIndex, parseNumstat } from "../core/diff-source";
 import { discoverDocs } from "../core/doc-discoverer";
 import {
 	type ClassificationResult,
+	churnOf,
 	classifyEntries,
 	isExcludedPath,
 	matchWatchdogs,
 	parseEntries,
+	selectByBudget,
+	sortByRisk,
 } from "../core/file-classifier";
 import {
 	type JevCandidatesFile,
@@ -27,6 +37,7 @@ import {
 	dedupeFindings,
 	parseContextSummary,
 	parseWatchdogReport,
+	renderDomainReport,
 	renderReport,
 	sanitizeBranch,
 	type WatchdogReport,
@@ -307,6 +318,136 @@ describe("isExcludedPath", () => {
 });
 
 // ---------------------------------------------------------------------------
+// diff-source (diff único: patch + churn)
+// ---------------------------------------------------------------------------
+
+describe("diff-source", () => {
+	test("parseNumstat lê adições/remoções por arquivo", () => {
+		const map = parseNumstat("3\t1\tsrc/a.ts\0");
+		expect(map.get("src/a.ts")).toEqual({ additions: 3, deletions: 1 });
+	});
+
+	test("parseNumstat trata rename (path vazio) e binário ('-')", () => {
+		const nul = String.fromCharCode(0);
+		const raw = [
+			"2	0	",
+			"src/old.ts",
+			"src/new.ts",
+			"10	-	dist/x.png",
+			"",
+		].join(nul);
+		const map = parseNumstat(raw);
+		expect(map.get("src/new.ts")).toEqual({ additions: 2, deletions: 0 });
+		expect(map.get("dist/x.png")).toEqual({ additions: 10, deletions: 0 });
+	});
+
+	test("parseDiffIndex fatia o patch e extrai o path novo (renames)", () => {
+		const patch = [
+			"diff --git a/src/a.ts b/src/a.ts",
+			"index 111..222 100644",
+			"--- a/src/a.ts",
+			"+++ b/src/a.ts",
+			"@@ -1 +1 @@",
+			"-old",
+			"+new",
+			"diff --git a/src/old.ts b/src/new.ts",
+			"similarity index 90%",
+			"rename from src/old.ts",
+			"rename to src/new.ts",
+			"--- a/src/old.ts",
+			"+++ b/src/new.ts",
+			"@@ -1 +1 @@",
+			"-a",
+			"+b",
+		].join("\n");
+
+		const map = parseDiffIndex(patch);
+		expect([...map.keys()]).toEqual(["src/a.ts", "src/new.ts"]);
+		expect(map.get("src/a.ts")).toContain("+new");
+		expect(map.get("src/new.ts")).toContain("+b");
+	});
+
+	test("parseDiffIndex não confunde linha de conteúdo com o header", () => {
+		const patch = [
+			"diff --git a/x.ts b/x.ts",
+			"--- a/x.ts",
+			"+++ b/x.ts",
+			"@@ -1 +1,2 @@",
+			" keep",
+			"+++ b/fake.ts",
+		].join("\n");
+		expect([...parseDiffIndex(patch).keys()]).toEqual(["x.ts"]);
+	});
+
+	test("parseDiffIndex respeita o teto por arquivo", () => {
+		const patch = "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n+a";
+		expect(parseDiffIndex(patch, 10).get("x.ts")).toHaveLength(10);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// triage (churn + orçamento por brief)
+// ---------------------------------------------------------------------------
+
+describe("triage", () => {
+	const churn = {
+		"a.ts": { additions: 1, deletions: 0 },
+		"b.ts": { additions: 50, deletions: 50 },
+		"c.ts": { additions: 10, deletions: 0 },
+	};
+
+	test("churnOf soma adições/remoções e trata ausente", () => {
+		expect(churnOf("b.ts", churn)).toBe(100);
+		expect(churnOf("ausente.ts", churn)).toBe(0);
+	});
+
+	test("sortByRisk ordena por churn desc", () => {
+		expect(sortByRisk(["a.ts", "b.ts", "c.ts"], churn)).toEqual([
+			"b.ts",
+			"c.ts",
+			"a.ts",
+		]);
+	});
+
+	test("selectByBudget mantém os de maior risco e devolve o excedente", () => {
+		const { selected, overflow } = selectByBudget(["a.ts", "b.ts", "c.ts"], churn, 2);
+		expect(selected).toEqual(["b.ts", "c.ts"]);
+		expect(overflow).toEqual(["a.ts"]);
+	});
+
+	test("maxFiles não-positivo desativa o orçamento", () => {
+		const { selected, overflow } = selectByBudget(["a.ts", "b.ts"], churn, 0);
+		expect(selected).toHaveLength(2);
+		expect(overflow).toEqual([]);
+	});
+
+	test("resolveMaxFilesPerBrief usa default e sobrepõe", () => {
+		expect(resolveMaxFilesPerBrief(fakeHoundsmanConfig)).toBe(
+			DEFAULT_MAX_FILES_PER_BRIEF,
+		);
+		expect(
+			resolveMaxFilesPerBrief({
+				...fakeHoundsmanConfig,
+				budgets: { maxFilesPerBrief: 5 },
+			}),
+		).toBe(5);
+		expect(
+			resolveMaxFilesPerBrief({
+				...fakeHoundsmanConfig,
+				budgets: { maxFilesPerBrief: 0 },
+			}),
+		).toBe(DEFAULT_MAX_FILES_PER_BRIEF);
+	});
+
+	test("resolveJevConcurrency usa default e sobrepõe", () => {
+		expect(resolveJevConcurrency(fakeHoundsmanConfig)).toBe(DEFAULT_JEV_CONCURRENCY);
+		expect(
+			resolveJevConcurrency({ ...fakeHoundsmanConfig, concurrency: { jev: 9 } }),
+		).toBe(9);
+	});
+});
+
+// ---------------------------------------------------------------------------
 // doc-discoverer
 // ---------------------------------------------------------------------------
 
@@ -440,6 +581,79 @@ describe("report-builder", () => {
 		);
 		expect(md).toContain("Watchdog Alpha");
 	});
+
+	test("renderReport agrupa achados por arquivo", () => {
+		const merged = [
+			{
+				rule: "R1",
+				severity: "blocking" as const,
+				file: "a.ts",
+				line: 1,
+				message: "m",
+				action: "a",
+				watchdogs: ["alpha"],
+			},
+			{
+				rule: "R2",
+				severity: "blocking" as const,
+				file: "b.ts",
+				line: 2,
+				message: "m",
+				action: "a",
+				watchdogs: ["alpha"],
+			},
+		];
+		const md = renderReport(
+			"main",
+			[{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] }],
+			merged,
+			{},
+		);
+		expect(md).toContain("### `a.ts`");
+		expect(md).toContain("### `b.ts`");
+	});
+
+	test("renderReport indexa os relatórios por domínio", () => {
+		const md = renderReport(
+			"main",
+			[{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] }],
+			[],
+			{},
+			undefined,
+			undefined,
+			undefined,
+			[
+				{
+					id: "alpha",
+					name: "Alpha",
+					file: "review.alpha.md",
+					findings: 2,
+					reviewedFiles: 3,
+					expectedFiles: 5,
+				},
+			],
+		);
+		expect(md).toContain("## Relatórios por domínio");
+		expect(md).toContain("review.alpha.md");
+	});
+
+	test("renderDomainReport mostra cobertura e não revisados", () => {
+		const md = renderDomainReport(
+			"main",
+			{
+				watchdogId: "alpha",
+				reviewedFiles: ["a.ts"],
+				skipped: ["b.ts"],
+				findings: [],
+			},
+			[],
+			2,
+			null,
+		);
+		expect(md).toContain("1/2");
+		expect(md).toContain("Não revisados");
+		expect(md).toContain("Nenhum achado");
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -571,6 +785,24 @@ describe("houndsman brief", () => {
 		expect(brief).toContain("**Objetivo:** Entregar X");
 	});
 
+	test("mostra churn e lista arquivos fora do orçamento", () => {
+		const brief = renderBrief(alphaWatchdog, {
+			watchdogId: "alpha",
+			files: ["src/alpha/keep.ts"],
+			overflow: ["src/alpha/skip.ts"],
+			churn: { "src/alpha/keep.ts": { additions: 12, deletions: 3 } },
+			branch: "feature/x",
+			outputPath: "o.json",
+			outputFormatPath: OUTPUT_FORMAT,
+			docs: [],
+			statuses: { "src/alpha/keep.ts": { status: "modified" } },
+			deleted: [],
+		});
+		expect(brief).toContain("+12/−3");
+		expect(brief).toContain("Fora do orçamento");
+		expect(brief).toContain("src/alpha/skip.ts");
+	});
+
 	test("hook custom de renderBrief é usado no lugar do default", () => {
 		const custom = { ...alphaWatchdog, renderBrief: () => ["# Custom"] };
 		const brief = renderBrief(custom, {
@@ -699,6 +931,7 @@ describe("jev-detector", () => {
 	const classification: ClassificationResult = {
 		watchdogs: { alpha: ["src/alpha/x.ts"] },
 		files: { "src/alpha/x.ts": { status: "modified" } },
+		churn: {},
 		unclassified: [],
 		excluded: [],
 		deleted: [],

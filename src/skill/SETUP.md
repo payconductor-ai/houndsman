@@ -7,8 +7,8 @@ no seu projeto é **autocontida** — não exige nenhuma dependência local do p
 
 - **Bun** — o CLI e o motor usam a runtime Bun (execução de TS, `Bun.spawnSync`).
 - **git** — o diff usa `git diff <base>...<head> --name-status`.
-- Opcional: **`gh`** (contexto da PR) e **`TYPESAFE_API_KEY`** (pré-análise Jev). Ambos são
-  **falha-aberto** — sem eles o pipeline segue normalmente.
+- Opcional: **`gh`** (contexto da PR) e **`TYPESAFE_API_KEY`** (pré-análise Jev). O pipeline
+  segue normalmente sem eles.
 
 ## Instalação (global)
 

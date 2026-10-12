@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { collectDiff, type DiffSource } from "../diff-source";
 import type { ClassificationResult } from "../file-classifier";
 import type { WatchdogMeta } from "../types";
 import {
@@ -25,6 +26,8 @@ export type DetectOptions = {
 	threshold?: number;
 	/** Nº de arquivos avaliados em paralelo. */
 	concurrency?: number;
+	/** Diff já coletado (evita novo `git diff`); ausente → coleta aqui. */
+	diff?: DiffSource;
 };
 
 export type DetectResult = {
@@ -60,6 +63,7 @@ export class JevDetector {
 	): Promise<DetectResult> {
 		const threshold = options.threshold ?? JevCandidatesStore.THRESHOLD;
 		const concurrency = options.concurrency ?? JevDetector.DEFAULT_CONCURRENCY;
+		const diff = this.resolveDiff(base, head, options.diff);
 
 		const jobs = this.buildJobs(classification);
 		const questionByKey = new Map<string, DerivedQuestion>();
@@ -76,7 +80,7 @@ export class JevDetector {
 			for (const dq of job.questions) questions[dq.key] = dq.question;
 
 			const status = classification.files[job.file]?.status ?? "modified";
-			const state = this.buildState(job.file, status, base, head);
+			const state = this.buildState(job.file, status, diff);
 
 			try {
 				const response = await this.client.evaluate({ state, questions });
@@ -125,15 +129,24 @@ export class JevDetector {
 			.filter((job) => job.questions.length > 0);
 	}
 
+	/**
+	 * Diff para o `state`: reaproveita o injetado ou coleta **uma vez** (antes era
+	 * 1 `git diff` por arquivo). Tolerante a falha — o Jev é opcional/fail-open.
+	 */
+	private resolveDiff(base: string, head: string, provided?: DiffSource): DiffSource {
+		if (provided) return provided;
+		try {
+			return collectDiff(base, head);
+		} catch {
+			return { byFile: new Map<string, string>(), churn: new Map() };
+		}
+	}
+
 	/** Monta o `state` de um arquivo: cabeçalho + hunk do diff, com cap de tamanho. */
-	private buildState(
-		filePath: string,
-		status: string,
-		base: string,
-		head: string,
-	): string {
+	private buildState(filePath: string, status: string, diff: DiffSource): string {
 		const header = this.readHeader(filePath);
-		const hunk = this.readHunk(base, head, filePath);
+		const hunk =
+			diff.byFile.get(filePath)?.slice(0, JevDetector.MAX_DIFF_CHARS) ?? "";
 		const parts = [`Arquivo: ${filePath} (${status})`];
 		if (header) {
 			parts.push("--- topo do arquivo (imports/declarações) ---", header);
@@ -151,17 +164,6 @@ export class JevDetector {
 		} catch {
 			return "";
 		}
-	}
-
-	private readHunk(base: string, head: string, filePath: string): string {
-		const result = Bun.spawnSync(
-			["git", "diff", `${base}...${head}`, "--", filePath],
-			{ stdout: "pipe", stderr: "pipe" },
-		);
-		if (result.exitCode !== 0) return "";
-		return new TextDecoder()
-			.decode(result.stdout)
-			.slice(0, JevDetector.MAX_DIFF_CHARS);
 	}
 
 	/** Arquivo → watchdogs que o cobrem. */

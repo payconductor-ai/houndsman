@@ -7,7 +7,8 @@
 
 import { readFileSync } from "node:fs";
 import type { HoundsmanConfig } from "./config";
-import type { ClassifyRule, WatchdogDefinition } from "./types";
+import { churnToRecord, collectChurn, type DiffSource } from "./diff-source";
+import type { ChurnMap, ClassifyRule, WatchdogDefinition } from "./types";
 
 type FileStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "unknown";
 
@@ -22,6 +23,8 @@ export type ClassificationResult = {
 	watchdogs: Record<string, string[]>;
 	/** path → metadados (status, oldPath) */
 	files: Record<string, { status: FileStatus; oldPath?: string }>;
+	/** path → linhas adicionadas/removidas (churn do diff) */
+	churn: ChurnMap;
 	/** Arquivos não classificados (revisar manualmente) */
 	unclassified: string[];
 	/** Arquivos excluídos da revisão (gerados, locks, builds) */
@@ -167,6 +170,7 @@ export function parseEntries(raw: string): FileEntry[] {
 export function classifyEntries<TId extends string>(
 	entries: FileEntry[],
 	config: HoundsmanConfig<TId>,
+	churn: ChurnMap = {},
 ): ClassificationResult {
 	const watchdogFiles: Record<string, string[]> = {};
 	const files: ClassificationResult["files"] = {};
@@ -223,6 +227,7 @@ export function classifyEntries<TId extends string>(
 	return {
 		watchdogs,
 		files,
+		churn,
 		unclassified,
 		excluded,
 		deleted,
@@ -233,15 +238,58 @@ export function classifyEntries<TId extends string>(
 
 /**
  * Executa `git diff` entre base e head e classifica os arquivos alterados.
+ *
+ * `diff` (opcional) reaproveita um `DiffSource` já coletado — evita rodar o git
+ * de novo quando o chamador (ex.: `prepare`) precisa também do patch para o Jev.
  */
 export function classifyRange<TId extends string>(
 	base: string,
 	head: string,
 	config: HoundsmanConfig<TId>,
+	diff?: DiffSource,
 ): ClassificationResult {
 	const entries = parseEntries(runGitDiff(base, head));
-	const result = classifyEntries(entries, config);
+	const churn = diff?.churn ?? collectChurn(base, head);
+	const result = classifyEntries(entries, config, churnToRecord(churn));
 	result.base = base;
 	result.head = head;
 	return result;
+}
+
+// ---------------------------------------------------------------------------
+// Triage (PRs grandes)
+// ---------------------------------------------------------------------------
+
+/** Churn total (adições + remoções) de um arquivo; 0 quando ausente. */
+export function churnOf(filePath: string, churn: ChurnMap | undefined): number {
+	const entry = churn?.[filePath];
+	return entry ? entry.additions + entry.deletions : 0;
+}
+
+/** Ordena os arquivos por risco (churn desc; empate pelo caminho). */
+export function sortByRisk(files: readonly string[], churn?: ChurnMap): string[] {
+	return [...files].sort((a, b) => {
+		const delta = churnOf(b, churn) - churnOf(a, churn);
+		return delta !== 0 ? delta : a.localeCompare(b);
+	});
+}
+
+/** Resultado da aplicação do orçamento: o que revisar e o que ficou de fora. */
+export type BudgetSelection = { selected: string[]; overflow: string[] };
+
+/**
+ * Aplica o orçamento por brief: mantém os `maxFiles` de maior risco e devolve o
+ * restante em `overflow` (nunca descarta silenciosamente). `maxFiles` não-positivo
+ * ou não-finito desativa o orçamento.
+ */
+export function selectByBudget(
+	files: readonly string[],
+	churn: ChurnMap | undefined,
+	maxFiles: number,
+): BudgetSelection {
+	const ordered = sortByRisk(files, churn);
+	if (!Number.isFinite(maxFiles) || maxFiles <= 0 || ordered.length <= maxFiles) {
+		return { selected: ordered, overflow: [] };
+	}
+	return { selected: ordered.slice(0, maxFiles), overflow: ordered.slice(maxFiles) };
 }

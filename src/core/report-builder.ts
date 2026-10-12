@@ -284,6 +284,112 @@ function renderConclusion(counts: Record<Severity, number>): string[] {
 	];
 }
 
+/**
+ * Agrupa os achados por arquivo (navegabilidade em PRs grandes) e renderiza cada
+ * bloco. O `merged` já vem ordenado por severidade/arquivo/linha.
+ */
+function renderFindingsByFile(
+	findings: readonly MergedFinding[],
+	nameOf: WatchdogNameResolver,
+): string[] {
+	const byFile = new Map<string, MergedFinding[]>();
+	for (const finding of findings) {
+		const list = byFile.get(finding.file);
+		if (list) list.push(finding);
+		else byFile.set(finding.file, [finding]);
+	}
+
+	const lines: string[] = [];
+	for (const [file, items] of byFile) {
+		lines.push(`### \`${file}\``, "");
+		for (const item of items) lines.push(...renderFinding(item, nameOf));
+	}
+	return lines;
+}
+
+/** Seções por severidade (❌ > ⚠️ > 💡 > 🔎), com achados agrupados por arquivo. */
+function renderFindingsSections(
+	merged: readonly MergedFinding[],
+	nameOf: WatchdogNameResolver,
+): string[] {
+	const lines: string[] = [];
+	for (const severity of SEVERITY_ORDER) {
+		const items = merged.filter((f) => f.severity === severity);
+		if (items.length === 0) continue;
+		lines.push(`## ${SEVERITY_EMOJI[severity]} ${severity}`, "");
+		lines.push(...renderFindingsByFile(items, nameOf));
+	}
+	return lines;
+}
+
+/** Relatório de domínio gravado à parte (um por watchdog com achados). */
+export type DomainReport = {
+	id: string;
+	name: string;
+	/** Nome do arquivo do relatório (relativo ao diretório de artefatos). */
+	file: string;
+	findings: number;
+	reviewedFiles: number;
+	expectedFiles: number;
+};
+
+/** Índice dos relatórios por domínio (seção do `review.md` consolidado). */
+function renderDomainIndex(domains: readonly DomainReport[]): string[] {
+	if (domains.length === 0) return [];
+	const lines = [
+		"## Relatórios por domínio",
+		"",
+		"| Watchdog | Achados | Revisados | Relatório |",
+		"|---|---|---|---|",
+	];
+	for (const domain of domains) {
+		lines.push(
+			`| ${domain.name} | ${domain.findings} | ${domain.reviewedFiles}/${domain.expectedFiles} | [\`${domain.file}\`](${domain.file}) |`,
+		);
+	}
+	lines.push("");
+	return lines;
+}
+
+/**
+ * Relatório isolado de um watchdog — mantém o `review.md` enxuto em PRs grandes.
+ */
+export function renderDomainReport(
+	branch: string,
+	report: WatchdogReport,
+	merged: MergedFinding[],
+	expectedFiles: number,
+	context?: ContextSummary | null,
+	nameOf: WatchdogNameResolver = identityName,
+): string {
+	const now = new Date().toISOString().slice(0, 10);
+	const name = watchdogName(nameOf, report.watchdogId);
+	const lines: string[] = [
+		`# Review — ${name} (\`${report.watchdogId}\`) — ${branch}`,
+		"",
+		`**Data:** ${now}`,
+		`**Arquivos revisados:** ${report.reviewedFiles.length}/${expectedFiles}`,
+		`**Achados:** ${merged.length}`,
+		"",
+	];
+
+	if (context?.available) lines.push(...renderContext(context));
+
+	lines.push(...renderFindingsSections(merged, nameOf));
+	if (merged.length === 0) lines.push("Nenhum achado. ✅", "");
+
+	if (report.skipped.length > 0) {
+		lines.push(
+			"## Não revisados",
+			"",
+			...report.skipped.map((item) => `- \`${item}\``),
+			"",
+		);
+	}
+
+	return lines.join("\n");
+}
+
 /** Seção de contexto da PR (Objetivo / Motivação / Resumo das alterações). */
 function renderContext(context: ContextSummary): string[] {
 	const lines = ["## Contexto da PR", ""];
@@ -313,6 +419,7 @@ export function renderReport(
 	context?: ContextSummary | null,
 	candidates?: JevCandidate[],
 	nameOf: WatchdogNameResolver = identityName,
+	domains: readonly DomainReport[] = [],
 ): string {
 	const now = new Date().toISOString().slice(0, 10);
 	const counts = {
@@ -333,14 +440,7 @@ export function renderReport(
 
 	if (context) lines.push(...renderContext(context));
 
-	for (const severity of SEVERITY_ORDER) {
-		const items = merged.filter((f) => f.severity === severity);
-		if (items.length === 0) continue;
-		lines.push(`## ${SEVERITY_EMOJI[severity]} ${severity}`, "");
-		for (const finding of items) {
-			lines.push(...renderFinding(finding, nameOf));
-		}
-	}
+	lines.push(...renderFindingsSections(merged, nameOf));
 
 	if (merged.length === 0) {
 		lines.push("Nenhum achado. ✅", "");
@@ -350,6 +450,7 @@ export function renderReport(
 		lines.push(...renderUnconfirmedCandidates(candidates, merged));
 	}
 
+	lines.push(...renderDomainIndex(domains));
 	lines.push(...renderCoverage(reports, coverage, nameOf));
 	lines.push(...renderConclusion(counts));
 

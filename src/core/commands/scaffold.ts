@@ -164,6 +164,24 @@ export type FileStatus =
 
 export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: string }>;
 
+/** Linhas adicionadas/removidas de um arquivo no diff (churn). */
+export type FileChurn = { additions: number; deletions: number };
+
+/** Churn por caminho de arquivo. */
+export type ChurnMap = Record<string, FileChurn>;
+
+/** Limites de triage para PRs grandes. */
+export type HoundsmanBudgets = {
+	/** Máx. de arquivos por brief (default: 40). Excedente vai para "fora do orçamento". */
+	maxFilesPerBrief?: number;
+};
+
+/** Concorrência das fases paralelas internas. */
+export type HoundsmanConcurrency = {
+	/** Chamadas Jev simultâneas (default: 5). */
+	jev?: number;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -173,6 +191,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	exclusions: readonly RegExp[];
 	docMappings: readonly (readonly [RegExp, readonly string[]])[];
 	alwaysIncludeDocs?: readonly string[];
+	budgets?: HoundsmanBudgets;
+	concurrency?: HoundsmanConcurrency;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */

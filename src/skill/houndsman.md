@@ -79,15 +79,30 @@ Gera em `.houndsman/.runs/<branch-slug>/`:
 
 | Artefato | Conteúdo |
 |---|---|
-| `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) |
+| `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) + churn |
 | `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) |
-| `briefs/<watchdog>.md` | Instruções prontas para cada subagente |
-| `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev |
+| `briefs/<watchdog>.md` | Instruções prontas para cada subagente (arquivos por risco) |
+| `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento |
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).
 **Deletados:** não entram como conteúdo; vão para o brief de watchdogs com
 `breakingChange` como candidatos a **breaking change**.
+
+### Orçamento por brief (PRs grandes)
+
+O motor coleta o diff **uma única vez** (`git diff` + `git diff --numstat`) e classifica
+com **churn** (linhas adicionadas/removidas) por arquivo — o custo não cresce com o nº de
+arquivos da PR. Cada brief recebe no máximo `budgets.maxFilesPerBrief` arquivos (default 40),
+**priorizados pelo maior churn**:
+
+- O excedente vai para a seção **Fora do orçamento (NÃO revisar)** do brief e o watchdog deve
+  registrá-lo em `skipped` — a tabela de **Cobertura** mostra o que ficou de fora (nunca some
+  silenciosamente).
+- Isso mantém o contexto do subagente limitado mesmo num PR de 10k linhas com centenas de
+  arquivos num único domínio.
+- Ajuste em `houndsman.config.ts`: `budgets: { maxFilesPerBrief: 60 }` e
+  `concurrency: { jev: 8 }`. Valores não-positivos caem no default (o `doctor` avisa).
 
 ### Pré-análise Jev (Passo 1.5, opcional)
 
@@ -96,14 +111,15 @@ as regras atômicas dos watchdogs. Respostas acima do limiar viram **candidatos*
 `candidates.json` e entram no brief como *warm start* — o subagente **confirma ou refuta**.
 
 - **Não é achado**: candidatos não bloqueiam.
-- **Falha-aberto**: sem chave / erro / timeout → `available:false`; a revisão segue idêntica.
+- **Opcional**: sem chave / erro / timeout → `available:false`; a revisão segue idêntica.
 - Desativar: `houndsman --no-jev`.
 
 ---
 
 ## Passo 2 — Revisar (skill despacha os subagentes)
 
-Um subagente por brief, todos no mesmo bloco de tool calls. O prompt é o próprio brief:
+Um subagente por brief. Despache em **ondas** (ex.: até 8 subagentes por bloco de tool
+calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief:
 
 ```
 Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<watchdog-id>.md
@@ -111,7 +127,8 @@ Você é o watchdog <watchdog-id> do {{projectName}}.
 ```
 
 Cada subagente grava `findings/<watchdog-id>.json` (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
-Sem achados → `"findings": []` (arquivo obrigatório).
+Sem achados → `"findings": []` (arquivo obrigatório). Arquivos na seção **Fora do orçamento**
+não são lidos: registre-os em `skipped`.
 
 **NUNCA enviar:** `git diff` completo · histórico de commits · arquivos de outros domínios ·
 `AGENTS.md` completo (já está no contexto global).
@@ -130,6 +147,11 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todo
 3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit
 4. Grava `.houndsman/.runs/<branch-slug>/review.md` + tabela de cobertura
 5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
+6. Agrupa os achados **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
+7. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
+   (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
+
+> Compatível com `classification.json` antigo: se faltar o churn, o orçamento não é aplicado.
 
 ---
 
@@ -150,9 +172,16 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todo
 - ...
 
 ## ❌ blocking
-- **<regra>** — `arquivo:linha` · _<watchdogs>_
+### `src/routes/order-route.ts`
+- **<regra>** — `src/routes/order-route.ts:5` · _<watchdogs>_
   <mensagem>
   **Ação:** <ação>
+
+## 🔎 Candidatos não verificados (Jev)   ← se houver
+
+## Relatórios por domínio
+| Watchdog | Achados | Revisados | Relatório |
+|---|---|---|---|
 
 ## Cobertura
 | Watchdog | Arquivos revisados | Findings |
@@ -208,6 +237,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 
 - ❌ Enviar git diff completo para qualquer watchdog
 - ❌ Ativar watchdogs sem arquivos no seu domínio
+- ❌ Revisar arquivos marcados como **Fora do orçamento** (registre-os em `skipped`)
 - ❌ Carregar documentação que o watchdog não precisa
 - ❌ Revisar arquivos gerados (lock files, builds, migrations)
 - ❌ Escrever markdown livre em vez do JSON de `OUTPUT-FORMAT.md`
@@ -237,3 +267,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | Médio (5k linhas) | 4-7 | ~1-2 min |
 | Grande (50k linhas) | 7-10 | ~3-5 min |
 | Enorme (300k linhas) | 10-15 | ~5-8 min |
+
+> O custo de coleta é **constante** (2 execuções de `git`), independente do nº de arquivos.
+> Em PRs muito grandes, o limitante é o nº de subagentes (ondas) e o orçamento por brief —
+> não o diff. Ajuste `budgets.maxFilesPerBrief` para revisar mais/menos arquivos por domínio.
