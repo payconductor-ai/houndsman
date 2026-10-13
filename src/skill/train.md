@@ -1,14 +1,14 @@
-# Atualização de Lógicas do houndsman
+# houndsman — {{projectName}} · `train` (atualização de regras)
 
-> **Documento canônico do skill `/houndsman-update`.** Os `SKILL.md` de cada harness
-> (`.agents/skills/houndsman-update/` e `.claude/skills/houndsman-update/`) são apenas ponteiros para cá.
+> **Documento canônico da capability `train`.** O entry point do skill é o `SKILL.md`
+> (`.agents/skills/houndsman/SKILL.md` e `.claude/skills/houndsman/SKILL.md`).
 
 > **Propósito:** manter os watchdogs do skill `houndsman` alinhados ao que o
 > projeto **realmente aplica** — seja para adicionar/ajustar uma regra a pedido do
 > usuário, seja para uma auditoria geral após mudanças de padrão no código.
 
-Este skill é o **mantenedor** do `houndsman`. Ele não revisa PRs; ele atualiza as regras
-que o `houndsman` usa.
+Invocação: `/houndsman train`. Esta capability é a **mantenedora** do `houndsman`.
+Ela não revisa PRs (isso é `hunt`); ela atualiza as regras que o `houndsman` usa.
 
 ---
 
@@ -86,7 +86,7 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 - O projeto mudou de padrão (ex.: passou a usar uma lib, mudou autenticação, etc.).
 - **Auditoria completa** dos watchdogs após revisão geral do código.
 - **Regra confusa/ambígua** (humano ou IA não entende) — ver Modo C.
-- O usuário invoca `/houndsman-update`.
+- O usuário invoca `/houndsman train`.
 
 ---
 
@@ -108,7 +108,7 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
 | `src/core/config-loader.ts` | Descoberta/carregamento de `houndsman.config.ts` |
 | `src/core/brief.ts` | Render do brief: `defaultRenderBrief` + `PROCEDURE` |
 | `src/core/registry-check.ts` | Validação anti-drift (config-driven) |
-| `src/skill/houndsman.md` | Orquestração + tabela de watchdogs |
+| `src/skill/hunt.md` | Orquestração da revisão (capability `hunt`) |
 | `src/tests/**` | Suíte da lib (project-agnóstica; usa `fixtures/fake-project.ts`) |
 | `src/cli/index.ts` | **CLI único** — `houndsman [context, setup, doctor, test, watchdog, --finalize]` |
 
@@ -169,7 +169,7 @@ verificáveis por leitura local. Candidatos não confirmados pelo watchdog **nã
    - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
    - Se a regra muda para outro domínio (paths), ajustar o `classify` do watchdog.
 5. **Watchdog novo?** criar `.houndsman/watchdogs/<id>.ts` e registrar em `.houndsman/watchdogs/index.ts` (o id é derivado das chaves).
-6. **Atualizar `src/skill/houndsman.md`/`README.md`** se escopo/regra visível mudou (no motor).
+6. **Atualizar `src/skill/hunt.md`/`README.md`** se escopo/regra visível mudou (no motor).
 7. **Atualizar a suíte da lib** se o comportamento do MOTOR mudou (a suíte é project-agnóstica).
 8. **Verificar** (seção abaixo).
 
@@ -228,16 +228,16 @@ todos os itens — em especial: **geral/reutilizável** (não regra de negócio 
 bun run houndsman doctor     # config sem drift + ambiente + credencial Jev
 bun run houndsman test       # suíte da lib (project-agnóstica)
 bun run ci:fix               # formatação/imports/lint (no repo da lib)
-bun run ci:check             # tipagem (no repo da lib)
+bun run ci                   # tipagem (no repo da lib)
 ```
 
 Checklist final:
 
 - [ ] `bun run houndsman doctor` → sem problemas reportados.
 - [ ] `bun run houndsman test` → **0 fail**.
-- [ ] `ci:fix` + `ci:check` → exit 0 (warnings pré-existentes não contam).
+- [ ] `ci:fix` + `ci` → exit 0 (warnings pré-existentes não contam).
 - [ ] `WATCHDOG_DEFINITIONS[<id>].id` bate com a chave e `description` não vazio.
-- [ ] `src/skill/houndsman.md` continua consistente com os watchdogs do projeto.
+- [ ] `src/skill/hunt.md` continua consistente com os watchdogs do projeto.
 - [ ] Toda regra nova/alterada tem **evidência** registrada no PR/relatório
       (`file:line` se afirmativa; `0 ocorrências do anti-padrão` se negativa).
 - [ ] Nenhuma regra **negativa** foi removida por "0 ocorrências" (Regra de Ouro).

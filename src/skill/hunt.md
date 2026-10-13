@@ -1,18 +1,18 @@
-# houndsman — {{projectName}} (v1)
+# houndsman — {{projectName}} · `hunt` (revisão de PR)
 
-> **Documento canônico do skill `/houndsman`.** Os `SKILL.md` de cada harness
-> (`.agents/skills/houndsman/` e `.claude/skills/houndsman/`) são apenas ponteiros para cá.
+> **Documento canônico da capability `hunt`.** O entry point do skill é o `SKILL.md`
+> (`.agents/skills/houndsman/SKILL.md` e `.claude/skills/houndsman/SKILL.md`).
 
 Revisão de PR: classificação de arquivos → revisão paralela por domínio → consolidação.
-O motor é o CLI **`houndsman`**; as regras do projeto ficam em `houndsman.config.ts` + `houndsman/`.
+Invocação: `/houndsman` (default) ou `/houndsman hunt`. O motor é o CLI **`houndsman`**;
+as regras do projeto ficam em `houndsman.config.ts` + `.houndsman/`.
 
-**Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor); **watchdog** = cada agente
-especialista por domínio que audita o diff (antigo "revisor"); **review/revisão** = o processo;
-**Jev** = pré-análise opcional (Passo 1.5).
+**Quando usar:** revisar PR antes de merge · code review de feature branch · validar
+mudanças antes de push.
 
 ## Quem executa o quê
 
-- **Você** só invoca o skill: `/houndsman`. Não precisa rodar nenhum script à mão.
+- **Você** só invoca o skill: `/houndsman [hunt]`. Não precisa rodar nenhum script à mão.
 - **O skill** orquestra: executa o CLI `houndsman` e despacha os subagentes.
 - **O CLI** tem passos distintos, um comando cada:
 
@@ -21,9 +21,10 @@ especialista por domínio que audita o diff (antigo "revisor"); **review/revisã
 | 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
 | 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog) |
-| 3. Finalizar | `houndsman --finalize` | skill | `review.md` |
+| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + `state.json` |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
+> Depois do passo 3, a correção dos achados é a capability **`fix`** — ver `fix.md`.
 
 **Arquitetura:**
 
@@ -41,12 +42,6 @@ especialista por domínio que audita o diff (antigo "revisor"); **review/revisã
   não adota. Regra sem aplicação real no código gera falso positivo.
 - Cada watchdog recebe apenas seus arquivos relevantes (brief pronto) — nunca o diff completo.
 - Saída estruturada (JSON) por watchdog → consolidada e deduplicada automaticamente.
-
-## Quando Usar
-
-- Revisar PR antes de merge
-- Code review de feature branch
-- Validar mudanças antes de push
 
 ---
 
@@ -151,46 +146,12 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todo
 7. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
    (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
 8. Grava `.houndsman/.runs/<branch-slug>/state.json` — a **triagem**: um `id` curto e um
-   `fingerprint` de conteúdo por finding (Passo 4), preservados entre execuções
+   `fingerprint` de conteúdo por finding, preservados entre execuções
 
 > Compatível com `classification.json` antigo: se faltar o churn, o orçamento não é aplicado.
 
----
-
-## Passo 4 — Triagem (opcional)
-
-Cada finding recebe um `id` curto e um `fingerprint` de **conteúdo** no `--finalize`,
-gravados em `.houndsman/.runs/<branch-slug>/state.json`. A triagem é feita pela UI ou
-pelo agente — sem editar o JSON à mão. Duas dimensões independentes:
-
-- **decision:** `pending` · `execute` · `ignore` (+ `comment` opcional).
-- **execState:** `pending` · `in_progress` · `done` · `stale`.
-
-### UI local
-
-```bash
-houndsman server --open
-```
-
-Abre a UI (Bun.serve + Preact): lista as runs, triar os findings por severidade, comentar,
-marcar como feito e ler os artefatos (`manifest.json`, `classification.json`, `review.md`).
-Bind em `127.0.0.1` (ferramenta local, sem auth).
-
-### Auto-fix pelo agente
-
-```bash
-houndsman findings list --decision execute --json   # pendentes marcados p/ corrigir
-# ... o agente aplica as correções ...
-houndsman findings sync                             # reancora por conteúdo
-houndsman findings done <id>                        # confirma os concluídos
-```
-
-> **A linha não é a identidade.** O auto-fix desloca linhas; o motor reancora cada finding
-> pelo **conteúdo** (trecho + contexto) e não perde itens que se movem. Se a âncora some
-> (o trecho foi corrigido), o finding vira `done` automaticamente quando a decisão era
-> `execute`, ou `stale` caso contrário.
-> Ocorrências byte-idênticas (mesmo trecho E mesmo contexto) compartilham o id — são
-> tratadas como um grupo (`×N`); limitação conhecida.
+Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
+comandos `findings` levam do achado à correção.
 
 ---
 
@@ -245,7 +206,7 @@ git diff --name-status (base...head)
         ↓
 [3] houndsman --finalize       ──►  review.md + state.json
         ↓
-[4] triagem (UI ou agente)     ──►  state.json (decision/execState)
+[4] fix / triagem (UI ou agente) ──►  state.json (decision/execState) + correções
 ```
 
 ---
@@ -254,12 +215,13 @@ git diff --name-status (base...head)
 
 ```
 /houndsman
-/houndsman feature/add-webhook-retry
+/houndsman hunt
+/houndsman hunt feature/add-webhook-retry
 ```
 
 Se a branch não for informada, detecta com `git branch --show-current`. Base do diff: `main`.
 
-**Comandos do CLI:**
+**Comandos do CLI usados no `hunt`:**
 
 | Comando | Função |
 |---|---|
@@ -267,12 +229,6 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman` | Passo 1 — preparar (briefs + manifesto) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
-| `houndsman findings <sub>` | Triagem dos findings (list/show/set/done/reset/sync/summary/path) |
-| `houndsman server` | UI local de triagem + leitura de artefatos (`--port`, `--host`, `--open`) |
-| `houndsman setup` | Cria a configuração inicial do projeto |
-| `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
-| `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev |
-| `houndsman test` | Suíte de testes da lib |
 
 ---
 
@@ -294,11 +250,11 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 
 ## Manutenção das Regras
 
-> Alterar qualquer regra (adicionar, ajustar severidade, remover, corrigir escopo) → usar o
-> skill **`houndsman-update`** (`src/skill/houndsman-update.md`).
+> Alterar qualquer regra (adicionar, ajustar severidade, remover, corrigir escopo) → capability
+> **`train`** (`/houndsman train`, doc `train.md`).
 > Regra de ouro: só é regra o que o projeto **aplica hoje** — prove com evidência no código
 > (regra negativa com 0 ocorrências = seguida → **manter**).
-> Após qualquer alteração, rodar `houndsman doctor` + `houndsman test` + `ci:fix` + `ci:check`.
+> Após qualquer alteração, rodar `houndsman doctor` + `houndsman test` + `ci:fix` + `ci`.
 
 ---
 

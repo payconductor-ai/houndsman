@@ -17,6 +17,9 @@ export const MEDIA_DIR = join(import.meta.dir, "..", "..", "assets");
 /** Nome do arquivo de schema de output dos watchdogs. */
 export const OUTPUT_FORMAT_FILE = "OUTPUT-FORMAT.md";
 
+/** Nome do arquivo-base do skill (`SKILL.md`) — entry point escrito para cada harness. */
+export const SKILL_FILE = "SKILL.md";
+
 /** Caminho absoluto de um asset embarcado em `src/skill/`. */
 export function assetPath(fileName: string): string {
 	return join(SKILL_DIR, fileName);

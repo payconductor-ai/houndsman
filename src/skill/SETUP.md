@@ -39,7 +39,7 @@ A camada separa o que é **auto-gerado** do que é **do usuário**:
 | `.houndsman/core/types.ts` | **auto** | Snapshot dos tipos + helpers (tipagem sem install) |
 | `.houndsman/core/skill/*.md` | **auto** | Documentação do skill |
 | `.houndsman/.gitignore` | **auto** | Ignora `core/` e `.runs/` (gerados/temporários) |
-| `.agents/skills/houndsman/SKILL.md` etc. | **auto** | Ponteiros de skill dos harnesses |
+| `.agents/skills/houndsman/SKILL.md` etc. | **auto** | `SKILL.md` do skill `/houndsman` (capabilities `hunt`/`train`/`fix`) por harness |
 
 Além disso, adiciona o script `"houndsman": "houndsman"` ao `package.json` — assim
 `bun run houndsman [...]` funciona na raiz do projeto. Os artefatos ficam em
@@ -63,6 +63,16 @@ bun run houndsman doctor         # valida config + ambiente + credencial Jev
 bun run houndsman test           # suíte da lib (project-agnóstica)
 bun run houndsman --base main    # prepara briefs do diff atual
 ```
+
+## Capabilities do skill
+
+Depois do setup, invoque o skill `/houndsman` no seu harness:
+
+| Capability | Para quê |
+|---|---|
+| `/houndsman hunt` | Revisar a PR (default: `/houndsman`). |
+| `/houndsman train` | Adicionar/ajustar/remover regras dos watchdogs. |
+| `/houndsman fix` | Corrigir os findings marcados como `execute`. |
 
 ## Contrato do motor (`HoundsmanConfig`)
 

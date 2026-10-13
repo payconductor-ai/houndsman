@@ -15,7 +15,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { SKILL_DIR } from "../assets";
+import { SKILL_DIR, SKILL_FILE } from "../assets";
 import {
 	ARTIFACT_DIR,
 	CORE_DIR,
@@ -279,25 +279,6 @@ core/
 .runs/
 `;
 
-const SKILL_POINTER = (
-	name: string,
-	projectName: string,
-	canonical: string,
-	description: string,
-	argumentHint: string,
-): string => `---
-name: ${name}
-description: '${description}'
-argument-hint: '${argumentHint}'
----
-
-# ${name} — ${projectName}
-
-> **Ponteiro.** O conteúdo canônico está em \`${canonical}\`.
-
-Leia e siga \`${canonical}\`.
-`;
-
 // ---------------------------------------------------------------------------
 // Escrita
 // ---------------------------------------------------------------------------
@@ -345,15 +326,17 @@ export function writeUserLayer(ctx: ScaffoldContext): void {
 
 /**
  * Arquivos auto-gerados: tipos, docs do skill, `.gitignore` (ignora `core/` e
- * `.runs/`) e os ponteiros de skill dos harnesses. Sempre sobrescritos (é o
- * alvo do `update`).
+ * `.runs/`) e o `SKILL.md` de cada harness. Sempre sobrescritos (é o alvo do
+ * `update`).
  */
 export function syncGeneratedFiles(ctx: ScaffoldContext): void {
 	writeGeneratedFile(ctx, join(CORE_DIR, "types.ts"), TYPES_TEMPLATE);
 	writeGeneratedFile(ctx, join(PROJECT_DIR, ".gitignore"), PROJECT_GITIGNORE);
 
+	// Docs do skill vão para `.houndsman/core/skill/`. O `SKILL.md` é o entry point
+	// dos harnesses (escrito em `writeHarnessPointers`), não um doc da camada.
 	for (const name of readdirSync(SKILL_DIR)) {
-		if (!name.endsWith(".md")) continue;
+		if (!name.endsWith(".md") || name === SKILL_FILE) continue;
 		const raw = readFileSync(join(SKILL_DIR, name), "utf8");
 		writeGeneratedFile(
 			ctx,
@@ -365,29 +348,15 @@ export function syncGeneratedFiles(ctx: ScaffoldContext): void {
 	for (const harness of ctx.harnesses) writeHarnessPointers(ctx, harness);
 }
 
-/** Escreve os ponteiros de skill de um harness. */
+/**
+ * Escreve o `SKILL.md` do harness a partir do asset base (`src/skill/SKILL.md`),
+ * resolvendo `{{projectName}}`. O texto do skill vive no asset — não aqui.
+ */
 function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
-	const pointerDir = `.${harness}/skills`;
+	const raw = readFileSync(join(SKILL_DIR, SKILL_FILE), "utf8");
 	writeGeneratedFile(
 		ctx,
-		join(pointerDir, "houndsman", "SKILL.md"),
-		SKILL_POINTER(
-			"houndsman",
-			ctx.projectName,
-			`${CORE_SKILL_DIR}/houndsman.md`,
-			"Revisa Pull Requests com watchdogs especializados por domínio. Orquestra `bun run houndsman context` → `bun run houndsman` → subagentes → `bun run houndsman --finalize`. Config em `houndsman.config.ts`; regras em `.houndsman/`; relatório em `.houndsman/.runs/<branch-slug>/review.md`.",
-			"Nome da branch (opcional, detecta automaticamente se omitido)",
-		),
-	);
-	writeGeneratedFile(
-		ctx,
-		join(pointerDir, "houndsman-update", "SKILL.md"),
-		SKILL_POINTER(
-			"houndsman-update",
-			ctx.projectName,
-			`${CORE_SKILL_DIR}/houndsman-update.md`,
-			"Atualiza as regras e protocolos do skill houndsman (watchdogs, exclusões, mapeamentos de docs).",
-			"Watchdog alvo (opcional)",
-		),
+		join(`.${harness}`, "skills", "houndsman", SKILL_FILE),
+		raw.replaceAll("{{projectName}}", ctx.projectName),
 	);
 }

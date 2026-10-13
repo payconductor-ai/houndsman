@@ -54,7 +54,7 @@ Cria a camada `.houndsman/`, que é **autocontida** (não instala nada no seu pr
 | `.houndsman/core/**` | auto | Tipos + docs do skill (sincronizados por `houndsman update`) |
 
 > **Não existe "modo completo".** O `setup` já cria a camada inicial com um watchdog de
-> exemplo — troque o exemplo pelas regras reais do seu projeto (ou use `/houndsman-update`).
+> exemplo — troque o exemplo pelas regras reais do seu projeto (ou use `/houndsman train`).
 
 ### 4. Escreva suas regras
 
@@ -71,7 +71,7 @@ bun run houndsman doctor
 No seu harness (Claude Code / agents), invoque o skill:
 
 ```
-/houndsman
+/houndsman hunt
 ```
 
 O skill orquestra tudo e grava o relatório em `.houndsman/.runs/<branch-slug>/review.md`.
@@ -82,16 +82,22 @@ Não precisa rodar nenhum script à mão.
 ## O fluxo de trabalho
 
 ```
-/houndsman
+/houndsman hunt
    ├─ Passo 0  contexto da PR (gh, opcional)
    ├─ Passo 1  classifica o diff → briefs por watchdog
    ├─ Passo 2  N subagentes revisam em paralelo
    ├─ Passo 3  consolida em review.md + state.json
-   └─ Passo 4  triagem (UI local ou agente)
+   └─ Passo 4  fix / triagem (UI local ou agente)
 ```
 
-- Revisão normal: só `/houndsman` (a branch é detectada; base default `main`).
-- Revisar outra branch: `/houndsman feature/minha-branch`.
+O skill tem **3 capabilities**, todas em `/houndsman`:
+
+- **`hunt`** — revisa a PR (default: `/houndsman` = `/houndsman hunt`).
+- **`train`** — mantém/atualiza as regras dos watchdogs.
+- **`fix`** — corrige os findings marcados (`/houndsman fix`).
+
+- Revisão normal: `/houndsman` ou `/houndsman hunt` (a branch é detectada; base default `main`).
+- Revisar outra branch: `/houndsman hunt feature/minha-branch`.
 - Manual (sem skill): `houndsman context` → `houndsman --base main` → *(subagentes)* →
   `houndsman --finalize`.
 - CI: `houndsman --finalize --fail-on-blocking` (exit 1 se houver bloqueantes).
@@ -126,8 +132,8 @@ bun run houndsman findings done <id>
 
 ## Mantendo a configuração
 
-- **Alterar regras** → use o skill **`/houndsman-update`**. Ele prova no código que o padrão
-  existe (evidência) antes de editar e roda as validações.
+- **Alterar regras** → use a capability **`train`** (`/houndsman train`). Ela prova no código
+  que o padrão existe (evidência) antes de editar e roda as validações.
 - **Atualizou a lib?** Sincronize os arquivos auto-gerados sem tocar nas suas regras:
 
   ```bash
@@ -152,5 +158,7 @@ bun run houndsman findings done <id>
   lib (para quem vai contribuir).
 
 - `src/skill/SETUP.md` — referência de configuração passo a passo.
-- `src/skill/houndsman.md` — orquestração do skill `/houndsman`.
-- `src/skill/houndsman-update.md` — manutenção das regras dos watchdogs.
+- `src/skill/SKILL.md` — entry point do skill `/houndsman` (capabilities).
+- `src/skill/hunt.md` — capability `hunt` (revisão de PR).
+- `src/skill/train.md` — capability `train` (manutenção das regras).
+- `src/skill/fix.md` — capability `fix` (correção dos findings).

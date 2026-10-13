@@ -161,7 +161,7 @@ Boas práticas:
    compatibilidade".
 5. **Declare o `classify`** do watchdog — regex de path (`filename`) ou de conteúdo
    (`content`) para o motor achar os arquivos do domínio.
-6. **Prefira editar via `/houndsman-update`** — ele aplica a rubrica completa e roda as
+6. **Prefira editar via `/houndsman train`** — aplica a rubrica completa e roda as
    verificações (`doctor`, `test`).
 
 > `houndsman doctor` emite um aviso (não bloqueante) para regra sem prefixo de polaridade.

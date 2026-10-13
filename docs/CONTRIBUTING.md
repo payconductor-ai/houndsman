@@ -116,13 +116,14 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 ### Setup / update (camada do projeto)
 
 - `setup` divide a camada em **auto-gerado** (`.houndsman/core/**`, `.houndsman/.gitignore`,
-  ponteiros de skill) e **usuário** (`watchdogs/`, `exclusions.ts`, `doc-mappings.ts`,
+  `SKILL.md` dos harnesses) e **usuário** (`watchdogs/`, `exclusions.ts`, `doc-mappings.ts`,
   `houndsman.config.ts`).
 - `update` reescreve **só** o auto-gerado — nunca toca nas regras do usuário.
 - `doctor` (`registry-check.ts` + `cli/index.ts`) valida ids, `classify`, specs Jev, ambiente e a credencial Jev (chamada mínima).
 
-Detalhe: `src/skill/*.md` são copiados para `.houndsman/core/skill/` com `{{projectName}}`
-resolvido no momento da geração.
+Detalhe: os assets de `src/skill/*.md` são copiados para `.houndsman/core/skill/` com
+`{{projectName}}` resolvido na geração; o `src/skill/SKILL.md` (entry point) vira o `SKILL.md`
+de cada harness (`.agents/`, `.claude/`), não um doc da camada.
 
 ---
 
@@ -187,7 +188,7 @@ seções de relatório; se um conceito for renomeado, atualize **código + `AGEN
 
 ## Escrita de regras (resumo do contrato)
 
-A rubrica completa vive no skill `src/skill/houndsman-update.md` (`/houndsman-update`). O
+A rubrica completa vive na capability `train` (`src/skill/train.md`, `/houndsman train`). O
 essencial:
 
 - **Prefixo de polaridade obrigatório**: `Promover:` (DEVE acontecer) · `Evitar:` / `Não` /

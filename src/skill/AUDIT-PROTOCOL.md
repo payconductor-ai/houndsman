@@ -1,7 +1,7 @@
 # Protocolo de Auditoria dos Watchdogs — houndsman
 
-Referência do Modo B do skill `houndsman-update`. Objetivo: garantir que as regras dos
-watchdogs validam **apenas padrões que o projeto aplica hoje**. Regras "utópicas" (não
+Referência do Modo B da capability `train` (skill `/houndsman`). Objetivo: garantir que as
+regras dos watchdogs validam **apenas padrões que o projeto aplica hoje**. Regras "utópicas" (não
 aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas rebaixadas.
 
 ---

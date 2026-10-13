@@ -20,7 +20,8 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **motor (engine)** | O pacote publicado (`@payconductor/houndsman`) — genérico e agnóstico ao projeto. | `src/core/`, `src/cli/` |
 | **camada do projeto** | Config + regras do consumidor, carregada em **runtime**. | `houndsman.config.ts` + `.houndsman/` |
 | **camada autocontida** | Propriedade da camada gerada: **não importa** o pacote em runtime (só tipos espelhados) — permite instalação global. | `.houndsman/core/types.ts` |
-| **skill** | O comando `/houndsman` que orquestra o CLI e despacha os subagentes. | `src/skill/houndsman.md` |
+| **skill** | O comando `/houndsman` — entrada única com 3 capabilities: `hunt` (revisão), `train` (regras) e `fix` (correção). | `src/skill/SKILL.md` |
+| **capability** | Uma das três lentes do skill: `hunt` (revisar PR), `train` (manter regras), `fix` (corrigir findings); selecionada por argumento (`/houndsman <capability>`). | `src/skill/<capability>.md` |
 | **drift** | Divergência entre config/regras e o código real. Detectada pelo `doctor`. | `src/core/registry-check.ts` |
 | **Jev** | Pré-análise **opcional** por LLM (seção 7). | `src/core/jev/` |
 
@@ -193,4 +194,4 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 - Um termo entra aqui quando aparece no vocabulário do código, dos briefs ou do relatório.
 - Ao renomear um conceito, atualize **código + `AGENTS.md` + este glossário** no mesmo PR.
 - Ver também: [`CONTRIBUTING.md`](./CONTRIBUTING.md) (princípios e arquitetura) e
-  `src/skill/houndsman.md` (documento canônico do skill).
+  `src/skill/SKILL.md` (entry point) + `src/skill/{hunt,train,fix}.md` (capabilities).

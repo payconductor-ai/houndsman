@@ -2,6 +2,16 @@
 
 Revisão automatizada de Pull Requests — CLI independente + camada de configuração do projeto.
 
+## Capabilities
+
+Um único skill (`/houndsman`), três capabilities (detalhadas em `hunt.md`, `train.md`, `fix.md`):
+
+| Capability | O que faz |
+|---|---|
+| `hunt` | Revisão de PR (Passos 0–3). |
+| `train` | Manutenção das regras dos watchdogs. |
+| `fix` | Correção dos findings marcados como `execute`. |
+
 ## Terminologia
 
 - **houndsman** — o orquestrador/treinador (CLI + motor).
@@ -35,6 +45,8 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
+| `houndsman findings <sub>` | Triagem dos findings (`list`/`set`/`done`/`sync`/...) |
+| `houndsman server` | UI local de triagem (Bun.serve + Preact) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev (anti-drift) |
@@ -105,8 +117,9 @@ houndsman.config.ts           # HoundsmanConfig (dados; descoberto em runtime)
 └── doc-mappings.ts           # USUÁRIO
 ```
 
-> Os `SKILL.md` em `.agents/skills/houndsman/` e `.claude/skills/houndsman/` são
-> ponteiros para `.houndsman/core/skill/houndsman.md`.
+> O `SKILL.md` do skill (`.agents/skills/houndsman/SKILL.md` e
+> `.claude/skills/houndsman/SKILL.md`) é gerado a partir de `src/skill/SKILL.md`
+> pelo `houndsman setup`/`update` (com `{{projectName}}` resolvido).
 
 ## Manutenção
 
@@ -120,5 +133,5 @@ houndsman.config.ts           # HoundsmanConfig (dados; descoberto em runtime)
    `.houndsman/watchdogs/<id>.ts` + entrada em `.houndsman/watchdogs/index.ts`.
 2. Rodar `bun run houndsman doctor` — valida a config (definições, classificação, specs Jev).
 
-> Para qualquer alteração de regra (pontual ou auditoria completa), use o skill
-> **`houndsman-update`**: `.houndsman/core/skill/houndsman-update.md`.
+> Para qualquer alteração de regra (pontual ou auditoria completa), use a capability
+> **`train`**: `/houndsman train` → `.houndsman/core/skill/train.md`.
