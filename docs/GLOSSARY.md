@@ -164,7 +164,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`houndsman watchdog <id>`** | Contexto de um watchdog (`--rules`, `--json`). |
 | **`houndsman setup` / `update`** | Cria / sincroniza a camada do projeto. |
 | **`houndsman test`** | Roda a suíte da lib. |
-| **`houndsman findings <sub>`** | Triagem dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`path`). |
+| **`houndsman findings <sub>`** | Triagem/correção dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`batch`/`path`). |
 | **`houndsman server`** | UI local de triagem e leitura de artefatos (`--port`, `--host`, `--open`). |
 | **`--base` / `--head`** | Extremos do diff (default `main` / `HEAD`). |
 | **`--branch` / `--dir`** | Branch alvo / pasta de artefatos. |
@@ -186,6 +186,9 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **ausente (`present:false`)** | Finding que sumiu do último `--finalize`; o estado de triagem é preservado. |
 | **grupo (`count`)** | Ocorrências byte-idênticas (mesmo trecho E mesmo contexto) compartilham id — limitação conhecida. |
 | **reancoragem (reanchor)** | Recalcular a linha de cada finding lendo o arquivo atual (`core/finding-anchor.ts`). |
+| **fila de correção** | Findings `decision: execute` ainda não `done` (presentes) — base do `fix`. |
+| **lote (`findings batch`)** | Grupo atual paginado + lista dos demais grupos — unidade de trabalho do `fix`. |
+| **escopo de correção** | Eixo de agrupamento do lote (`file`/`rule`/`watchdog`), escolhido automaticamente pela coesão da fila. |
 
 ---
 

@@ -3,7 +3,7 @@
  *
  * Lê/grava o `state.json` da run (`findings-state.ts`). Devolve o texto pronto
  * (markdown ou JSON) + exit code; o CLI decide o log/exit. O agente do usuário
- * usa `list`/`set`/`done` para interagir sem abrir o JSON à mão.
+ * usa `list`/`set`/`done` (e `batch` para lotes de correção) para interagir sem abrir o JSON à mão.
  *
  * Se o `state.json` não existir, é re-construído a partir de
  * `findings/*.json` + `classification.json` (não exige `--finalize`).
@@ -29,6 +29,7 @@ import {
 	summarize,
 	syncState,
 } from "../findings-state";
+import { buildFixBatch, type FixBatchResult } from "../fix-batch";
 import { relFromRoot } from "../paths";
 import { currentBranch } from "../pr-context";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "../types";
@@ -49,6 +50,8 @@ const VALUE_FLAGS = new Set([
 	"--limit",
 	"--comment",
 	"--by",
+	"--offset",
+	"--group",
 ]);
 
 type ParsedArgs = {
@@ -159,6 +162,42 @@ function renderSummary(state: FindingsStateFile, summary: FindingsSummary): stri
 		`Execução: ${exec}`,
 		`Severidade: ${severities}`,
 	].join("\n");
+}
+
+/** Mix de severidade compacto (ex.: `❌1 ⚠️2`). */
+function severityBreakdown(bySeverity: Record<Severity, number>): string {
+	return SEVERITY_ORDER.filter((severity) => bySeverity[severity] > 0)
+		.map((severity) => `${SEVERITY_EMOJI[severity]}${bySeverity[severity]}`)
+		.join(" ");
+}
+
+/** Render do lote de correção: grupo atual paginado + outros grupos. */
+function renderBatch(result: FixBatchResult): string {
+	const { dimension, current, others, totals } = result;
+	if (totals.queue === 0) return "Nenhum finding pendente de correção.";
+
+	const lines = [
+		`# Lote de correção — agrupado por ${dimension} (${totals.groups} grupo(s))`,
+		"",
+		`## Grupo atual — ${current.key} (${current.total} finding(s), mostrando ${current.returned})`,
+	];
+	for (const finding of current.findings) lines.push(...renderFindingLine(finding));
+	if (current.remaining > 0) {
+		lines.push("", `_… +${current.remaining} neste grupo (use \`--offset\`)._`);
+	}
+	if (others.length > 0) {
+		lines.push("", "## Outros grupos disponíveis");
+		for (const group of others) {
+			lines.push(
+				`- ${group.key} — ${group.count} (${severityBreakdown(group.bySeverity)})`,
+			);
+		}
+	}
+	lines.push(
+		"",
+		`fila: ${totals.queue} · retornados: ${totals.returned} · grupos: ${totals.groups}`,
+	);
+	return lines.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -357,9 +396,26 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			const path = FindingsStateStore.at(dir, branch).filePath;
 			return { output: relFromRoot(path), exitCode: 0 };
 		}
+		case "batch": {
+			const state = loadState(config, parsed);
+			const severity = parsed.values["--severity"];
+			const offset = Number(parsed.values["--offset"]);
+			const result = buildFixBatch(state, {
+				severity: severity ? (severity as Severity) : undefined,
+				includeDone: parsed.bools.has("--include-done"),
+				offset: Number.isFinite(offset) ? offset : undefined,
+				group: parsed.values["--group"],
+			});
+			return {
+				output: parsed.bools.has("--json")
+					? JSON.stringify(result, null, 2)
+					: renderBatch(result),
+				exitCode: 0,
+			};
+		}
 		default:
 			return {
-				output: `Subcomando '${parsed.sub}' desconhecido. Use: list, show, set, done, reset, sync, summary, path.`,
+				output: `Subcomando '${parsed.sub}' desconhecido. Use: list, show, set, done, reset, sync, summary, batch, path.`,
 				exitCode: 1,
 			};
 	}

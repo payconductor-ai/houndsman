@@ -45,7 +45,7 @@ Um único skill (`/houndsman`), três capabilities (detalhadas em `hunt.md`, `tr
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
-| `houndsman findings <sub>` | Triagem dos findings (`list`/`set`/`done`/`sync`/...) |
+| `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/...) |
 | `houndsman server` | UI local de triagem (Bun.serve + Preact) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |

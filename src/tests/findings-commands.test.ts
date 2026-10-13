@@ -223,4 +223,129 @@ describe("findings command", () => {
 			run0.cleanup();
 		}
 	});
+
+	test("batch agrupa a fila e devolve o grupo atual + outros grupos", () => {
+		const dir = mkdtempSync(join(tmpdir(), "houndsman-batch-"));
+		const outDir = join(dir, "main");
+		mkdirSync(join(outDir, "findings"), { recursive: true });
+		writeFileSync(
+			join(outDir, "classification.json"),
+			JSON.stringify({ watchdogs: { alpha: ["src/a.ts"], beta: ["src/b.ts"] } }),
+		);
+		writeFileSync(
+			join(outDir, "findings", "alpha.json"),
+			JSON.stringify({
+				watchdogId: "alpha",
+				reviewedFiles: ["src/a.ts"],
+				skipped: [],
+				findings: [
+					{
+						rule: "R1",
+						severity: "blocking",
+						file: "src/a.ts",
+						line: 1,
+						message: "m1",
+						action: "a",
+					},
+					{
+						rule: "R2",
+						severity: "attention",
+						file: "src/a.ts",
+						line: 2,
+						message: "m2",
+						action: "a",
+					},
+					{
+						rule: "R3",
+						severity: "attention",
+						file: "src/a.ts",
+						line: 3,
+						message: "m3",
+						action: "a",
+					},
+					{
+						rule: "R4",
+						severity: "nit",
+						file: "src/a.ts",
+						line: 4,
+						message: "m4",
+						action: "a",
+					},
+				],
+			}),
+		);
+		writeFileSync(
+			join(outDir, "findings", "beta.json"),
+			JSON.stringify({
+				watchdogId: "beta",
+				reviewedFiles: ["src/b.ts"],
+				skipped: [],
+				findings: [
+					{
+						rule: "R5",
+						severity: "attention",
+						file: "src/b.ts",
+						line: 1,
+						message: "m5",
+						action: "a",
+					},
+					{
+						rule: "R6",
+						severity: "suggestion",
+						file: "src/b.ts",
+						line: 2,
+						message: "m6",
+						action: "a",
+					},
+				],
+			}),
+		);
+		try {
+			const list = JSON.parse(
+				run(["list", "--dir", dir, "--branch", "main", "--json"]).output,
+			);
+			for (const item of list) {
+				run([
+					"set",
+					item.id,
+					"--decision",
+					"execute",
+					"--dir",
+					dir,
+					"--branch",
+					"main",
+				]);
+			}
+
+			const result = run(["batch", "--dir", dir, "--branch", "main", "--json"]);
+			expect(result.exitCode).toBe(0);
+			const parsed = JSON.parse(result.output);
+			expect(parsed.dimension).toBe("file");
+			expect(parsed.totals.queue).toBe(6);
+			expect(parsed.totals.groups).toBe(2);
+			expect(parsed.current.key).toBe("file:src/a.ts");
+			expect(parsed.current.findings).toHaveLength(4);
+			expect(parsed.others).toEqual([
+				expect.objectContaining({ key: "file:src/b.ts", count: 2 }),
+			]);
+
+			const markdown = run(["batch", "--dir", dir, "--branch", "main"]);
+			expect(markdown.output).toContain("Grupo atual");
+			expect(markdown.output).toContain("Outros grupos");
+
+			const scoped = run([
+				"batch",
+				"--group",
+				"file:src/b.ts",
+				"--dir",
+				dir,
+				"--branch",
+				"main",
+				"--json",
+			]);
+			expect(JSON.parse(scoped.output).current.key).toBe("file:src/b.ts");
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });

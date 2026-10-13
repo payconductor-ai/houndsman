@@ -11,7 +11,7 @@
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
- *   findings <sub>       Triagem dos findings (list/set/done/sync/...)
+ *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/...)
  *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -44,7 +44,7 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
-  findings <sub>      Triagem dos findings (list · show · set · done · reset · sync · summary · path)
+  findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · path)
   server              Sobe a UI local de triagem (--port, --host, --open)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -67,11 +67,14 @@ Flags de findings:
   --exec <e>          pending | in_progress | done | stale
   --comment <text>    Comentário/instrução adicional
   --watchdog <id>     Filtra por watchdog (list)
-  --severity <s>      Filtra por severidade (list)
+  --severity <s>      Filtra por severidade (list, batch)
   --file <text>       Filtra por trecho do caminho (list)
   --all               Inclui findings ausentes do último relatório
   --json              Saída JSON
-  --limit <n>         Limita o nº de itens (list)`;
+  --limit <n>         Limita o nº de itens (list)
+  --group <key>       Grupo alvo no batch (default: o primeiro)
+  --offset <n>        Paginação dentro do grupo (batch)
+  --include-done      Inclui já concluídos no batch`;
 
 function readFlag(args: string[], flag: string): string | undefined {
 	const index = args.indexOf(flag);
@@ -174,8 +177,8 @@ function runWatchdog(config: HoundsmanConfig, args: string[]): void {
 }
 
 /**
- * Subcomando `findings` — triagem dos findings (list/show/set/done/reset/
- * sync/summary/path). Deixa o agente interagir com o estado sem abrir o JSON.
+ * Subcomando `findings` — triagem/correção dos findings (list/show/set/done/reset/
+ * sync/summary/batch/path). Deixa o agente interagir com o estado sem abrir o JSON.
  */
 function runFindings(config: HoundsmanConfig, args: string[]): void {
 	const result = runFindingsCommand(config, args);

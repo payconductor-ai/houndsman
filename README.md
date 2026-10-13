@@ -120,8 +120,9 @@ bun run houndsman server --open     # UI: triar, comentar, marcar feito, ler art
 **Auto-fix pelo agente** — as linhas mudam depois do fix, e o motor reancora por conteúdo:
 
 ```bash
-bun run houndsman findings list --decision execute --json
-bun run houndsman findings sync
+bun run houndsman findings batch --json     # grupo atual (agrupamento automático) + outros
+# ... o agente corrige apenas esse grupo ...
+bun run houndsman findings sync             # reancora por conteúdo
 bun run houndsman findings done <id>
 ```
 

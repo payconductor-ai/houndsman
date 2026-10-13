@@ -131,7 +131,7 @@ Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consol
 | `houndsman --base main` | Passo 1 — prepara os briefs |
 | `houndsman --finalize` | Passo 3 — gera o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--rules`, `--json`) |
-| `houndsman findings <sub>` | Triagem dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`path`) |
+| `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`batch`/`path`) |
 | `houndsman server` | UI local de triagem + leitura de artefatos (`--port`, `--host`, `--open`) |
 
 Flags: `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
