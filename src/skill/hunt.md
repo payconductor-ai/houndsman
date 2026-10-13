@@ -148,8 +148,6 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todo
 8. Grava `.houndsman/.runs/<branch-slug>/state.json` — a **triagem**: um `id` curto e um
    `fingerprint` de conteúdo por finding, preservados entre execuções
 
-> Compatível com `classification.json` antigo: se faltar o churn, o orçamento não é aplicado.
-
 Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
 comandos `findings` levam do achado à correção.
 

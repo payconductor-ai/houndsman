@@ -2,9 +2,8 @@
  * Coleta do diff em um único passo (biblioteca).
  *
  * Roda `git diff base...head` **uma vez** (patch) e `--numstat` **uma vez**
- * (churn), fatiando o patch por arquivo em memória. Substitui os N spawns de
- * `git diff -- <arquivo>` (antes feitos por arquivo, no `jev-detector`): o custo
- * deixa de crescer com o número de arquivos da PR.
+ * (churn), fatiando o patch por arquivo em memória — o custo não cresce com o
+ * número de arquivos da PR.
  *
  * Usado por `orchestrator.prepare` (churn para a classificação + patch para o
  * Jev) e por `classifyRange` (fallback standalone).

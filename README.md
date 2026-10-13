@@ -53,8 +53,8 @@ Cria a camada `.houndsman/`, que é **autocontida** (não instala nada no seu pr
 | `.houndsman/doc-mappings.ts` | você | path → documentação de contexto |
 | `.houndsman/core/**` | auto | Tipos + docs do skill (sincronizados por `houndsman update`) |
 
-> **Não existe "modo completo".** O `setup` já cria a camada inicial com um watchdog de
-> exemplo — troque o exemplo pelas regras reais do seu projeto (ou use `/houndsman train`).
+> O `setup` já cria a camada inicial com um watchdog de exemplo — troque o exemplo pelas
+> regras reais do seu projeto (ou use `/houndsman train`).
 
 ### 4. Escreva suas regras
 

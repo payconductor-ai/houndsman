@@ -1,8 +1,7 @@
 /**
  * Acesso tipado aos watchdogs de um `HoundsmanConfig` (biblioteca).
  *
- * Substitui o antigo barrel `registry/`. O motor não conhece ids concretos —
- * tudo chega via `config`.
+ * O motor não conhece ids concretos — tudo chega via `config`.
  */
 
 import type { HoundsmanConfig } from "./config";

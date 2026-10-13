@@ -14,7 +14,7 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | Termo | Significado no houndsman | Onde vive |
 | --- | --- | --- |
 | **houndsman** | O orquestrador ("treinador"): CLI + motor. Não é um watchdog nem a revisão — é quem comanda a caçada. | `src/cli/`, `src/core/` |
-| **watchdog** | Um agente especialista **por domínio** de review (ex.: rotas, banco, testes). Um subagente por brief. (Antigo "revisor".) | `.houndsman/watchdogs/<id>.ts` |
+| **watchdog** | Um agente especialista **por domínio** de review (ex.: rotas, banco, testes). Um subagente por brief. | `.houndsman/watchdogs/<id>.ts` |
 | **review / revisão** | O **processo** completo (Passos 0–3), não um arquivo. O resultado escrito é o *relatório*. | fluxo `context → prepare → findings → finalize` |
 | **subagente** | Instância de LLM despachada pelo skill para executar um brief. | `runSubagent` (harness) |
 | **motor (engine)** | O pacote publicado (`@payconductor/houndsman`) — genérico e agnóstico ao projeto. | `src/core/`, `src/cli/` |

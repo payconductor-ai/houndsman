@@ -453,8 +453,6 @@ function readClassification(classificationPath: string): ClassificationResult {
 	const parsed = JSON.parse(
 		readFileSync(classificationPath, "utf8"),
 	) as ClassificationResult;
-	// Compatível com classification.json gerado antes do churn existir.
-	parsed.churn ??= {};
 	return parsed;
 }
 

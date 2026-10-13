@@ -11,7 +11,7 @@
 despacha watchdogs especializados (um subagente por brief) e consolida um relatório.
 
 > **Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor); **watchdog** = cada
-> agente especialista por domínio que audita o diff (antigo "revisor"); **review/revisão** =
+> agente especialista por domínio que audita o diff; **review/revisão** =
 > o processo; **Jev** = pré-análise opcional.
 
 O motor é **genérico e agnóstico ao projeto** — nenhuma regra, path ou nome de consumidor vive

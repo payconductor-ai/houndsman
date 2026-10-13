@@ -1,8 +1,8 @@
 /**
  * Renderização do brief de um watchdog (biblioteca) — `defaultRenderBrief`.
  *
- * O procedimento (`PROCEDURE`) é compartilhado por todos os watchdogs; o que era
- * protocolo específico vive nas regras do watchdog (`rules`).
+ * O procedimento (`PROCEDURE`) é compartilhado por todos os watchdogs; o que é
+ * específico do domínio vive nas regras do watchdog (`rules`).
  */
 
 import {
@@ -17,7 +17,6 @@ import {
 
 /**
  * Procedimento de revisão — compartilhado por todos os watchdogs.
- * Substitui o antigo protocolo genérico de 5 passos + o ponteiro `PROTOCOL_GLOB`.
  */
 export const PROCEDURE: readonly string[] = [
 	"1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).",

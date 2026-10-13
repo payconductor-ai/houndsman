@@ -130,8 +130,8 @@ export class JevDetector {
 	}
 
 	/**
-	 * Diff para o `state`: reaproveita o injetado ou coleta **uma vez** (antes era
-	 * 1 `git diff` por arquivo). Tolerante a falha — o Jev é opcional/fail-open.
+	 * Diff para o `state`: reaproveita o injetado ou coleta **uma vez**. Tolerante
+	 * a falha — o Jev é opcional/fail-open.
 	 */
 	private resolveDiff(base: string, head: string, provided?: DiffSource): DiffSource {
 		if (provided) return provided;
