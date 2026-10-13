@@ -27,6 +27,7 @@ import {
 	syncState,
 } from "../core/findings-state";
 import { STATE_FILE } from "../core/paths";
+import { pingFindingsStatus, readRunStatus } from "../core/run-status";
 import type { Severity } from "../core/types";
 import { listRunSlugs, readRunFile, readRunJson, runDirForSlug } from "./artifacts";
 import { buildClientBundle } from "./client-build";
@@ -95,10 +96,12 @@ function listRuns(artifactDir: string): unknown[] {
 			dir,
 			"manifest.json",
 		);
+		const status = readRunStatus(dir);
 		return {
 			slug,
 			branch: state.branch || manifest?.branch || slug,
-			updatedAt: state.updatedAt,
+			updatedAt: status?.updatedAt ?? state.updatedAt,
+			status: status?.status ?? null,
 			summary: summarize(state),
 		};
 	});
@@ -114,6 +117,7 @@ function runDetail(dir: string, slug: string): unknown {
 	return {
 		slug,
 		branch: state.branch || slug,
+		status: readRunStatus(dir),
 		manifest: readRunJson(dir, "manifest.json"),
 		summary: summarize(state),
 		watchdogs: Object.keys(classification?.watchdogs ?? {}),
@@ -153,6 +157,7 @@ async function updateFinding(
 	applyFindingUpdate(finding, body);
 	reorder(state);
 	store.write(state);
+	pingFindingsStatus(dir, state);
 	return json({ finding });
 }
 
@@ -161,6 +166,7 @@ function syncRun(dir: string, slug: string): Response {
 	const state = store.read() ?? buildForRun(dir, slug) ?? emptyState(slug);
 	const result: SyncResult = syncState(state, fileReader(process.cwd()));
 	store.write(state);
+	pingFindingsStatus(dir, state);
 	return json({ result, summary: summarize(state) });
 }
 
@@ -301,6 +307,11 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
 .run.active { border-color:var(--accent); background:#22304d; }
 .run-branch { font-weight:600; font-size:13px; }
 .run-meta { color:var(--muted); font-size:11px; }
+.run-status { font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+.status-reviewing, .status-fixing { color:#e3a008; }
+.status-review_done { color:#4c8dff; }
+.status-fix_done { color:#3fb950; }
+.status-timeout { color:#e5484d; }
 .main { flex:1; padding:16px 20px; max-width:980px; }
 .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 .tabs { display:flex; gap:6px; flex-wrap:wrap; }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runFindingsCommand } from "../core/commands/findings";
@@ -346,6 +346,45 @@ describe("findings command", () => {
 			expect(JSON.parse(scoped.output).current.key).toBe("file:src/b.ts");
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("mutações fazem ping no run.json (status)", () => {
+		const run0 = makeRun(ONE_FINDING);
+		try {
+			const id = JSON.parse(
+				run(["list", "--dir", run0.dir, "--branch", "main", "--json"]).output,
+			)[0].id;
+			const runJson = join(run0.dir, "main", "run.json");
+
+			run([
+				"set",
+				id,
+				"--decision",
+				"execute",
+				"--dir",
+				run0.dir,
+				"--branch",
+				"main",
+			]);
+			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("review_done");
+
+			run([
+				"set",
+				id,
+				"--exec",
+				"in_progress",
+				"--dir",
+				run0.dir,
+				"--branch",
+				"main",
+			]);
+			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("fixing");
+
+			run(["done", id, "--dir", run0.dir, "--branch", "main"]);
+			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("fix_done");
+		} finally {
+			run0.cleanup();
 		}
 	});
 });

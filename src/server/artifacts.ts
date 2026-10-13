@@ -11,6 +11,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 const RUN_MARKERS = [
 	"manifest.json",
 	"state.json",
+	"run.json",
 	"classification.json",
 	"review.md",
 ] as const;

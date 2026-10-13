@@ -32,6 +32,7 @@ import {
 import { buildFixBatch, type FixBatchResult } from "../fix-batch";
 import { relFromRoot } from "../paths";
 import { currentBranch } from "../pr-context";
+import { pingFindingsStatus } from "../run-status";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "../types";
 
 export type FindingsCommandResult = {
@@ -236,6 +237,13 @@ function filterFrom(parsed: ParsedArgs): FindingsFilter {
 	};
 }
 
+/** Faz ping no `run.json` (status derivado do estado atual) após uma mutação. */
+function pingStatus(config: HoundsmanConfig, parsed: ParsedArgs): void {
+	const { dir, branch } = resolveDir(config, parsed);
+	const state = FindingsStateStore.at(dir, branch).read();
+	if (state) pingFindingsStatus(runDir(dir, branch), state);
+}
+
 /** Aplica uma atualização a um finding e persiste. */
 function updateOne(
 	config: HoundsmanConfig,
@@ -333,6 +341,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 				);
 			}
 			const finding = updateOne(config, parsed, id, update);
+			pingStatus(config, parsed);
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(finding, null, 2)
@@ -343,6 +352,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 		case "done": {
 			const ids = requireIds(parsed, "done");
 			const updated = updateMany(config, parsed, ids, { execState: "done" });
+			pingStatus(config, parsed);
 			return {
 				output: `Marcados como done: ${updated.map((f) => f.id).join(", ")}.`,
 				exitCode: 0,
@@ -355,6 +365,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 				execState: "pending",
 				comment: "",
 			});
+			pingStatus(config, parsed);
 			return {
 				output: `Triagem reiniciada: ${updated.map((f) => f.id).join(", ")}.`,
 				exitCode: 0,
@@ -366,6 +377,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			const state = loadState(config, parsed);
 			const result = syncState(state, fileReader(process.cwd()));
 			store.write(state);
+			pingStatus(config, parsed);
 			const output = parsed.bools.has("--json")
 				? JSON.stringify(result, null, 2)
 				: [

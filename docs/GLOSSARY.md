@@ -54,6 +54,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **`state.json`** | Estado de triagem dos findings da run (ids, decisão, execução, histórico) — ver seção 11. |
+| **`run.json`** | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + `startedAt`/`updatedAt` — exibido na UI; ver seção 11. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
 | **`context-brief.md`** | Instruções para o subagente que resume o contexto. |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
@@ -189,6 +190,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **fila de correção** | Findings `decision: execute` ainda não `done` (presentes) — base do `fix`. |
 | **lote (`findings batch`)** | Grupo atual paginado + lista dos demais grupos — unidade de trabalho do `fix`. |
 | **escopo de correção** | Eixo de agrupamento do lote (`file`/`rule`/`watchdog`), escolhido automaticamente pela coesão da fila. |
+| **run status** | `reviewing` → `review_done` → `fixing` → `fix_done` (em `run.json`). Toda ação mutante faz um **ping** (`updatedAt`); a UI deriva *timeout* de `updatedAt` (display-only, não é status). |
 
 ---
 

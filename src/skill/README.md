@@ -72,6 +72,8 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman
 | `findings/<watchdog>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
 | `review.md` | Relatório final (achados agrupados por arquivo) |
 | `review.<watchdog>.md` | Relatório por domínio (só quando há achados) |
+| `state.json` | Estado de triagem dos findings (decisão/execução + fingerprint) |
+| `run.json` | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + timestamps |
 
 ## Estrutura
 

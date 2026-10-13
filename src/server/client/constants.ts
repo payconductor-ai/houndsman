@@ -2,7 +2,7 @@
  * Constantes de apresentação do cliente (labels, ordem, emojis).
  */
 
-import type { Decision, ExecState, Severity } from "./types";
+import type { Decision, ExecState, RunStatus, RunSummary, Severity } from "./types";
 
 export const SEVERITY_EMOJI: Record<Severity, string> = {
 	blocking: "❌",
@@ -29,6 +29,37 @@ export const EXEC_LABELS: Record<ExecState, string> = {
 	done: "exec: feito",
 	stale: "exec: stale",
 };
+
+export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
+	reviewing: "Revisando",
+	review_done: "Revisão pronta",
+	fixing: "Corrigindo",
+	fix_done: "Correção pronta",
+};
+
+/** Limiar de inatividade para exibir timeout (display-only; não é status). */
+export const STATUS_TIMEOUT_MS = 10 * 60 * 1000;
+
+export type RunStatusView = { kind: string; label: string; timeout: boolean };
+
+/** View do status de uma run — label; vira timeout quando ativo e sem ping recente. */
+export function describeRunStatus(
+	run: RunSummary,
+	now: number = Date.now(),
+): RunStatusView | null {
+	const status = run.status;
+	if (!status) return null;
+	const active = status === "reviewing" || status === "fixing";
+	const updated = run.updatedAt ? Date.parse(run.updatedAt) : Number.NaN;
+	if (active && Number.isFinite(updated) && now - updated > STATUS_TIMEOUT_MS) {
+		return {
+			kind: "timeout",
+			label: status === "reviewing" ? "Timeout na revisão" : "Timeout na correção",
+			timeout: true,
+		};
+	}
+	return { kind: status, label: RUN_STATUS_LABELS[status], timeout: false };
+}
 
 /** Artefatos que podem ser lidos na aba "Artefatos". */
 export const ARTIFACTS = [

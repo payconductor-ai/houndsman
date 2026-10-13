@@ -110,6 +110,36 @@ describe("server API", () => {
 		}
 	});
 
+	test("PATCH expõe o run status em /api/runs", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config);
+			const before = (await (await get(handler, "/api/runs")).json()) as {
+				runs: { status: string | null }[];
+			};
+			expect(before.runs[0].status).toBeNull();
+
+			const list = (await (
+				await get(handler, "/api/runs/main/findings?all=1")
+			).json()) as { findings: { id: string }[] };
+			const id = list.findings[0].id;
+			await handler(
+				new Request(`http://localhost/api/runs/main/findings/${id}`, {
+					method: "PATCH",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ execState: "in_progress" }),
+				}),
+			);
+
+			const after = (await (await get(handler, "/api/runs")).json()) as {
+				runs: { status: string | null }[];
+			};
+			expect(after.runs[0].status).toBe("fixing");
+		} finally {
+			env.cleanup();
+		}
+	});
+
 	test("POST sync devolve o resultado da reancoragem", async () => {
 		const env = makeEnv();
 		try {

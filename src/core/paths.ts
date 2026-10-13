@@ -31,3 +31,6 @@ export const OUTPUT_FORMAT_PATH = `${CORE_SKILL_DIR}/${OUTPUT_FORMAT_FILE}`;
 
 /** Estado de triagem dos findings, dentro da pasta da run (`<slug>/state.json`). */
 export const STATE_FILE = "state.json";
+
+/** Status da run (revisão/correção), dentro da pasta da run (`<slug>/run.json`). */
+export const RUN_STATUS_FILE = "run.json";

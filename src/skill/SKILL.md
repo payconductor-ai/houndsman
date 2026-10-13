@@ -35,6 +35,9 @@ Um argumento extra é o alvo da capability (ex.: `/houndsman hunt feature/minha-
 Escolha a capability pelo que o usuário quer, leia o documento correspondente em
 `.houndsman/core/skill/<capability>.md` e siga-o.
 
+> **Depois de revisar (`hunt`), valide na UI:** `bun run houndsman server --open` — revise os
+> achados e marque os que devem ser executados (`execute`) antes de rodar `fix`.
+
 ## Referências
 
 - `.houndsman/core/skill/OUTPUT-FORMAT.md` — schema do JSON de saída dos watchdogs.

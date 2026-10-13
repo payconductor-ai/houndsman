@@ -190,4 +190,5 @@ houndsman.config.ts
 └── doc-mappings.ts       # você
 ```
 
-Os artefatos de cada review ficam em `.houndsman/.runs/<branch-slug>/` (auto-ignorados).
+Os artefatos de cada review ficam em `.houndsman/.runs/<branch-slug>/` (auto-ignorados) —
+incluindo `state.json` (triagem) e `run.json` (status da run, exibido na UI).

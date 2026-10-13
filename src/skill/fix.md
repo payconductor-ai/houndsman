@@ -11,11 +11,14 @@ Invocação: `/houndsman fix`. Não revisa nem altera regras; consome o que o `h
 **Quando usar:**
 
 - Depois de `/houndsman` (ou `houndsman --finalize`), para corrigir os achados.
-- O usuário marcou achados como `execute` (na UI local ou via `findings set`).
+- O usuário marcou achados como `execute` na UI (`bun run houndsman server --open`) ou via
+  `findings set <id> --decision execute`.
 - "Corrija os findings", "aplica as correções", "resolve os bloqueantes".
 
 > **Pré-requisito:** existe `.houndsman/.runs/<branch-slug>/state.json` da run atual
 > (gerado no `--finalize`). Se não existir, a revisão não foi finalizada — rode o `hunt` antes.
+> A triagem (`execute`) é feita na UI (`bun run houndsman server --open`) ou via `findings set`,
+> e é o que alimenta a fila de correção.
 
 ---
 

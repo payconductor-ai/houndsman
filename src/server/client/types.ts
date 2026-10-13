@@ -9,6 +9,9 @@ export type Severity = "blocking" | "attention" | "suggestion" | "nit";
 export type Decision = "pending" | "execute" | "ignore";
 export type ExecState = "pending" | "in_progress" | "done" | "stale";
 
+/** Estados de execução de uma run (espelham `core/run-status.ts`). */
+export type RunStatus = "reviewing" | "review_done" | "fixing" | "fix_done";
+
 export type Finding = {
 	id: string;
 	rule: string;
@@ -38,6 +41,7 @@ export type RunSummary = {
 	slug: string;
 	branch: string;
 	updatedAt?: string;
+	status?: RunStatus | null;
 	summary: Summary;
 };
 

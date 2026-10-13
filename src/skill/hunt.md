@@ -21,7 +21,7 @@ mudanças antes de push.
 | 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
 | 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog) |
-| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + `state.json` |
+| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + `state.json` + `run.json` |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 > Depois do passo 3, a correção dos achados é a capability **`fix`** — ver `fix.md`.
@@ -202,9 +202,11 @@ git diff --name-status (base...head)
         ↓
 [2] N subagentes em paralelo   ──►  findings/<watchdog>.json
         ↓
-[3] houndsman --finalize       ──►  review.md + state.json
+[3] houndsman --finalize       ──►  review.md + state.json + run.json (review_done)
         ↓
-[4] fix / triagem (UI ou agente) ──►  state.json (decision/execState) + correções
+[4] server (UI)                ──►  validar a revisão + marcar decision: execute
+        ↓
+[5] fix                        ──►  correções + state.json/run.json (fix_done)
 ```
 
 ---

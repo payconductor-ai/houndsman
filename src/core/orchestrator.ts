@@ -50,6 +50,7 @@ import {
 	sanitizeBranch,
 	type WatchdogReport,
 } from "./report-builder";
+import { writeRunStatus } from "./run-status";
 import type { WatchdogMeta } from "./types";
 import { findWatchdog } from "./watchdog-registry";
 
@@ -388,6 +389,9 @@ export async function prepare(
 ): Promise<void> {
 	prepareDirs(dirs, opts.clean);
 
+	// Marca o run como "revisando" (reinicia o ciclo) — a UI mostra o status.
+	writeRunStatus(dirs.outDir, { branch, status: "reviewing", resetStartedAt: true });
+
 	// Um único diff para toda a execução (churn + patch) — antes: 1 spawn por arquivo.
 	const diff = collectDiff(opts.base, opts.head);
 	const classification = classifyRange(opts.base, opts.head, config, diff);
@@ -400,10 +404,12 @@ export async function prepare(
 
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
+		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
 		console.log(`Nenhuma alteração entre ${opts.base}...${opts.head}.`);
 		return;
 	}
 	if (activeIds.length === 0) {
+		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
 		console.log("Nenhum arquivo revisável (tudo excluído, deletado ou irrelevante).");
 		return;
 	}
@@ -555,6 +561,7 @@ export function finalize(
 	console.log(
 		`Triagem: ${relFromRoot(store.filePath)} — ${Object.keys(state.findings).length} finding(s).`,
 	);
+	writeRunStatus(dirs.outDir, { branch, status: "review_done" });
 
 	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
 	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;

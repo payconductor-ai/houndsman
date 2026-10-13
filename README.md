@@ -87,7 +87,8 @@ Não precisa rodar nenhum script à mão.
    ├─ Passo 1  classifica o diff → briefs por watchdog
    ├─ Passo 2  N subagentes revisam em paralelo
    ├─ Passo 3  consolida em review.md + state.json
-   └─ Passo 4  fix / triagem (UI local ou agente)
+   ├─ Passo 4  valida na UI (server) e marca os achados a executar
+   └─ Passo 5  fix corrige o grupo atual → run.json (fix_done)
 ```
 
 O skill tem **3 capabilities**, todas em `/houndsman`:
@@ -98,6 +99,7 @@ O skill tem **3 capabilities**, todas em `/houndsman`:
 
 - Revisão normal: `/houndsman` ou `/houndsman hunt` (a branch é detectada; base default `main`).
 - Revisar outra branch: `/houndsman hunt feature/minha-branch`.
+- Validar e triar na UI: `houndsman server --open` — marque os achados a executar (`execute`).
 - Manual (sem skill): `houndsman context` → `houndsman --base main` → *(subagentes)* →
   `houndsman --finalize`.
 - CI: `houndsman --finalize --fail-on-blocking` (exit 1 se houver bloqueantes).
