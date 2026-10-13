@@ -22,15 +22,22 @@ import {
 	resolveJevConcurrency,
 	resolveMaxFilesPerBrief,
 } from "./config";
-import { collectDiff, type DiffSource } from "./diff-source";
+import { churnToRecord, collectDiff, type DiffSource } from "./diff-source";
 import { discoverDocs } from "./doc-discoverer";
 import {
 	type BudgetSelection,
 	type ClassificationResult,
+	classifyEntries,
 	classifyRange,
 	selectByBudget,
 } from "./file-classifier";
-import { buildStateFromFindings, FindingsStateStore, fileReader } from "./findings-state";
+import {
+	buildStateFromFindings,
+	type FindingsStateFile,
+	FindingsStateStore,
+	fileReader,
+} from "./findings-state";
+import { collectDiffSince, diffEntries, isAncestor, resolveSha } from "./git-revision";
 import {
 	type JevCandidate,
 	type JevCandidatesFile,
@@ -44,6 +51,7 @@ import {
 	type ContextSummary,
 	type DomainReport,
 	dedupeFindings,
+	type MergedFinding,
 	parseWatchdogReport,
 	renderDomainReport,
 	renderReport,
@@ -51,7 +59,7 @@ import {
 	type WatchdogReport,
 } from "./report-builder";
 import { writeRunStatus } from "./run-status";
-import type { WatchdogMeta } from "./types";
+import { severityRank, type WatchdogMeta } from "./types";
 import { findWatchdog } from "./watchdog-registry";
 
 export type ReviewOptions = {
@@ -63,6 +71,8 @@ export type ReviewOptions = {
 	failOnBlocking: boolean;
 	clean: boolean;
 	noJev: boolean;
+	/** Força review completo (ignora o modo incremental). */
+	full: boolean;
 };
 
 /** Valores default das opções (o CLI sobrepõe com as flags). */
@@ -75,6 +85,7 @@ export function defaultOptions(artifactDir: string = ARTIFACT_DIR): ReviewOption
 		failOnBlocking: false,
 		clean: false,
 		noJev: false,
+		full: false,
 	};
 }
 
@@ -108,6 +119,142 @@ function prepareDirs(dirs: Paths, clean: boolean): void {
 		rmSync(dirs.findingsDir, { recursive: true, force: true });
 		mkdirSync(dirs.findingsDir, { recursive: true });
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Escopo da revisão (completo vs incremental)
+// ---------------------------------------------------------------------------
+
+/** Classificação enriquecida gravada no `classification.json` (modo + revisão + carry-over). */
+type RunClassification = ClassificationResult & {
+	/** Commit revisado (head do diff). */
+	headSha?: string;
+	/** Modo do prepare: completo ou incremental (delta desde a última revisão). */
+	mode: "full" | "incremental";
+	/** Commit da última revisão (só no incremental). */
+	reviewedFrom?: string;
+	/** Findings preservados do review anterior (arquivos inalterados). */
+	carryover?: MergedFinding[];
+};
+
+/** SHA curto para logs (7 chars, como o git). */
+function shortSha(sha: string): string {
+	return sha.slice(0, 7);
+}
+
+/** Chave de dedupe de finding: `(file, line, rule)` — igual ao `dedupeFindings`. */
+function findingKey(finding: Pick<MergedFinding, "file" | "line" | "rule">): string {
+	return `${finding.file}|${finding.line ?? ""}|${finding.rule}`;
+}
+
+/** Aviso no topo do `review.md` quando a revisão foi incremental (senão vazio). */
+function incrementalNote(classification: RunClassification): string {
+	if (classification.mode !== "incremental" || !classification.reviewedFrom) return "";
+	const carried = classification.carryover?.length ?? 0;
+	return (
+		`> **Revisão incremental** — desde \`${shortSha(classification.reviewedFrom)}\`; ` +
+		`${Object.keys(classification.files).length} arquivo(s) alterado(s), ` +
+		`${carried} finding(s) carregado(s) do review anterior.\n\n`
+	);
+}
+
+/**
+ * Findings do review anterior em arquivos inalterados — carregados sem
+ * re-revisão (carry-over). Preserva o `foundAtSha` para o diff focado do verify.
+ */
+function buildCarryover(
+	previous: FindingsStateFile | null,
+	changedPaths: Set<string>,
+): MergedFinding[] {
+	if (!previous) return [];
+	return Object.values(previous.findings)
+		.filter((finding) => finding.present && !changedPaths.has(finding.file))
+		.map((finding) => ({
+			id: finding.id,
+			rule: finding.rule,
+			severity: finding.severity,
+			file: finding.file,
+			line: finding.line ?? undefined,
+			message: finding.message,
+			action: finding.action,
+			evidence: finding.evidence,
+			foundAtSha: finding.foundAtSha,
+			watchdogs: [...finding.watchdogIds],
+		}));
+}
+
+/** Une os findings re-reportados com os carry-over (preserva ids do estado anterior). */
+function mergeCarryover(
+	merged: MergedFinding[],
+	carryover: readonly MergedFinding[],
+): MergedFinding[] {
+	const byKey = new Map(merged.map((finding) => [findingKey(finding), finding]));
+	for (const carried of carryover) {
+		const existing = byKey.get(findingKey(carried));
+		if (existing) {
+			for (const watchdog of carried.watchdogs) {
+				if (!existing.watchdogs.includes(watchdog))
+					existing.watchdogs.push(watchdog);
+			}
+			continue;
+		}
+		byKey.set(findingKey(carried), carried);
+		merged.push(carried);
+	}
+	merged.sort((a, b) => {
+		const bySeverity = severityRank(a.severity) - severityRank(b.severity);
+		if (bySeverity !== 0) return bySeverity;
+		if (a.file !== b.file) return a.file.localeCompare(b.file);
+		return (a.line ?? 0) - (b.line ?? 0);
+	});
+	return merged;
+}
+
+/**
+ * Decide entre review completo e incremental. Incremental só quando há um
+ * `reviewed.headSha` anterior, o `HEAD` atual o sucede (sem rebase) e não veio
+ * `--full`/`--clean`. Reconstrói só o delta `prevSha..headSha` e carrega os
+ * findings de arquivos inalterados do estado anterior.
+ */
+function resolveReviewScope(
+	opts: ReviewOptions,
+	previous: FindingsStateFile | null,
+	headSha: string,
+	config: HoundsmanConfig,
+): { classification: RunClassification; diff: DiffSource; reviewedFrom?: string } {
+	const prevSha = previous?.reviewed?.headSha;
+	if (
+		opts.full ||
+		opts.clean ||
+		!prevSha ||
+		prevSha === headSha ||
+		!isAncestor(prevSha, headSha)
+	) {
+		const diff = collectDiff(opts.base, opts.head);
+		return {
+			diff,
+			classification: {
+				...classifyRange(opts.base, opts.head, config, diff),
+				headSha,
+				mode: "full",
+			},
+		};
+	}
+
+	const range = `${prevSha}..${headSha}`;
+	const diff = collectDiffSince(prevSha, headSha);
+	const entries = diffEntries(range);
+	const changedPaths = new Set(entries.map((entry) => entry.path));
+	const classification: RunClassification = {
+		...classifyEntries(entries, config, churnToRecord(diff.churn)),
+		base: prevSha,
+		head: opts.head,
+		headSha,
+		mode: "incremental",
+		reviewedFrom: prevSha,
+		carryover: buildCarryover(previous, changedPaths),
+	};
+	return { classification, diff, reviewedFrom: prevSha };
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +305,7 @@ function writeManifest(
 	outDir: string,
 	opts: ReviewOptions,
 	branch: string,
-	classification: ClassificationResult,
+	classification: RunClassification,
 	activeIds: string[],
 	pending: string[],
 	jev: JevCandidatesFile,
@@ -185,10 +332,19 @@ function writeManifest(
 		slug: sanitizeBranch(branch),
 		base: opts.base,
 		head: opts.head,
+		headSha: classification.headSha,
 		generatedAt: new Date().toISOString(),
 		outputFormat: OUTPUT_FORMAT_PATH,
 		budget: { maxFilesPerBrief, filesOverBudget },
 		churn: churnTotals(classification),
+		incremental:
+			classification.mode === "incremental"
+				? {
+						from: classification.reviewedFrom,
+						changedFiles: Object.keys(classification.files).length,
+						carried: classification.carryover?.length ?? 0,
+					}
+				: undefined,
 		watchdogs,
 		context: contextManifest(opts, branch),
 		jev: jev.available
@@ -392,9 +548,10 @@ export async function prepare(
 	// Marca o run como "revisando" (reinicia o ciclo) — a UI mostra o status.
 	writeRunStatus(dirs.outDir, { branch, status: "reviewing", resetStartedAt: true });
 
-	// Um único diff para toda a execução (churn + patch) — antes: 1 spawn por arquivo.
-	const diff = collectDiff(opts.base, opts.head);
-	const classification = classifyRange(opts.base, opts.head, config, diff);
+	// Marca o commit revisado e decide entre review completo e incremental.
+	const headSha = resolveSha(opts.head);
+	const previous = FindingsStateStore.at(opts.dir, branch).read();
+	const { classification, diff } = resolveReviewScope(opts, previous, headSha, config);
 	writeFileSync(
 		join(dirs.outDir, "classification.json"),
 		`${JSON.stringify(classification, null, 2)}\n`,
@@ -405,13 +562,22 @@ export async function prepare(
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
 		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
-		console.log(`Nenhuma alteração entre ${opts.base}...${opts.head}.`);
+		console.log(
+			classification.mode === "incremental"
+				? `Nenhuma alteração desde a última revisão (${shortSha(classification.reviewedFrom ?? "")}).`
+				: `Nenhuma alteração entre ${opts.base}...${opts.head}.`,
+		);
 		return;
 	}
 	if (activeIds.length === 0) {
 		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
 		console.log("Nenhum arquivo revisável (tudo excluído, deletado ou irrelevante).");
 		return;
+	}
+	if (classification.mode === "incremental") {
+		console.log(
+			`Modo incremental: ${Object.keys(classification.files).length} arquivo(s) alterado(s) desde ${shortSha(classification.reviewedFrom ?? "")}; ${classification.carryover?.length ?? 0} finding(s) carregado(s) do review anterior.`,
+		);
 	}
 
 	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
@@ -450,7 +616,7 @@ export async function prepare(
 // ---------------------------------------------------------------------------
 
 /** Lê o classification.json gravado pelo passo de preparação (lança se ausente). */
-function readClassification(classificationPath: string): ClassificationResult {
+function readClassification(classificationPath: string): RunClassification {
 	if (!existsSync(classificationPath)) {
 		throw new Error(
 			`Não encontrei ${relFromRoot(classificationPath)}. Rode \`bun run houndsman\` (preparar) primeiro.`,
@@ -458,7 +624,7 @@ function readClassification(classificationPath: string): ClassificationResult {
 	}
 	const parsed = JSON.parse(
 		readFileSync(classificationPath, "utf8"),
-	) as ClassificationResult;
+	) as RunClassification;
 	return parsed;
 }
 
@@ -546,16 +712,32 @@ export function finalize(
 		);
 	}
 
-	const merged = dedupeFindings(reports);
+	const now = new Date().toISOString();
+	// Findings re-reportados neste ciclo + carry-over (arquivos inalterados).
+	const merged = mergeCarryover(
+		dedupeFindings(reports),
+		classification.carryover ?? [],
+	);
+	if (classification.mode === "incremental") {
+		console.log(
+			`Carry-over: ${classification.carryover?.length ?? 0} finding(s) preservado(s) de ${shortSha(classification.reviewedFrom ?? "")}.`,
+		);
+	}
 
 	// Estado de triagem: preserva o que já existia (casando por fingerprint) e
 	// anexa o `id` de cada finding aos itens do relatório. A linha é cache —
-	// recalculada por `houndsman findings sync` após edições.
+	// recalculada por `houndsman findings sync` após edições. O commit revisado
+	// (`reviewed.headSha`) habilita o review incremental e o diff focado do verify.
 	const store = FindingsStateStore.at(opts.dir, branch);
 	const state = buildStateFromFindings(merged, {
 		branch,
 		readFile: fileReader(process.cwd()),
 		previous: store.read(),
+		now,
+		headSha: classification.headSha,
+		reviewed: classification.headSha
+			? { headSha: classification.headSha, at: now }
+			: undefined,
 	});
 	store.write(state);
 	console.log(
@@ -584,7 +766,7 @@ export function finalize(
 		domains,
 	);
 	const reportPath = join(dirs.outDir, "review.md");
-	writeFileSync(reportPath, `${markdown}\n`);
+	writeFileSync(reportPath, `${incrementalNote(classification)}${markdown}\n`);
 
 	const blockers = merged.filter((f) => f.severity === "blocking").length;
 	const attention = merged.filter((f) => f.severity === "attention").length;

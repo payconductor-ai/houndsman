@@ -14,6 +14,7 @@ const BOOLEAN_FLAGS = new Set([
 	"--fail-on-blocking",
 	"--clean",
 	"--no-jev",
+	"--full",
 ]);
 
 function applyValue(opts: ReviewOptions, flag: string, value: string | undefined): void {
@@ -29,6 +30,7 @@ function applyBoolean(opts: ReviewOptions, flag: string): void {
 	else if (flag === "--fail-on-blocking") opts.failOnBlocking = true;
 	else if (flag === "--clean") opts.clean = true;
 	else if (flag === "--no-jev") opts.noJev = true;
+	else if (flag === "--full") opts.full = true;
 }
 
 /** Converte argv (sem o subcomando) nas opções de prepare/finalize. */

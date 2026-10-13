@@ -267,8 +267,59 @@ describe("FindingsStateStore", () => {
 
 	test("emptyState cria um estado vazio válido", () => {
 		const state = emptyState("feature/x");
-		expect(state.version).toBe(1);
+		expect(state.version).toBe(2);
 		expect(state.slug).toBe("feature-x");
 		expect(state.findings).toEqual({});
+	});
+});
+
+describe("rastreio de revisão (incremental)", () => {
+	test("carimba reviewed e foundAtSha nos findings do ciclo", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const state = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "r", line: 2 })],
+				{
+					branch: "main",
+					readFile: fileReader(project.cwd),
+					headSha: "abc1234",
+					reviewed: { headSha: "abc1234", at: "2026-01-01T00:00:00.000Z" },
+				},
+			);
+			expect(state.reviewed?.headSha).toBe("abc1234");
+			const only = Object.values(state.findings)[0];
+			expect(only.foundAtSha).toBe("abc1234");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("carry-over preserva o foundAtSha original", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const state = buildStateFromFindings(
+				[
+					// Novo/re-reportado: recebe o head atual.
+					merged({ file: "src/f.ts", rule: "r", line: 2 }),
+					// Carry-over: carrega o `foundAtSha` de quando foi observado.
+					{
+						...merged({ file: "src/f.ts", rule: "r2", line: 5 }),
+						foundAtSha: "old0001",
+					},
+				],
+				{
+					branch: "main",
+					readFile: fileReader(project.cwd),
+					headSha: "new0002",
+					reviewed: { headSha: "new0002", at: "2026-01-02T00:00:00.000Z" },
+				},
+			);
+			const byRule = (rule: string): string | undefined =>
+				Object.values(state.findings).find((f) => f.rule === rule)?.foundAtSha;
+			expect(byRule("r")).toBe("new0002");
+			expect(byRule("r2")).toBe("old0001");
+		} finally {
+			project.cleanup();
+		}
 	});
 });

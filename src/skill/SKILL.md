@@ -1,7 +1,7 @@
 ---
 name: houndsman
-description: 'Revisa Pull Requests com watchdogs especializados por domínio de negócio e mantém essas regras alinhadas ao projeto. Use para revisar/code review de PR, atualizar as regras de revisão dos watchdogs e corrigir os findings da revisão. Capabilities: `hunt` (revisar a PR), `train` (atualizar regras), `fix` (corrigir achados).'
-argument-hint: 'Capability: hunt | train | fix (default: hunt)'
+description: 'Revisa Pull Requests com watchdogs especializados por domínio de negócio e mantém essas regras alinhadas ao projeto. Use para revisar/code review de PR, atualizar as regras de revisão dos watchdogs e corrigir/verificar os findings da revisão. Capabilities: `hunt` (revisar a PR), `train` (atualizar regras), `fix` (corrigir achados), `verify` (violações resolvidas?).'
+argument-hint: 'Capability: hunt | train | fix | verify (default: hunt)'
 ---
 
 # houndsman — {{projectName}}
@@ -21,6 +21,7 @@ especialista por domínio · **finding** = um achado da revisão · **Jev** = pr
 | **`hunt`** | Revisar uma Pull Request e produzir o relatório de achados. | `.houndsman/core/skill/hunt.md` |
 | **`train`** | Manter as regras dos watchdogs alinhadas ao que o projeto aplica. | `.houndsman/core/skill/train.md` |
 | **`fix`** | Corrigir os achados de uma revisão já finalizada. | `.houndsman/core/skill/fix.md` |
+| **`verify`** | Conferir se as violações foram resolvidas, sem re-revisar a PR. | `.houndsman/core/skill/verify.md` |
 
 ## Invocação
 
@@ -29,6 +30,7 @@ especialista por domínio · **finding** = um achado da revisão · **Jev** = pr
 /houndsman hunt         → revisar a Pull Request
 /houndsman train        → atualizar as regras dos watchdogs
 /houndsman fix          → corrigir os findings
+/houndsman verify       → conferir se as violações foram resolvidas
 ```
 
 Um argumento extra é o alvo da capability (ex.: `/houndsman hunt feature/minha-branch`).

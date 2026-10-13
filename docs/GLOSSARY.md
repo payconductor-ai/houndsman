@@ -20,8 +20,8 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **motor (engine)** | O pacote publicado (`@payconductor/houndsman`) — genérico e agnóstico ao projeto. | `src/core/`, `src/cli/` |
 | **camada do projeto** | Config + regras do consumidor, carregada em **runtime**. | `houndsman.config.ts` + `.houndsman/` |
 | **camada autocontida** | Propriedade da camada gerada: **não importa** o pacote em runtime (só tipos espelhados) — permite instalação global. | `.houndsman/core/types.ts` |
-| **skill** | O comando `/houndsman` — entrada única com 3 capabilities: `hunt` (revisão), `train` (regras) e `fix` (correção). | `src/skill/SKILL.md` |
-| **capability** | Uma das três lentes do skill: `hunt` (revisar PR), `train` (manter regras), `fix` (corrigir findings); selecionada por argumento (`/houndsman <capability>`). | `src/skill/<capability>.md` |
+| **skill** | O comando `/houndsman` — entrada única com 4 capabilities: `hunt` (revisão), `train` (regras), `fix` (correção) e `verify` (conferir resolução). | `src/skill/SKILL.md` |
+| **capability** | Uma das quatro lentes do skill: `hunt` (revisar PR), `train` (manter regras), `fix` (corrigir findings), `verify` (violações resolvidas?); selecionada por argumento (`/houndsman <capability>`). | `src/skill/<capability>.md` |
 | **drift** | Divergência entre config/regras e o código real. Detectada pelo `doctor`. | `src/core/registry-check.ts` |
 | **Jev** | Pré-análise **opcional** por LLM (seção 7). | `src/core/jev/` |
 
@@ -55,6 +55,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **`state.json`** | Estado de triagem dos findings da run (ids, decisão, execução, histórico) — ver seção 11. |
 | **`run.json`** | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + `startedAt`/`updatedAt` — exibido na UI; ver seção 11. |
+| **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 11. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
 | **`context-brief.md`** | Instruções para o subagente que resume o contexto. |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
@@ -191,6 +192,12 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **lote (`findings batch`)** | Grupo atual paginado + lista dos demais grupos — unidade de trabalho do `fix`. |
 | **escopo de correção** | Eixo de agrupamento do lote (`file`/`rule`/`watchdog`), escolhido automaticamente pela coesão da fila. |
 | **run status** | `reviewing` → `review_done` → `fixing` → `fix_done` (em `run.json`). Toda ação mutante faz um **ping** (`updatedAt`); a UI deriva *timeout* de `updatedAt` (display-only, não é status). |
+| **review incremental** | Prepare que revisa só o delta `reviewed.headSha..HEAD` (arquivos alterados) e carrega o resto (carry-over). |
+| **carry-over** | Findings de arquivos inalterados preservados sem re-revisão (id/`foundAtSha` mantidos). |
+| **`reviewed.headSha`** | Commit da última revisão (em `state.json`) — base do incremental e do diff focado do verify. |
+| **`foundAtSha`** | Commit em que o achado foi observado (por finding) — base do diff focado do verify. |
+| **verify / `findings verify`** | Confere se as violações foram resolvidas sem re-revisar: tier local (reancoragem) + Jev nos ambíguos. |
+| **tier local / tier Jev** | As duas camadas do verify: a local é grátis e determinística; a do Jev confirma só os casos ambíguos. |
 
 ---
 

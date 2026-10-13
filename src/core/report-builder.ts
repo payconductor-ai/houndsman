@@ -25,6 +25,11 @@ export type Finding = {
 	message: string;
 	action: string;
 	evidence?: string;
+	/**
+	 * Commit em que o achado foi observado (interno). Preenchido nos carry-over
+	 * do review incremental — preserva a referência para a verificação (verify).
+	 */
+	foundAtSha?: string;
 };
 
 export type WatchdogReport = {

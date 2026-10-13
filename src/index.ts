@@ -8,7 +8,7 @@
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
 export type { FindingsCommandResult } from "./core/commands/findings";
-export { runFindingsCommand } from "./core/commands/findings";
+export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export type {
 	HoundsmanBudgets,
 	HoundsmanConcurrency,

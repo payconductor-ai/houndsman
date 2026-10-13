@@ -67,6 +67,13 @@ export type FindingHistoryEntry = {
 	by?: string;
 };
 
+/** Marco da revisão que originou o estado: commit revisado + quando. */
+export type FindingsReviewed = {
+	/** SHA do commit revisado (head do diff no `--finalize`). */
+	headSha: string;
+	at: string;
+};
+
 /** Um finding triável, com o estado das duas dimensões. */
 export type FindingState = {
 	id: string;
@@ -80,6 +87,8 @@ export type FindingState = {
 	action: string;
 	evidence?: string;
 	anchor: FindingAnchor | null;
+	/** Commit em que o achado foi observado (base do diff focado do verify). */
+	foundAtSha?: string;
 	/** Ocorrências idênticas colapsadas neste fingerprint (>1 = grupo). */
 	count: number;
 	/** Ainda presente no último relatório consolidado. */
@@ -94,16 +103,18 @@ export type FindingState = {
 
 /** Conteúdo do `state.json`. */
 export type FindingsStateFile = {
-	version: 1;
+	version: 2;
 	branch: string;
 	slug: string;
 	updatedAt: string;
 	/** Ids na ordem de exibição (estável). */
 	order: string[];
+	/** Commit revisado — habilita o review incremental e o verify por diff. */
+	reviewed?: FindingsReviewed;
 	findings: Record<string, FindingState>;
 };
 
-export const FINDINGS_STATE_VERSION = 1;
+export const FINDINGS_STATE_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Caminhos
@@ -249,6 +260,10 @@ export type BuildStateOptions = {
 	branch: string;
 	readFile: FileReader;
 	previous?: FindingsStateFile | null;
+	/** Commit revisado — carimbado nos findings e no `reviewed` do estado. */
+	reviewed?: FindingsReviewed;
+	/** SHA usado para carimbar `foundAtSha` de findings novos/re-reportados. */
+	headSha?: string;
 	now?: string;
 };
 
@@ -320,6 +335,8 @@ export function buildStateFromFindings(
 			action: finding.action,
 			evidence: finding.evidence,
 			anchor,
+			// Carry-over preserva o `foundAtSha` original; novos/re-reportados usam o head atual.
+			foundAtSha: finding.foundAtSha ?? options.headSha ?? prev?.foundAtSha,
 			count: 1,
 			present: true,
 			decision: prev?.decision ?? "pending",
@@ -340,6 +357,7 @@ export function buildStateFromFindings(
 		slug: sanitizeBranch(options.branch),
 		updatedAt: now,
 		order: [],
+		reviewed: options.reviewed ?? previous?.reviewed,
 		findings: result,
 	};
 	reorder(state);

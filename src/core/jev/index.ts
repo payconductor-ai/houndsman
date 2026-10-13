@@ -10,3 +10,4 @@ export * from "./jev-client";
 export * from "./jev-detector";
 export * from "./jev-questions";
 export * from "./jev-types";
+export * from "./jev-verify";

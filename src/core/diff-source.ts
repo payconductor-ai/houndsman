@@ -23,7 +23,8 @@ export type CollectDiffOptions = {
 	maxPerFileChars?: number;
 };
 
-const DEFAULT_MAX_PER_FILE_CHARS = 8_000;
+/** Teto default de caracteres por arquivo no patch (compartilhado com o git-revision). */
+export const DEFAULT_MAX_PER_FILE_CHARS = 8_000;
 
 /** Executa `git` com `core.quotepath=false` (paths literais) e devolve o stdout. */
 function runGit(args: string[]): string {

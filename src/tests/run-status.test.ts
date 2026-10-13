@@ -36,7 +36,7 @@ function findingState(partial: Partial<FindingState>): FindingState {
 
 function stateOf(findings: FindingState[]): FindingsStateFile {
 	return {
-		version: 1,
+		version: 2,
 		branch: "feature/x",
 		slug: "feature-x",
 		updatedAt: "",

@@ -33,7 +33,7 @@ projeto **autocontida**), carregada em runtime.
 | `bun run lint` / `bun run format` | Biome |
 | `bun run build` | `bun build` → `dist/` (bundle único) |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
-| `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/...) |
+| `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `bun run houndsman -- server` | Sobe a UI local de triagem (Bun.serve + Preact) |
 | `bun publish --dry-run` | Confere o que vai no tarball |
 
@@ -53,14 +53,18 @@ src/
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
-│   ├── orchestrator.ts      # prepare/finalize (+ state.json no finalize)
+│   ├── orchestrator.ts      # prepare (full/incremental) + finalize (+ state.json)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
+│   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff por intervalo
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
-│   ├── findings-state.ts    # estado de triagem (state.json) + store atômico
+│   ├── findings-state.ts    # estado de triagem (state.json + reviewed.headSha)
+│   ├── verify.ts            # verificação de findings (tier local + Jev)
+│   ├── run-status.ts        # run.json (reviewing/review_done/fixing/fix_done)
+│   ├── fix-batch.ts         # agrupamento/paginação do lote (findings batch)
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
 │   ├── commands/            # context · review · watchdog · findings · setup · test
@@ -101,6 +105,10 @@ src/
   recalculada por `syncState`. Não volte a chavear por `(file, line)`.
 - O estado de triagem (`state.json`) é **local** e vive na pasta da run (`.runs/<slug>/`) —
   já coberto pelo `.gitignore` gerado. O `server` só vincula em `127.0.0.1` (sem auth).
+- O **commit revisado** é a base do incremental e do verify: `state.json` → `reviewed.headSha`
+  (run) e `foundAtSha` (por finding). O prepare incremental revisa só `reviewed.headSha..HEAD`
+  e carrega o resto; o `findings verify` compara contra esse commit fixado — nunca contra um
+  `HEAD` arbitrário.
 
 ## Convenções
 

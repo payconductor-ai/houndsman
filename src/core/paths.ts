@@ -34,3 +34,6 @@ export const STATE_FILE = "state.json";
 
 /** Status da run (revisão/correção), dentro da pasta da run (`<slug>/run.json`). */
 export const RUN_STATUS_FILE = "run.json";
+
+/** Relatório da verificação de findings, dentro da pasta da run (`<slug>/verify.md`). */
+export const VERIFY_FILE = "verify.md";

@@ -109,6 +109,20 @@ as regras atômicas dos watchdogs. Respostas acima do limiar viram **candidatos*
 - **Opcional**: sem chave / erro / timeout → `available:false`; a revisão segue idêntica.
 - Desativar: `houndsman --no-jev`.
 
+### Review incremental (da 2ª revisão em diante)
+
+Cada `--finalize` grava o **commit revisado** (`reviewed.headSha` no `state.json`). No prepare
+seguinte, se o `HEAD` descende desse commit (sem rebase), o motor revisa **só o delta** — os
+arquivos alterados desde a última revisão — e **carrega** os findings dos arquivos inalterados
+(carry-over), sem re-revisá-los. O `manifest.json` traz o bloco `incremental` (`from`,
+`changedFiles`, `carried`) e o `review.md` abre com um aviso.
+
+- Sem mudanças desde a última revisão → **no-op** (nada a revisar; o estado é preservado).
+- Rebase/force-push (histórico reescrito) → cai automaticamente no **review completo**.
+- Forçar completo: `houndsman --full` (ou `--clean`, que também descarta a triagem anterior).
+
+> Custo: o LLM só é gasto nos arquivos que mudaram desde a última revisão — não na PR inteira.
+
 ---
 
 ## Passo 2 — Revisar (skill despacha os subagentes)
@@ -226,9 +240,12 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | Comando | Função |
 |---|---|
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
-| `houndsman` | Passo 1 — preparar (briefs + manifesto) |
+| `houndsman` | Passo 1 — preparar (briefs + manifesto; incremental quando possível) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
+
+Flags do review: `--base` · `--head` · `--branch` · `--dir` · `--clean` · `--full` (força
+completo) · `--no-jev` · `--fail-on-blocking` (com `--finalize`).
 
 ---
 

@@ -84,18 +84,20 @@ Não precisa rodar nenhum script à mão.
 ```
 /houndsman hunt
    ├─ Passo 0  contexto da PR (gh, opcional)
-   ├─ Passo 1  classifica o diff → briefs por watchdog
+   ├─ Passo 1  classifica o diff → briefs por watchdog (incremental quando possível)
    ├─ Passo 2  N subagentes revisam em paralelo
    ├─ Passo 3  consolida em review.md + state.json
    ├─ Passo 4  valida na UI (server) e marca os achados a executar
-   └─ Passo 5  fix corrige o grupo atual → run.json (fix_done)
+   ├─ Passo 5  fix corrige o grupo atual → run.json (fix_done)
+   └─ Passo 6  verify confere o que resolveu, sem re-revisar
 ```
 
-O skill tem **3 capabilities**, todas em `/houndsman`:
+O skill tem **4 capabilities**, todas em `/houndsman`:
 
 - **`hunt`** — revisa a PR (default: `/houndsman` = `/houndsman hunt`).
 - **`train`** — mantém/atualiza as regras dos watchdogs.
 - **`fix`** — corrige os findings marcados (`/houndsman fix`).
+- **`verify`** — confere se as violações foram resolvidas (`/houndsman verify`), sem re-revisar.
 
 - Revisão normal: `/houndsman` ou `/houndsman hunt` (a branch é detectada; base default `main`).
 - Revisar outra branch: `/houndsman hunt feature/minha-branch`.
@@ -126,7 +128,12 @@ bun run houndsman findings batch --json     # grupo atual (agrupamento automáti
 # ... o agente corrige apenas esse grupo ...
 bun run houndsman findings sync             # reancora por conteúdo
 bun run houndsman findings done <id>
+bun run houndsman findings verify           # confere o que resolveu (barato, sem re-revisar)
 ```
+
+> A partir da 2ª revisão o `hunt` é **incremental**: revisa só os arquivos que mudaram desde
+> o último `--finalize` e **carrega** os findings dos arquivos inalterados. `--full` força
+> o review completo.
 
 > A identidade do finding é o **conteúdo** (fingerprint), não a linha: itens deslocados
 > pelo fix não se perdem. O estado é local e mora em `.runs/<slug>/state.json` (gitignored).

@@ -9,7 +9,13 @@
  * `findings/*.json` + `classification.json` (não exige `--finalize`).
  */
 
-import { type HoundsmanConfig, resolveArtifactDir } from "../config";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+	type HoundsmanConfig,
+	resolveArtifactDir,
+	resolveJevConcurrency,
+} from "../config";
 import {
 	applyFindingUpdate,
 	buildStateFromRunDir,
@@ -30,10 +36,21 @@ import {
 	syncState,
 } from "../findings-state";
 import { buildFixBatch, type FixBatchResult } from "../fix-batch";
-import { relFromRoot } from "../paths";
+import { JevCandidatesStore, JevClient, JevVerifier } from "../jev";
+import { relFromRoot, VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
 import { pingFindingsStatus } from "../run-status";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "../types";
+import {
+	applyJev,
+	applyResolutions,
+	selectVerifiable,
+	summarizeVerify,
+	type VerifyEntry,
+	type VerifyStatus,
+	type VerifySummary,
+	verifyLocal,
+} from "../verify";
 
 export type FindingsCommandResult = {
 	output: string;
@@ -455,4 +472,147 @@ function requireIds(parsed: ParsedArgs, sub: string): string[] {
 		throw new Error(`Informe ao menos um id: houndsman findings ${sub} <id...>`);
 	}
 	return parsed.positionals;
+}
+
+// ---------------------------------------------------------------------------
+// verify — as violações foram resolvidas? (sem re-revisar a PR)
+// ---------------------------------------------------------------------------
+
+/** Rótulo curto de cada status de verificação. */
+const VERIFY_LABEL: Record<VerifyStatus, string> = {
+	resolved: "✅ resolvido",
+	persisting: "❌ persiste",
+	uncertain: "⚠️ incerto",
+	"file-missing": "🗑️ arquivo ausente",
+};
+
+/** Render da verificação: contagem por status + uma linha por finding. */
+function renderVerify(
+	state: FindingsStateFile,
+	entries: VerifyEntry[],
+	summary: VerifySummary,
+	meta: { jevChecked: number; jevReason?: string },
+): string {
+	if (entries.length === 0) return "Nenhum finding para verificar.";
+	const lines = [
+		`# Verificação — ${state.branch} (${entries.length})`,
+		"",
+		`Resolvidos: ${summary.resolved} · Persistem: ${summary.persisting} · Incertos: ${summary.uncertain} · Arquivo ausente: ${summary["file-missing"]}`,
+	];
+	if (meta.jevChecked > 0) lines.push(`Confirmados por Jev: ${meta.jevChecked}.`);
+	else if (meta.jevReason) lines.push(`Jev: pulado (${meta.jevReason}).`);
+	lines.push("");
+	for (const entry of entries) {
+		const location = entry.line ? `${entry.file}:${entry.line}` : entry.file;
+		const via =
+			entry.basis === "jev" ? ` · Jev ${(entry.confidence ?? 0).toFixed(2)}` : "";
+		lines.push(
+			`- \`${entry.id}\` ${VERIFY_LABEL[entry.status]} — **${entry.severity}** \`${location}\` — ${entry.rule}${via}`,
+			`  ${entry.message}`,
+		);
+		if (entry.detail) lines.push(`  _${entry.detail}_`);
+	}
+	return lines.join("\n");
+}
+
+/**
+ * Subcomando `findings verify` — checa se as violações foram resolvidas, sem
+ * re-revisar a PR. Tier local (grátis) + confirmação Jev dos casos ambíguos
+ * (fail-open). `--apply` persiste os `resolved` como `done`.
+ */
+export async function runVerifyCommand(
+	config: HoundsmanConfig,
+	args: string[],
+): Promise<FindingsCommandResult> {
+	const parsed = parseArgs(args);
+	try {
+		return await executeVerify(config, parsed);
+	} catch (error) {
+		return {
+			output: error instanceof Error ? error.message : String(error),
+			exitCode: 1,
+		};
+	}
+}
+
+async function executeVerify(
+	config: HoundsmanConfig,
+	parsed: ParsedArgs,
+): Promise<FindingsCommandResult> {
+	const { dir, branch } = resolveDir(config, parsed);
+	const store = FindingsStateStore.at(dir, branch);
+	const state = loadState(config, parsed);
+
+	const findings = selectVerifiable(state, filterFrom(parsed));
+	const entries = verifyLocal(findings, fileReader(process.cwd()));
+
+	// Tier 1 — Jev só nos ambíguos (fail-open: sem chave/erro mantém o provisório).
+	let jevChecked = 0;
+	let jevReason: string | undefined;
+	const ambiguous = entries.filter((entry) => entry.ambiguous);
+	if (ambiguous.length > 0) {
+		const verifier = new JevVerifier(new JevClient());
+		if (parsed.bools.has("--no-jev")) {
+			jevReason = "desativado (--no-jev)";
+		} else if (!verifier.isConfigured()) {
+			jevReason = "TYPESAFE_API_KEY não configurada";
+		} else {
+			const byId = new Map(findings.map((finding) => [finding.id, finding]));
+			const outcome = await verifier.verify(
+				ambiguous.map((entry) => ({
+					id: entry.id,
+					file: entry.file,
+					rule: entry.rule,
+					foundAtSha: byId.get(entry.id)?.foundAtSha,
+				})),
+				{
+					headSha: state.reviewed?.headSha,
+					concurrency: resolveJevConcurrency(config),
+				},
+			);
+			applyJev(entries, outcome.confidence, JevCandidatesStore.THRESHOLD);
+			jevChecked = outcome.checked;
+			jevReason = outcome.reason;
+		}
+	}
+
+	const summary = summarizeVerify(entries);
+	const reportPath = join(runDir(dir, branch), VERIFY_FILE);
+	writeFileSync(
+		reportPath,
+		`${renderVerify(state, entries, summary, { jevChecked, jevReason })}\n`,
+	);
+
+	let applied: string[] = [];
+	if (parsed.bools.has("--apply")) {
+		store.update((current) => {
+			applied = applyResolutions(current, entries);
+		});
+		pingStatus(config, parsed);
+	}
+
+	const output = parsed.bools.has("--json")
+		? JSON.stringify(
+				{ branch, summary, jevChecked, jevReason, applied, entries },
+				null,
+				2,
+			)
+		: [
+				renderVerify(state, entries, summary, { jevChecked, jevReason }),
+				"",
+				`Relatório: ${relFromRoot(reportPath)}`,
+				parsed.bools.has("--apply")
+					? `Aplicados (done): ${applied.length > 0 ? applied.join(", ") : "—"}.`
+					: "",
+			]
+				.filter(Boolean)
+				.join("\n");
+
+	const failOnPersisting =
+		parsed.bools.has("--fail-on-persisting") &&
+		entries.some(
+			(entry) => entry.status === "persisting" && entry.severity === "blocking",
+		);
+
+	return { output, exitCode: failOnPersisting ? 1 : 0 };
 }

@@ -110,8 +110,14 @@ outro modo → `stale` (revisar).
 
 ### 5. Confirmar ou devolver
 
+Antes de fechar, confirme com o `verify` (barato): ele diz o que **resolveu** (`resolved`), o que
+**persiste** e o que ficou **incerto** — sem re-revisar a PR. Com `--apply`, os `resolved` viram
+`done` automaticamente.
+
 ```bash
-bun run houndsman findings done <id...>          # corrigidos
+bun run houndsman findings verify            # relatório (não altera o estado)
+bun run houndsman findings verify --apply     # marca os resolvidos como done
+bun run houndsman findings done <id...>              # corrigidos (manual)
 bun run houndsman findings set <id> --decision pending --comment "<motivo / falta>"  # não corrigidos
 ```
 
@@ -170,6 +176,8 @@ Arquivo: <file>
 
 - `bun run houndsman findings summary` → os corrigidos saíram de `execute`/`in_progress`.
 - `bun run houndsman findings sync` → sem `stale` inesperado.
+- `bun run houndsman findings verify` → o que **resolveu** / **persiste** / ficou **incerto**
+  (sem re-revisar). Use `--apply` para marcar os `resolved` como `done`.
 - Rode o build/testes do **projeto consumidor** (não o houndsman) depois das correções.
 - Se a mudança for grande, reexecute o `hunt` para uma segunda passada:
 
@@ -195,3 +203,4 @@ Arquivo: <file>
 - ❌ Reescrever o arquivo inteiro — correção mínima e localizada.
 - ❌ Inventar mudança de produto/arquitetura para fechar um achado ambíguo — pergunte.
 - ❌ Marcar `done` sem ter aplicado a correção (o `sync` reancora; o achado volta).
+- ❌ Reexecutar o `hunt` inteiro só para conferir o fix — use `findings verify`.

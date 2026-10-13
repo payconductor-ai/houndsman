@@ -11,7 +11,7 @@
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
- *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/...)
+ *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/...)
  *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -20,11 +20,11 @@
  *   watchdog <id>        Contexto de um watchdog (`--rules`, `--json`)
  *
  * Flags: `--base <b>` · `--head <ref>` · `--branch <b>` · `--dir <d>` ·
- *   `--config <path>` · `--clean` · `--no-jev` · `--fail-on-blocking`.
+ *   `--config <path>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking`.
  */
 
 import { runContextCommand } from "../core/commands/context";
-import { runFindingsCommand } from "../core/commands/findings";
+import { runFindingsCommand, runVerifyCommand } from "../core/commands/findings";
 import { parseReviewArgs } from "../core/commands/review";
 import { runSetupCommand } from "../core/commands/setup";
 import { runLibTests } from "../core/commands/test";
@@ -44,7 +44,7 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
-  findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · path)
+  findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · path)
   server              Sobe a UI local de triagem (--port, --host, --open)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -59,6 +59,7 @@ Flags:
   --branch <nome>     Branch alvo (default: detecta do git)
   --dir <dir>         Diretório dos artefatos
   --clean             Descarta findings anteriores
+  --full              Força review completo (ignora o modo incremental)
   --no-jev            Desativa a pré-análise Jev
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
 
@@ -74,7 +75,9 @@ Flags de findings:
   --limit <n>         Limita o nº de itens (list)
   --group <key>       Grupo alvo no batch (default: o primeiro)
   --offset <n>        Paginação dentro do grupo (batch)
-  --include-done      Inclui já concluídos no batch`;
+  --include-done      Inclui já concluídos no batch
+  --apply             (verify) Marca os resolvidos como done
+  --fail-on-persisting (verify) Exit 1 se algum blocking persistir`;
 
 function readFlag(args: string[], flag: string): string | undefined {
 	const index = args.indexOf(flag);
@@ -178,10 +181,15 @@ function runWatchdog(config: HoundsmanConfig, args: string[]): void {
 
 /**
  * Subcomando `findings` — triagem/correção dos findings (list/show/set/done/reset/
- * sync/summary/batch/path). Deixa o agente interagir com o estado sem abrir o JSON.
+ * sync/summary/batch/verify/path). Deixa o agente interagir com o estado sem abrir
+ * o JSON. O `verify` é assíncrono (consulta opcional ao Jev) — roteado à parte.
  */
-function runFindings(config: HoundsmanConfig, args: string[]): void {
-	const result = runFindingsCommand(config, args);
+async function runFindings(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const sub = args.find((arg) => !arg.startsWith("-"));
+	const result =
+		sub === "verify"
+			? await runVerifyCommand(config, args)
+			: runFindingsCommand(config, args);
 	if (result.exitCode !== 0) {
 		console.error(result.output);
 		process.exit(result.exitCode);
@@ -270,7 +278,7 @@ export async function main(): Promise<void> {
 			runWatchdog(config, rest);
 			return;
 		case "findings":
-			runFindings(config, rest);
+			await runFindings(config, rest);
 			return;
 		case "server":
 			runServer(config, rest);

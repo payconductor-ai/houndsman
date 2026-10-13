@@ -4,13 +4,15 @@ Revisão automatizada de Pull Requests — CLI independente + camada de configur
 
 ## Capabilities
 
-Um único skill (`/houndsman`), três capabilities (detalhadas em `hunt.md`, `train.md`, `fix.md`):
+Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `train.md`,
+`fix.md`, `verify.md`):
 
 | Capability | O que faz |
 |---|---|
-| `hunt` | Revisão de PR (Passos 0–3). |
+| `hunt` | Revisão de PR (Passos 0–3; incremental quando possível). |
 | `train` | Manutenção das regras dos watchdogs. |
 | `fix` | Correção dos findings marcados como `execute`. |
+| `verify` | Confere se as violações foram resolvidas, sem re-revisar a PR. |
 
 ## Terminologia
 
@@ -45,7 +47,7 @@ Um único skill (`/houndsman`), três capabilities (detalhadas em `hunt.md`, `tr
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
-| `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/...) |
+| `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `houndsman server` | UI local de triagem (Bun.serve + Preact) |
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
@@ -55,7 +57,7 @@ Um único skill (`/houndsman`), três capabilities (detalhadas em `hunt.md`, `tr
 ### Flags
 
 `--config <path>` · `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
-`--branch <nome>` · `--dir <dir>` · `--clean` · `--no-jev` · `--fail-on-blocking` (no `--finalize`).
+`--branch <nome>` · `--dir <dir>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking` (no `--finalize`).
 
 ## Artefatos
 
@@ -72,8 +74,9 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman
 | `findings/<watchdog>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
 | `review.md` | Relatório final (achados agrupados por arquivo) |
 | `review.<watchdog>.md` | Relatório por domínio (só quando há achados) |
-| `state.json` | Estado de triagem dos findings (decisão/execução + fingerprint) |
+| `state.json` | Estado de triagem dos findings (decisão/execução + fingerprint + commit revisado) |
 | `run.json` | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + timestamps |
+| `verify.md` | Relatório do `findings verify` (resolvidos/persistem/incertos) |
 
 ## Estrutura
 
@@ -97,6 +100,12 @@ src/
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ churn/orçamento
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
+│   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
+│   ├── findings-state.ts    # estado de triagem (state.json) + store atômico
+│   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff por intervalo
+│   ├── verify.ts            # verificação de findings (tier local + Jev)
+│   ├── run-status.ts        # run.json (reviewing/review_done/fixing/fix_done)
+│   ├── fix-batch.ts         # agrupamento/paginação do lote (findings batch)
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── commands/            # context · review · watchdog · setup · update · test
 │   └── jev/                 # subsistema Jev (Passo 1.5)

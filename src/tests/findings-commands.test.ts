@@ -1,8 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runFindingsCommand } from "../core/commands/findings";
+import { runFindingsCommand, runVerifyCommand } from "../core/commands/findings";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
 
 /** Run fake em disco: classification.json + findings/alpha.json. */
@@ -383,6 +390,85 @@ describe("findings command", () => {
 
 			run(["done", id, "--dir", run0.dir, "--branch", "main"]);
 			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("fix_done");
+		} finally {
+			run0.cleanup();
+		}
+	});
+});
+
+describe("findings verify", () => {
+	const FILE = "src/tests/fixtures/fake-project.ts";
+
+	/** Run fake apontando para um arquivo real (relativo ao cwd → âncora resolvível). */
+	function makeVerifyRun(): { dir: string; outDir: string; cleanup: () => void } {
+		const dir = mkdtempSync(join(tmpdir(), "houndsman-verify-"));
+		const outDir = join(dir, "main");
+		mkdirSync(join(outDir, "findings"), { recursive: true });
+		writeFileSync(
+			join(outDir, "classification.json"),
+			JSON.stringify({ watchdogs: { alpha: [FILE] } }),
+		);
+		writeFileSync(
+			join(outDir, "findings", "alpha.json"),
+			JSON.stringify({
+				watchdogId: "alpha",
+				reviewedFiles: [FILE],
+				skipped: [],
+				findings: [
+					{
+						rule: "regra",
+						severity: "attention",
+						file: FILE,
+						line: 1,
+						message: "msg",
+						action: "ação",
+					},
+				],
+			}),
+		);
+		return {
+			dir,
+			outDir,
+			cleanup: () => rmSync(dir, { recursive: true, force: true }),
+		};
+	}
+
+	test("reporta persisting e grava o verify.md (tier local)", async () => {
+		const run0 = makeVerifyRun();
+		try {
+			const result = await runVerifyCommand(fakeHoundsmanConfig, [
+				"verify",
+				"--dir",
+				run0.dir,
+				"--branch",
+				"main",
+				"--json",
+			]);
+			expect(result.exitCode).toBe(0);
+			const parsed = JSON.parse(result.output);
+			expect(parsed.summary.persisting).toBe(1);
+			expect(parsed.entries[0].basis).toBe("anchor");
+			expect(existsSync(join(run0.outDir, "verify.md"))).toBe(true);
+		} finally {
+			run0.cleanup();
+		}
+	});
+
+	test("sem --apply não altera o estado", async () => {
+		const run0 = makeVerifyRun();
+		try {
+			await runVerifyCommand(fakeHoundsmanConfig, [
+				"verify",
+				"--dir",
+				run0.dir,
+				"--branch",
+				"main",
+			]);
+			const state = JSON.parse(
+				readFileSync(join(run0.outDir, "state.json"), "utf8"),
+			) as { findings: Record<string, { execState: string }> };
+			const only = Object.values(state.findings)[0];
+			expect(only.execState).toBe("pending");
 		} finally {
 			run0.cleanup();
 		}
