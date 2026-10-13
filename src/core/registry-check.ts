@@ -127,6 +127,57 @@ function checkRulePolarity(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
+/** Normaliza o texto da regra para detectar duplicatas (case/espaços). */
+function normalizeRuleText(text: string): string {
+	return text.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Aviso para regra repetida (texto normalizado) no mesmo watchdog — a regra deve
+ * existir uma única vez em `rules` (§ Convenções de escrita, item 10).
+ */
+function checkRuleDuplication(config: HoundsmanConfig, warnings: string[]): void {
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
+		if (!def) continue;
+		const seen = new Set<string>();
+		def.rules.forEach((rule, index) => {
+			const key = normalizeRuleText(rule.text);
+			if (!key) return;
+			if (seen.has(key)) {
+				warnings.push(`Regra duplicada em ${id} (rule-${index}): ${rule.text}`);
+				return;
+			}
+			seen.add(key);
+		});
+	}
+}
+
+/** Campos de metadados que NÃO devem conter texto de regra. */
+const RULE_BEARING_FIELDS = ["reviewFocus", "contextFiles", "exclude"] as const;
+
+/**
+ * Aviso quando `reviewFocus`/`contextFiles`/`exclude` recebem texto de regra
+ * (prefixo de polaridade) — a regra vive só em `rules`; duplicá-la nesses campos
+ * deixa o brief do subagente redundante.
+ */
+function checkMetadataPrecision(config: HoundsmanConfig, warnings: string[]): void {
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
+		if (!def) continue;
+		for (const field of RULE_BEARING_FIELDS) {
+			const items = def[field];
+			if (!items) continue;
+			items.forEach((item, index) => {
+				if (!POLARITY_PREFIX.test(item.trim())) return;
+				warnings.push(
+					`Texto de regra em ${id}.${field}[${index}] — a regra vive só em 'rules': ${item}`,
+				);
+			});
+		}
+	}
+}
+
 /** Aviso para orçamento/concorrência inválidos — o motor cai no default. */
 function checkBudgets(config: HoundsmanConfig, warnings: string[]): void {
 	const maxFiles = config.budgets?.maxFilesPerBrief;
@@ -153,6 +204,8 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkClassification(config, problems);
 	checkRendering(config, problems);
 	checkRulePolarity(config, warnings);
+	checkRuleDuplication(config, warnings);
+	checkMetadataPrecision(config, warnings);
 	checkBudgets(config, warnings);
 	const jevQuestions = checkJevSpecs(config, problems);
 

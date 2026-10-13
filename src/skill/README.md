@@ -52,7 +52,7 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 | `houndsman setup` | Cria a configuração inicial do projeto |
 | `houndsman update` | Sincroniza os arquivos auto-gerados (`.houndsman/core`) |
 | `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev (anti-drift) |
-| `houndsman test` | Roda a suíte de testes da lib |
+| `houndsman test` | **Manutenção da lib** — roda a suíte de testes do pacote (não é uso do consumidor) |
 
 ### Flags
 
@@ -138,6 +138,8 @@ houndsman.config.ts           # HoundsmanConfig (dados; descoberto em runtime)
 > prove que o padrão existe no código (regra negativa: prove que o anti-padrão **não** existe).
 > Regras devem ser **gerais/reutilizáveis** no domínio e declarar a **polaridade** no texto
 > (`Promover:` = deve acontecer; `Evitar:`/`Não`/`Nunca` = não deve acontecer).
+> Cada regra vive **só** em `rules` — não a repita em `reviewFocus`/`contextFiles`/`scope`/
+> `description`/`exclude` (isso só duplicaria o brief).
 
 1. Novas regras/watchdogs → editar `.houndsman/watchdogs/<id>.ts` (regras + escopo +
    `classify`) ou `doc-mappings.ts`/`exclusions.ts`. Um watchdog novo exige só o módulo em

@@ -72,10 +72,29 @@ Toda regra (nova ou alterada) deve passar por **todos** os itens:
      direta da afirmação). Aí o prefixo lidera o sentido dominante e o outro entra como oração
      subordinada — nunca como segundo juízo coordenado.
 9. **Escopo coerente** — a regra pertence ao domínio do watchdog.
-10. **Sem duplicata** — nenhuma regra repetida literalmente no mesmo watchdog.
+10. **Sem duplicata** — nenhuma regra repetida (texto normalizado) no mesmo watchdog.
+11. **Lugar único** — a regra vive **apenas** em `rules`. Nunca repita o texto (nem o anti-padrão)
+    em `reviewFocus`, `contextFiles`, `scope`, `description` ou `exclude`.
 
 > O `houndsman doctor` emite um **aviso** (não bloqueante) para regra sem polaridade explícita
-> (`Promover:`, `Evitar:`, `Não` ou `Nunca`).
+> (`Promover:`, `Evitar:`, `Não` ou `Nunca`), para regra duplicada e para texto de regra que
+> vazou para `reviewFocus`/`contextFiles`/`exclude`.
+
+### Onde cada coisa vive (não duplique a regra)
+
+Cada informação tem o seu campo — não espelhe a regra em vários lugares:
+
+| O que você quer expressar | Campo | Observação |
+|---|---|---|
+| A **regra** (o que DEVE/NÃO DEVE acontecer) | `rules[]` | Único lugar da regra: `{ severity, text, jev? }`. |
+| **Quais arquivos** o watchdog cobre | `classify` | Regex de path (ou de conteúdo). |
+| **Que arquivos** olhar primeiro | `reviewFocus` | **Paths/áreas** do código — não texto de regra. |
+| **Que docs** consultar | `contextFiles` | Caminhos de **documentação** — não regra nem código. |
+| O que **nunca** carregar | `exclude` | Paths a ignorar. |
+| O **território** em prosa | `scope` / `description` | Contexto do domínio, não regra. |
+
+> A regra aparece **uma única vez** no arquivo — em `rules`. Repeti-la em
+> `reviewFocus`/`contextFiles`/`scope`/`description`/`exclude` só cria ruído no brief do subagente.
 
 ---
 
@@ -166,7 +185,9 @@ verificáveis por leitura local. Candidatos não confirmados pelo watchdog **nã
      `Evitar:`/`Não`/`Nunca` (NÃO DEVE), conforme as Convenções de escrita.
    - Regra que mistura afirmação e negação (dois sentidos) → dividir em **duas entradas** (*Unipolar*, item 8).
    - `jev` (opcional): `{ kind: "noul" }`, com `instructions` e/ou `criteria` — ver seção acima.
-   - Ajustar `scope` / `description` / `reviewFocus` / `exclude` / `contextFiles` se necessário.
+   - **A regra vai só em `rules`** — não a repita em `reviewFocus`/`contextFiles`/`scope`/
+     `description`/`exclude`. Só toque nesses campos se o **domínio/paths** mudou (ver
+     *Onde cada coisa vive*), nunca para reafirmar a regra.
    - Se a regra muda para outro domínio (paths), ajustar o `classify` do watchdog.
 5. **Watchdog novo?** criar `.houndsman/watchdogs/<id>.ts` e registrar em `.houndsman/watchdogs/index.ts` (o id é derivado das chaves).
 6. **Atualizar `src/skill/hunt.md`/`README.md`** se escopo/regra visível mudou (no motor).
@@ -226,16 +247,14 @@ todos os itens — em especial: **geral/reutilizável** (não regra de negócio 
 
 ```bash
 bun run houndsman doctor     # config sem drift + ambiente + credencial Jev
-bun run houndsman test       # suíte da lib (project-agnóstica)
-bun run ci:fix               # formatação/imports/lint (no repo da lib)
-bun run ci                   # tipagem (no repo da lib)
 ```
+
+> `bun run houndsman test`, `bun run ci:fix` e `bun run ci` são comandos para **manter a lib** do
+> houndsman (repo do pacote) — não para quem só usa o houndsman no projeto.
 
 Checklist final:
 
 - [ ] `bun run houndsman doctor` → sem problemas reportados.
-- [ ] `bun run houndsman test` → **0 fail**.
-- [ ] `ci:fix` + `ci` → exit 0 (warnings pré-existentes não contam).
 - [ ] `WATCHDOG_DEFINITIONS[<id>].id` bate com a chave e `description` não vazio.
 - [ ] `src/skill/hunt.md` continua consistente com os watchdogs do projeto.
 - [ ] Toda regra nova/alterada tem **evidência** registrada no PR/relatório
@@ -244,6 +263,8 @@ Checklist final:
 - [ ] Brief de amostra não contém regra removida (dry-run abaixo).
 - [ ] Toda regra passa nas convenções de escrita (geral/reutilizável, sem jargão abreviado,
       sem qualificador vago, com polaridade explícita e **unipolar**) — conferir via grep.
+- [ ] O texto de cada regra aparece **exatamente uma vez** no arquivo (só em `rules`) — nada em
+      `reviewFocus`/`contextFiles`/`scope`/`description`/`exclude`.
 
 ```bash
 # Dry-run: gerar briefs e conferir ausência de regras removidas

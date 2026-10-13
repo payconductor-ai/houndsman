@@ -90,11 +90,11 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`classify` / `ClassifyRule`** | Padrão (regex) que decide se o watchdog cobre um arquivo. Sem casamento → `unclassified`. |
 | **`type: "filename"`** (default) | O regex é aplicado ao **caminho** do arquivo. |
 | **`type: "content"`** | O regex é aplicado ao **conteúdo** do arquivo (o motor lê o arquivo). |
-| **`scope`** | Descrição textual do território do watchdog (contexto/documentação). |
-| **`reviewFocus`** | Prioridade de leitura — o que o watchdog olha primeiro. |
+| **`scope`** | Descrição textual do território do watchdog (contexto/documentação; **não** contém regra). |
+| **`reviewFocus`** | Prioridade de leitura — **paths** que o watchdog olha primeiro (não contém regra). |
 | **`exclude`** | O que o watchdog **nunca** deve carregar. |
 | **`breakingChange`** | Marca o watchdog como responsável por avaliar **deletados** do seu domínio. |
-| **`contextFiles`** | Docs que o watchdog deve consultar. |
+| **`contextFiles`** | Docs que o watchdog deve consultar (não contém regra). |
 | **`docMappings`** | Regras `path → docs` do projeto. |
 | **`alwaysIncludeDocs`** | Docs sempre incluídos nos briefs (default `["AGENTS.md"]`). |
 | **`exclusions`** | Padrões de arquivos que **nunca** entram na revisão. |
@@ -104,7 +104,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 
 | Termo | Significado |
 | --- | --- |
-| **`Rule`** | Uma regra: `severity` + `text` (+ `jev` opcional). |
+| **`Rule`** | Uma regra: `severity` + `text` (+ `jev` opcional). Vive **só** em `rules` — não duplicar em `reviewFocus`/`contextFiles`/`scope`/`description`. |
 | **polaridade** | O texto **deve** começar com `Promover:` (deve acontecer) ou `Evitar:` / `Não` / `Nunca` (não deve acontecer). Sem prefixo → **aviso** no `doctor`. |
 | **`Severity`** | `blocking` ❌ (bloqueia merge) > `attention` ⚠️ > `suggestion` 💡 > `nit` 🔎. |
 | **`PROCEDURE`** | Os 5 passos do watchdog: FILTER → READ HEAD → GREP → DEEP-READ → CONCLUDE. |

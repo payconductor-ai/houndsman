@@ -271,7 +271,8 @@ completo) · `--no-jev` · `--fail-on-blocking` (com `--finalize`).
 > **`train`** (`/houndsman train`, doc `train.md`).
 > Regra de ouro: só é regra o que o projeto **aplica hoje** — prove com evidência no código
 > (regra negativa com 0 ocorrências = seguida → **manter**).
-> Após qualquer alteração, rodar `houndsman doctor` + `houndsman test` + `ci:fix` + `ci`.
+> Após qualquer alteração, rodar `houndsman doctor`. (`houndsman test` e `ci:fix`/`ci` são
+> comandos da **lib**, não do projeto consumidor.)
 
 ---
 

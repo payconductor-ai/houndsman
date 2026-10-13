@@ -60,7 +60,6 @@ bun run houndsman update      # reescreve .houndsman/core/** e .houndsman/.gitig
 
 ```bash
 bun run houndsman doctor         # valida config + ambiente + credencial Jev
-bun run houndsman test           # suíte da lib (project-agnóstica)
 bun run houndsman --base main    # prepara briefs do diff atual
 ```
 

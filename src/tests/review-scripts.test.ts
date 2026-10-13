@@ -139,6 +139,42 @@ describe("registry-check", () => {
 		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
 		expect(warnings).toEqual([]);
 	});
+
+	test("regra duplicada no mesmo watchdog gera aviso", () => {
+		const config = {
+			...fakeHoundsmanConfig,
+			watchdogs: {
+				...fakeHoundsmanConfig.watchdogs,
+				alpha: {
+					...alphaWatchdog,
+					rules: [
+						{ severity: "attention" as const, text: "Evitar console.log." },
+						{ severity: "blocking" as const, text: "Evitar   console.log." },
+					],
+				},
+			},
+		};
+		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
+		expect(warnings.some((w) => w.includes("duplicada"))).toBe(true);
+	});
+
+	test("texto de regra em reviewFocus/contextFiles gera aviso", () => {
+		const config = {
+			...fakeHoundsmanConfig,
+			watchdogs: {
+				...fakeHoundsmanConfig.watchdogs,
+				alpha: {
+					...alphaWatchdog,
+					reviewFocus: ["Evitar: console.log."],
+					contextFiles: ["Promover: validar a entrada."],
+				},
+			},
+		};
+		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
+		expect(
+			warnings.filter((w) => w.includes("a regra vive só em 'rules'")),
+		).toHaveLength(2);
+	});
 });
 
 // ---------------------------------------------------------------------------

@@ -11,6 +11,10 @@ aplicadas em nenhuma parte do código) devem ser **removidas**, não apenas reba
 1. `.houndsman/watchdogs/<id>.ts` — `WATCHDOG_DEFINITIONS[<id>]` é a fonte única de verdade:
    `description`, `scope`, `rules` (severidade + texto), `classify`, `contextFiles`,
    `reviewFocus`, `exclude`.
+
+   > **Onde cada coisa vive:** a **regra** vive só em `rules`; `reviewFocus` = paths a priorizar;
+   > `contextFiles` = docs a consultar; `exclude` = paths a ignorar; `scope`/`description` = prosa.
+   > Texto de regra em `reviewFocus`/`contextFiles`/`exclude` é **duplicação** a corrigir.
 2. `src/core/brief.ts` (no motor) — `PROCEDURE` (passos de revisão compartilhados).
 3. Ground truth (padrões reais do projeto):
    - Documentos de convenção do projeto (ex.: `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`).
@@ -41,6 +45,7 @@ classifique sem evidência (caminho de arquivo, linha, ou "0 ocorrências via gr
 | `OUTDATED` | Já foi aplicado, mas o código mudou | Remover ou reescrever |
 | `MISCALIBRATED` | Regra válida, mas severidade errada | Ajustar severidade |
 | `DEAD-PATH` | `scope`/`contextFiles`/`classify` apontam para caminho/arquivo inexistente | Corrigir ou remover |
+| `REDUNDANT` | Regra duplicada no mesmo watchdog ou repetida em `reviewFocus`/`contextFiles`/`exclude` | Remover a cópia (a regra fica só em `rules`) |
 
 ## Formato do relatório
 
