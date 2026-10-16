@@ -4,11 +4,12 @@
 
 import type { Decision, ExecState, RunStatus, RunSummary, Severity } from "./types";
 
-export const SEVERITY_EMOJI: Record<Severity, string> = {
-	blocking: "❌",
-	attention: "⚠️",
-	suggestion: "💡",
-	nit: "🔎",
+/** Rótulo de exibição de cada severidade (o CSS dá a cor via `sev-<nivel>`). */
+export const SEVERITY_LABELS: Record<Severity, string> = {
+	blocking: "Blocking",
+	attention: "Attention",
+	suggestion: "Suggestion",
+	nit: "Nit",
 };
 
 export const SEVERITY_ORDER: Severity[] = ["blocking", "attention", "suggestion", "nit"];
@@ -23,13 +24,6 @@ export const DECISION_LABELS: Record<Decision, string> = {
 
 export const EXEC_STATES: ExecState[] = ["pending", "in_progress", "done", "stale"];
 
-export const EXEC_LABELS: Record<ExecState, string> = {
-	pending: "exec: pendente",
-	in_progress: "exec: em andamento",
-	done: "exec: feito",
-	stale: "exec: stale",
-};
-
 export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
 	reviewing: "Revisando",
 	review_done: "Revisão pronta",
@@ -39,6 +33,9 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
 
 /** Limiar de inatividade para exibir timeout (display-only; não é status). */
 export const STATUS_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Intervalo do polling da UI (o badge conta o tempo desde a última sync). */
+export const AUTO_REFRESH_MS = 10_000;
 
 export type RunStatusView = { kind: string; label: string; timeout: boolean };
 

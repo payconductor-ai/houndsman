@@ -25,12 +25,12 @@ export function ArtifactsPanel({ slug }: { slug: string }) {
 
 	return (
 		<div class="artifacts">
-			<div class="tabs">
+			<div class="artifact-tabs">
 				{ARTIFACTS.map((artifact) => (
 					<button
 						type="button"
 						title={ARTIFACT_INFO[artifact]}
-						class={`btn tab${artifact === name ? " active" : ""}`}
+						class={`chip${artifact === name ? " active" : ""}`}
 						onClick={() => setName(artifact)}
 					>
 						{artifact}

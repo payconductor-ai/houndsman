@@ -18,6 +18,8 @@ export type Finding = {
 	severity: Severity;
 	file: string;
 	line: number | null;
+	/** Caminho absoluto resolvido pelo servidor — base do link `vscode://file/…`. */
+	absFile?: string;
 	message: string;
 	action: string;
 	evidence?: string;

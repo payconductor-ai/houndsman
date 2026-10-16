@@ -1,10 +1,11 @@
 /**
- * Lista de findings agrupada por severidade (❌ > ⚠️ > 💡 > 🔎).
+ * Lista de findings agrupada por severidade (blocking > attention > suggestion > nit).
  */
 
 import { useMemo } from "preact/hooks";
-import { SEVERITY_EMOJI, SEVERITY_ORDER } from "./constants";
+import { SEVERITY_LABELS, SEVERITY_ORDER } from "./constants";
 import { FindingCard } from "./FindingCard";
+import { Alert } from "./icons";
 import type { Finding, Severity } from "./types";
 
 export function FindingsList({
@@ -33,10 +34,11 @@ export function FindingsList({
 				const items = grouped.get(severity) ?? [];
 				if (items.length === 0) return null;
 				return (
-					<section class="sev-group">
-						<h2>
-							{SEVERITY_EMOJI[severity]} {severity}{" "}
-							<span class="n">({items.length})</span>
+					<section class={`sev-group sev-${severity}`} key={severity}>
+						<h2 class="sev-head">
+							<Alert size={14} />
+							{SEVERITY_LABELS[severity]}
+							<span class="n">{items.length}</span>
 						</h2>
 						{items.map((finding) => (
 							<FindingCard

@@ -112,6 +112,11 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 - `houndsman findings ...` (`commands/findings.ts`) é a interface do agente; `houndsman server`
   (`src/server/`) é a UI (Bun.serve + Preact; bundle do cliente em memória por `Bun.build`).
   O `server` faz bind em `127.0.0.1` — ferramenta local, sem autenticação.
+- **Cliente** (`src/server/client/`): CSS num único bloco em `src/server/index.ts` (`STYLES`,
+  tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas e link
+  `vscode://file/...` em `format.ts`. O `absFile` que alimenta o link vem do servidor
+  (o cliente não conhece o cwd). Auto-refresh de 10s (`AutoRefresh.tsx`) e auto-save do
+  comentário (debounce no `FindingCard`) são estados locais — nada disso muda o contrato da API.
 
 ### Setup / update (camada do projeto)
 

@@ -1,11 +1,30 @@
 /**
- * Cartão de um finding: dados + decisão (Executar/Ignorar), comentário e "feito".
+ * Cartão de um finding: identidade (severidade + local), ação recomendada,
+ * evidência, watchdogs, decisão segmentada e comentário com auto-save.
+ *
+ * Colapso: marcar como feito recolhe o cartão (título tachado) para limpar a
+ * poluição visual da triagem; reabrir volta a expandir.
  */
 
-import { useCallback, useEffect, useState } from "preact/hooks";
+import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
-import { DECISION_LABELS, DECISIONS, EXEC_LABELS, SEVERITY_EMOJI } from "./constants";
+import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS } from "./constants";
+import { vscodeFileLink } from "./format";
+import {
+	Check,
+	ChevronRight,
+	CodeIcon,
+	ExternalLink,
+	Sparkles,
+	Spinner,
+	Watch,
+} from "./icons";
 import type { Finding } from "./types";
+
+/** Debounce do auto-save do comentário (ms). */
+const AUTOSAVE_MS = 700;
+/** Tempo que o "✓ Salvo" fica visível antes de voltar ao estado neutro (ms). */
+const SAVED_VISIBLE_MS = 1800;
 
 export function FindingCard({
 	slug,
@@ -16,12 +35,32 @@ export function FindingCard({
 	finding: Finding;
 	onUpdated: (finding: Finding) => void;
 }) {
-	const [comment, setComment] = useState(finding.comment ?? "");
+	const isDone = finding.execState === "done";
+	const [open, setOpen] = useState(!isDone);
 	const [busy, setBusy] = useState(false);
+	const [comment, setComment] = useState(finding.comment ?? "");
+	const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+	/** Último valor confirmado pelo servidor — evita sobrescrever o que foi digitado. */
+	const savedRef = useRef(finding.comment ?? "");
+
+	// O cartão acompanha o estado de execução: feito colapsa, reaberto expande.
+	useEffect(() => {
+		setOpen(!isDone);
+	}, [isDone]);
+
+	// Só reidrata o comentário quando o servidor tem um valor novo e nada local pendente.
+	useEffect(() => {
+		const incoming = finding.comment ?? "";
+		if (incoming === savedRef.current) return;
+		savedRef.current = incoming;
+		setComment(incoming);
+	}, [finding.comment]);
 
 	useEffect(() => {
-		setComment(finding.comment ?? "");
-	}, [finding.comment]);
+		if (saveState !== "saved") return;
+		const id = setTimeout(() => setSaveState("idle"), SAVED_VISIBLE_MS);
+		return () => clearTimeout(id);
+	}, [saveState]);
 
 	const patch = useCallback(
 		async (body: Record<string, unknown>) => {
@@ -36,6 +75,7 @@ export function FindingCard({
 					},
 				);
 				onUpdated(updated);
+				return updated;
 			} finally {
 				setBusy(false);
 			}
@@ -43,80 +83,161 @@ export function FindingCard({
 		[finding.id, onUpdated, slug],
 	);
 
+	// Auto-save do comentário (debounce): nada a salvar = nada a fazer.
+	useEffect(() => {
+		const value = comment.trim();
+		if (value === savedRef.current.trim()) return;
+		setSaveState("saving");
+		const id = setTimeout(async () => {
+			try {
+				await patch({ comment: value });
+				savedRef.current = value;
+				setSaveState("saved");
+			} catch {
+				setSaveState("idle");
+			}
+		}, AUTOSAVE_MS);
+		return () => clearTimeout(id);
+	}, [comment, patch]);
+
 	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-	const count = finding.count > 1 ? `×${finding.count}` : "";
-	const isDone = finding.execState === "done";
+	const href = finding.absFile ? vscodeFileLink(finding.absFile, finding.line) : null;
+	const toggle = () => setOpen((current) => !current);
 
 	return (
 		<article
-			class={`card sev-${finding.severity}${finding.present ? "" : " absent"}`}
+			class={`card sev-${finding.severity}${finding.present ? "" : " absent"}${
+				isDone ? " done" : ""
+			}`}
 		>
-			<header class="card-head">
-				<span class="sev">
-					{SEVERITY_EMOJI[finding.severity]} {finding.severity}
-				</span>
-				<code class="loc">{location}</code>
-				{count && <span class="count">{count}</span>}
+			<div class="card-head">
+				<button
+					type="button"
+					class={`chev${open ? " open" : ""}`}
+					aria-expanded={open}
+					title={open ? "Recolher finding" : "Expandir finding"}
+					onClick={toggle}
+				>
+					<ChevronRight size={16} />
+				</button>
+				<span class="sev-badge">{SEVERITY_LABELS[finding.severity]}</span>
+				{href ? (
+					<a class="loc" href={href} title={`Abrir ${location} no VS Code`}>
+						<CodeIcon size={13} />
+						{location}
+						<ExternalLink size={12} class="ext" />
+					</a>
+				) : (
+					<code class="loc static" title={location}>
+						<CodeIcon size={13} />
+						{location}
+					</code>
+				)}
+				{finding.count > 1 && (
+					<span class="count" title="ocorrências idênticas colapsadas">
+						×{finding.count}
+					</span>
+				)}
+				{!finding.present && (
+					<span class="tag" title="Não aparece no último relatório consolidado">
+						ausente
+					</span>
+				)}
 				<span class="spacer" />
-				<code class="id" title="id do finding">
-					{finding.id}
-				</code>
-			</header>
-			<h3 class="rule">{finding.rule}</h3>
-			<p class="msg">{finding.message}</p>
-			<p class="action">
-				<strong>Ação:</strong> {finding.action}
-			</p>
-			{finding.evidence && <pre class="evidence">{finding.evidence}</pre>}
-			<footer class="card-foot">
-				<span class="watchdogs">{finding.watchdogIds.join(", ") || "—"}</span>
-				<span class="exec-state">{EXEC_LABELS[finding.execState]}</span>
-			</footer>
-			<div class="decisions">
-				{DECISIONS.map((decision) => (
-					<button
-						type="button"
-						title={`Marcar como ${DECISION_LABELS[decision]}`}
-						class={`btn dec-${decision}${finding.decision === decision ? " active" : ""}`}
-						disabled={busy}
-						onClick={() =>
-							patch({ decision, comment: comment.trim() || undefined })
-						}
-					>
-						{DECISION_LABELS[decision]}
-					</button>
-				))}
+				<button
+					type="button"
+					class={`done-btn${isDone ? " is-done" : ""}`}
+					disabled={busy}
+					title={isDone ? "Reabrir este finding" : "Marcar como feito"}
+					onClick={() => void patch({ execState: isDone ? "pending" : "done" })}
+				>
+					{isDone ? (
+						<>
+							<Check size={14} /> Feito
+						</>
+					) : (
+						"Marcar como feito"
+					)}
+				</button>
 			</div>
-			<div class="comment-row">
-				<textarea
-					title="Comentário ou instrução adicional para o auto-fix"
-					placeholder="Comentário / instrução para o auto-fix (opcional)"
-					value={comment}
-					onInput={(event) =>
-						setComment((event.target as HTMLTextAreaElement).value)
-					}
-				/>
-				<div class="comment-actions">
-					<button
-						type="button"
-						title="Salvar o comentário neste finding"
-						class="btn"
-						disabled={busy}
-						onClick={() => patch({ comment: comment.trim() })}
-					>
-						Salvar comentário
-					</button>
-					<button
-						type="button"
-						title="Alternar o estado de execução deste finding (feito/pendente)"
-						class={`btn done${isDone ? " active" : ""}`}
-						disabled={busy}
-						onClick={() => patch({ execState: isDone ? "pending" : "done" })}
-					>
-						{isDone ? "✓ Feito" : "Marcar feito"}
-					</button>
+
+			<h3 class="card-title">{finding.message}</h3>
+
+			{open && (
+				<div class="card-body">
+					<div class="meta-row">
+						<span class="meta">
+							<span class="meta-k">regra</span>
+							<code>{finding.rule}</code>
+						</span>
+						<span class="meta">
+							<span class="meta-k">exec</span>
+							<code>{finding.execState}</code>
+						</span>
+					</div>
+
+					<div class="action-block">
+						<Sparkles size={16} class="action-icon" />
+						<div>
+							<span class="action-label">Ação recomendada</span>
+							<p>{finding.action}</p>
+						</div>
+					</div>
+
+					{finding.evidence && <pre class="evidence">{finding.evidence}</pre>}
+
+					<div class="tags">
+						<span class="tags-label">
+							<Watch size={13} /> Watchdogs
+						</span>
+						{(finding.watchdogIds.length > 0
+							? finding.watchdogIds
+							: ["—"]
+						).map((id) => (
+							<span class="tag" key={id}>
+								{id}
+							</span>
+						))}
+					</div>
+
+					<div class="decisions">
+						{DECISIONS.map((decision) => (
+							<button
+								type="button"
+								title={`Marcar como ${DECISION_LABELS[decision]}`}
+								class={`dec-btn dec-${decision}${
+									finding.decision === decision ? " active" : ""
+								}`}
+								disabled={busy}
+								onClick={() => void patch({ decision })}
+							>
+								{DECISION_LABELS[decision]}
+							</button>
+						))}
+					</div>
+
+					<div class="comment">
+						<textarea
+							title="Comentário ou instrução adicional para o auto-fix"
+							placeholder="Comentário / instrução para o auto-fix — salvo automaticamente"
+							value={comment}
+							onInput={(event) =>
+								setComment((event.target as HTMLTextAreaElement).value)
+							}
+						/>
+						{saveState === "saving" && (
+							<span class="comment-status">
+								<Spinner size={12} class="icon spin" /> Salvando…
+							</span>
+						)}
+						{saveState === "saved" && (
+							<span class="comment-status saved">
+								<Check size={12} /> Salvo
+							</span>
+						)}
+					</div>
 				</div>
-			</div>
+			)}
 		</article>
 	);
 }

@@ -1,21 +1,73 @@
 /**
- * Barra de resumo da triagem (total, presentes e contagens por decisão/execução).
+ * Métricas da triagem: cards de KPI (Total/Executar/Ignorar/Feitos) e a barra de
+ * progresso da correção (feitos ÷ total).
  */
 
-import { DECISION_LABELS, DECISIONS } from "./constants";
 import type { Summary } from "./types";
 
-export function SummaryBar({ summary }: { summary: Summary }) {
+function Kpi({
+	label,
+	value,
+	tone,
+	hint,
+}: {
+	label: string;
+	value: number;
+	tone: "total" | "execute" | "ignore" | "done";
+	hint?: string;
+}) {
 	return (
-		<div class="summary-bar">
-			<span>Total: {summary.total}</span>
-			<span>Presentes: {summary.present}</span>
-			{DECISIONS.filter((decision) => decision !== "pending").map((decision) => (
-				<span key={decision}>
-					{DECISION_LABELS[decision]}: {summary.byDecision[decision] ?? 0}
-				</span>
-			))}
-			<span>Feitos: {summary.byExecState.done ?? 0}</span>
+		<div class={`kpi kpi-${tone}`} title={hint}>
+			<span class="kpi-label">{label}</span>
+			<span class="kpi-value">{value}</span>
+			{hint && <span class="kpi-hint">{hint}</span>}
 		</div>
+	);
+}
+
+export function SummaryBar({ summary }: { summary: Summary }) {
+	const done = summary.byExecState.done ?? 0;
+	const pct = summary.total > 0 ? Math.round((done / summary.total) * 100) : 0;
+
+	return (
+		<>
+			<div class="kpis">
+				<Kpi
+					label="Total"
+					value={summary.total}
+					tone="total"
+					hint={`${summary.present} presentes`}
+				/>
+				<Kpi
+					label="Executar"
+					value={summary.byDecision.execute ?? 0}
+					tone="execute"
+					hint="marcados para auto-fix"
+				/>
+				<Kpi
+					label="Ignorar"
+					value={summary.byDecision.ignore ?? 0}
+					tone="ignore"
+					hint="descartados na triagem"
+				/>
+				<Kpi label="Feitos" value={done} tone="done" hint="corrigidos" />
+			</div>
+			<div class="progress">
+				<div class="progress-head">
+					<span>Progresso da correção</span>
+					<span class="pct">{pct}%</span>
+				</div>
+				<div
+					class="progress-track"
+					role="progressbar"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={pct}
+					title={`${done} de ${summary.total} findings feitos`}
+				>
+					<span class="progress-fill" style={{ width: `${pct}%` }} />
+				</div>
+			</div>
+		</>
 	);
 }
