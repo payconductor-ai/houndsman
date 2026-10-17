@@ -45,7 +45,7 @@ export function FindingCard({
 
 	// O cartão acompanha o estado de execução: feito colapsa, reaberto expande.
 	useEffect(() => {
-		setOpen(!isDone);
+		setOpen(finding.execState !== "done" && finding.decision !== 'ignore');
 	}, [isDone]);
 
 	// Só reidrata o comentário quando o servidor tem um valor novo e nada local pendente.

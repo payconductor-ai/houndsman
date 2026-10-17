@@ -27,7 +27,8 @@ function Kpi({
 
 export function SummaryBar({ summary }: { summary: Summary }) {
 	const done = summary.byExecState.done ?? 0;
-	const pct = summary.total > 0 ? Math.round((done / summary.total) * 100) : 0;
+	const total = summary.total - (summary.byDecision.ignore || 0);
+	const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
 	return (
 		<>

@@ -225,8 +225,10 @@ export function App() {
 				</header>
 
 				<div class="content">
-					{slug && <h1 class="page-title">{branch}</h1>}
-					<p class="page-sub">{TAB_CAPTIONS[tab]}</p>
+					<div class="page-header">
+						{slug && <h1 class="page-title">{branch}</h1>}
+						<p class="page-sub">{TAB_CAPTIONS[tab]}</p>
+					</div>
 					{error && <p class="error">{error}</p>}
 
 					{slug && tab === "findings" && data && (
