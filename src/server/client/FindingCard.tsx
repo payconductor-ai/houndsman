@@ -6,8 +6,9 @@
  * poluição visual da triagem; reabrir volta a expandir.
  */
 
-import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { api } from "./api";
+import { highlightCode, languageFromFile } from "./code-highlight";
 import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS } from "./constants";
 import { vscodeFileLink } from "./format";
 import {
@@ -19,6 +20,7 @@ import {
 	Spinner,
 	Watch,
 } from "./icons";
+import { MarkdownText } from "./MarkdownText";
 import type { Finding } from "./types";
 
 /** Debounce do auto-save do comentário (ms). */
@@ -102,6 +104,13 @@ export function FindingCard({
 
 	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
 	const href = finding.absFile ? vscodeFileLink(finding.absFile, finding.line) : null;
+	const highlighted = useMemo(
+		() =>
+			finding.evidence
+				? highlightCode(finding.evidence, languageFromFile(finding.file))
+				: null,
+		[finding.evidence, finding.file],
+	);
 	const toggle = () => setOpen((current) => !current);
 
 	return (
@@ -186,14 +195,36 @@ export function FindingCard({
 					<div class="meta-row">{finding.rule}</div>
 
 					<div class="action-block">
-						<p>
-							<Sparkles size={16} class="action-icon" />
+						<Sparkles size={16} class="action-icon" />
+						<div class="action-text">
 							<span class="action-label">Ação:</span>
-							{finding.action}
-						</p>
+							<MarkdownText text={finding.action} />
+						</div>
 					</div>
 
-					{finding.evidence && <pre class="evidence">{finding.evidence}</pre>}
+					{finding.evidence &&
+						(highlighted ? (
+							<div class="evidence-block">
+								<div class="evidence-head">
+									<span class="code-lang">{highlighted.label}</span>
+								</div>
+								<pre class="evidence code-evidence">
+									{highlighted.tokens.map((token) => (
+										<span
+											class={
+												token.type === "plain"
+													? undefined
+													: `tok-${token.type}`
+											}
+										>
+											{token.text}
+										</span>
+									))}
+								</pre>
+							</div>
+						) : (
+							<pre class="evidence">{finding.evidence}</pre>
+						))}
 
 					<div class="decision-tags-block">
 						<div class="decisions">

@@ -122,8 +122,13 @@ export function SubmitModal({
 		() => selected.filter((candidate) => includeSent || !candidate.sent),
 		[selected, includeSent],
 	);
-	const onLine = toSend.filter((candidate) => candidate.kind === "line").length;
-	const onFile = toSend.filter((candidate) => candidate.kind === "file").length;
+	const totals = useMemo(
+		() => ({
+			line: toSend.filter((candidate) => candidate.kind === "line").length,
+			file: toSend.filter((candidate) => candidate.kind === "file").length,
+		}),
+		[toSend],
+	);
 	const skipped = selected.length - toSend.length;
 
 	const submit = useCallback(async () => {
@@ -277,8 +282,8 @@ export function SubmitModal({
 
 								<div class="submit-summary">
 									Serão disparados <b>{toSend.length}</b> comentário(s)
-									— <b>{onLine}</b> na linha · <b>{onFile}</b> no
-									arquivo
+									— <b>{totals.line}</b> na linha · <b>{totals.file}</b>{" "}
+									no arquivo
 									{skipped > 0 ? (
 										<>
 											{" "}

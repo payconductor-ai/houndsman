@@ -4,7 +4,7 @@
  * auditáveis pela mesma navegação.
  */
 
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useMemo, useState } from "preact/hooks";
 import { api } from "./api";
 import {
 	ARTIFACT_KIND_LABELS,
@@ -23,7 +23,7 @@ function pickDefault(items: ArtifactMeta[]): string {
 
 /** JSON com destaque de sintaxe (tokens em spans, sem lib externa). */
 function JsonView({ content }: { content: string }) {
-	const tokens = highlightJson(formatJson(content));
+	const tokens = useMemo(() => highlightJson(formatJson(content)), [content]);
 	return (
 		<pre class="artifact-view json-view">
 			{tokens.map((token) => (
@@ -93,8 +93,11 @@ export function ArtifactsPanel({ slug }: { slug: string }) {
 		};
 	}, [slug, name]);
 
-	const groups = groupArtifacts(items);
-	const selected = items.find((item) => item.name === name);
+	const groups = useMemo(() => groupArtifacts(items), [items]);
+	const selected = useMemo(
+		() => items.find((item) => item.name === name),
+		[items, name],
+	);
 
 	return (
 		<div class="artifacts">

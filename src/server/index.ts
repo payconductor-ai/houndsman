@@ -262,7 +262,7 @@ html, body { height:100%; }
 body { margin:0; font-size:14px; background:var(--bg); color:var(--fg); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; }
 body::before { content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
   background:radial-gradient(820px 420px at 8% -12%, rgba(240,165,44,.08), transparent 62%); }
-code, pre, .mono { font-family:var(--font-mono); }
+code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 ::-webkit-scrollbar { width:10px; height:10px; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border:2px solid transparent; border-radius:999px; background-clip:padding-box; }
 ::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.18); background-clip:padding-box; }
@@ -404,13 +404,35 @@ code, pre, .mono { font-family:var(--font-mono); }
 .meta { display:inline-flex; align-items:center; gap:7px; }
 .meta-k { font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-2); }
 .meta code { padding:2px 6px; font-size:11.5px; color:var(--fg); background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:6px; }
-.action-block { display:flex; gap:11px; padding:16px; background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:var(--radius); }
-.action-icon { flex:none; display:inline-block; margin-right:5px; margin-bottom:-5px; color:var(--accent); }
-.action-label { display:inline-block; font-size:10px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-right:5px; }
-.action-block p { margin:0; font-size:13px; color:#f0ece6; }
+.action-block { display:flex; gap:11px; padding:0; background:transparent; border:0; border-radius:0; }
+.action-icon { flex:none; display:inline-block; margin-top:3px; margin-right:2px; color:var(--accent); }
+.action-text { flex:1; min-width:0; }
+.action-label { display:block; margin-bottom:4px; font-size:10px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); }
+.action-text p, .md-p { margin:0 0 6px; font-size:13px; line-height:1.65; color:#f0ece6; white-space:pre-wrap; }
+.action-text p:last-child { margin-bottom:0; }
+.md-list { margin:0 0 6px; padding-left:20px; font-size:13px; line-height:1.65; color:#f0ece6; }
+.md-list li { margin:0 0 2px; }
+.md-quote { margin:0 0 6px; padding:2px 0 2px 10px; border-left:2px solid var(--accent-line); color:var(--muted); font-size:13px; line-height:1.65; }
+.action-text code, .md-code { font-family:var(--font-mono); font-size:11.5px; padding:1px 5px; color:#f0ece6; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:5px; }
+.action-text a { color:var(--accent-strong); text-decoration:underline; text-underline-offset:2px; }
+.action-text strong { color:#fff; font-weight:600; }
+.action-text em { color:#e9e4dc; }
+.md-code-block { margin:6px 0; padding:10px 12px; max-height:320px; overflow:auto; white-space:pre; font-size:11.5px; line-height:1.6; color:#cdc7bf; background:#0b0b0e; border-radius:10px; }
 .decision-tags-block { display:flex; align-items:center; gap:8px; }
 .evidence { margin:0; padding: 16px; white-space:break-spaces; font-size:12px; line-height:1.6; color:#cdc7bf;
   background:#0b0b0e; border:1px solid var(--border); border-radius:var(--radius); }
+.evidence-block { display:flex; flex-direction:column; gap:6px; }
+.evidence-head { display:flex; justify-content:flex-end; }
+.code-lang { font-family:var(--font-mono); font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-2); }
+.code-evidence { white-space:pre; overflow:auto; }
+.tok-keyword { color:#c792ea; }
+.tok-string { color:#9ddc8a; }
+.tok-comment { color:#6d6862; font-style:italic; }
+.tok-number { color:#8fc7ff; }
+.tok-type { color:var(--accent-strong); }
+.tok-function { color:#82aaff; }
+.tok-property { color:#e6c07b; }
+.tok-punct { color:#8d8a85; }
 .tags { display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-left: auto; }
 .tags-label { display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted-2); }
 .tag { display:inline-flex; align-items:center; gap:6px; padding:3px 9px; font-family:var(--font-mono); font-size:11px; color:var(--muted);
