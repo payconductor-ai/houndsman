@@ -20,9 +20,11 @@ import {
 	type PrTarget,
 	renderGeneralBody,
 	renderReviewBody,
+	resolveFindingThreads,
 	resolvePrTarget,
 	selectSubmitCandidates,
 	submitFindings,
+	syncResolvedThreads,
 } from "../core/github-review";
 import type { Severity } from "../core/types";
 
@@ -110,6 +112,10 @@ type ReviewRunnerOptions = {
 	lineId?: number;
 	fileId?: number;
 	generalId?: number;
+	/** Threads do PR (comentário → conversa). */
+	threads?: { id: string; commentId: number; isResolved?: boolean }[];
+	/** Erro GraphQL ao listar/resolver threads. */
+	threadsError?: string;
 };
 
 /**
@@ -173,6 +179,7 @@ function reviewRunner(options: ReviewRunnerOptions = {}): {
 					data: {
 						addPullRequestReviewThread: {
 							thread: {
+								id: `THREAD_${lineId}`,
 								comments: {
 									nodes: [
 										{
@@ -182,6 +189,40 @@ function reviewRunner(options: ReviewRunnerOptions = {}): {
 									],
 								},
 							},
+						},
+					},
+				});
+			}
+			if (query.includes("reviewThreads")) {
+				if (options.threadsError) {
+					return okJson({ errors: [{ message: options.threadsError }] });
+				}
+				return okJson({
+					data: {
+						repository: {
+							pullRequest: {
+								reviewThreads: {
+									nodes: (options.threads ?? []).map((thread) => ({
+										id: thread.id,
+										isResolved: thread.isResolved ?? false,
+										comments: {
+											nodes: [{ databaseId: thread.commentId }],
+										},
+									})),
+								},
+							},
+						},
+					},
+				});
+			}
+			if (query.includes("resolveReviewThread")) {
+				if (options.threadsError) {
+					return okJson({ errors: [{ message: options.threadsError }] });
+				}
+				return okJson({
+					data: {
+						resolveReviewThread: {
+							thread: { id: "THREAD", isResolved: true },
 						},
 					},
 				});
@@ -207,6 +248,13 @@ function reviewRunner(options: ReviewRunnerOptions = {}): {
 		if (args[1]?.includes("/issues/")) {
 			const generalId = options.generalId ?? 900;
 			return okJson({ id: generalId, html_url: `https://x/${generalId}` });
+		}
+		if (args[0] === "pr" && args[1] === "view") {
+			return okJson({
+				number: 7,
+				url: "https://github.com/acme/app/pull/7",
+				headRefOid: "abc",
+			});
 		}
 		if (args.includes("subject_type=file")) {
 			if (options.fileError) {
@@ -373,6 +421,7 @@ describe("submitFindings", () => {
 			commentId: 700,
 			kind: "line",
 			pr: 7,
+			threadId: "THREAD_700",
 		});
 		expect(calls.filter((args) => args[1] === "graphql")).toHaveLength(4);
 	});
@@ -516,5 +565,105 @@ describe("submitFindings", () => {
 			error: "sem permissão",
 		});
 		expect(calls.some((args) => args.includes("subject_type=file"))).toBe(false);
+	});
+});
+
+describe("resolveFindingThreads", () => {
+	const NOW = "2026-02-02T00:00:00.000Z";
+
+	test("resolve a thread aberta e grava threadId/resolvedAt", () => {
+		const state = stateWith([finding({ id: "a", commentId: 700 })]);
+		const { runner, calls } = reviewRunner({
+			threads: [{ id: "THREAD_700", commentId: 700 }],
+		});
+		const outcome = resolveFindingThreads({
+			target: TARGET,
+			findings: Object.values(state.findings),
+			runner,
+			now: NOW,
+		});
+
+		expect(outcome.checked).toBe(1);
+		expect(outcome.resolved).toEqual([{ id: "a", threadId: "THREAD_700" }]);
+		expect(state.findings.a.github).toMatchObject({
+			threadId: "THREAD_700",
+			resolvedAt: NOW,
+		});
+		expect(outcome.updated).toEqual(["a"]);
+		expect(
+			calls.some((args) => args.some((arg) => arg.includes("resolveReviewThread"))),
+		).toBe(true);
+	});
+
+	test("pula thread já resolvida (sem mutation)", () => {
+		const state = stateWith([finding({ id: "a", commentId: 700 })]);
+		const { runner, calls } = reviewRunner({
+			threads: [{ id: "THREAD_700", commentId: 700, isResolved: true }],
+		});
+		const outcome = resolveFindingThreads({
+			target: TARGET,
+			findings: Object.values(state.findings),
+			runner,
+			now: NOW,
+		});
+
+		expect(outcome.resolved).toEqual([]);
+		expect(outcome.skipped).toEqual([{ id: "a", reason: "já resolvida no GitHub." }]);
+		expect(state.findings.a.github?.resolvedAt).toBe(NOW);
+		expect(
+			calls.some((args) => args.some((arg) => arg.includes("resolveReviewThread"))),
+		).toBe(false);
+	});
+
+	test("comentário geral não é thread (não consulta o gh)", () => {
+		const state = stateWith([finding({ id: "a", commentId: 900 })]);
+		const link = state.findings.a.github;
+		if (link) link.kind = "comment";
+		const { runner, calls } = reviewRunner();
+
+		const outcome = resolveFindingThreads({
+			target: TARGET,
+			findings: Object.values(state.findings),
+			runner,
+		});
+
+		expect(outcome.checked).toBe(0);
+		expect(calls).toHaveLength(0);
+	});
+
+	test("falha do gh vira failed (fail-open)", () => {
+		const state = stateWith([finding({ id: "a", commentId: 700 })]);
+		const { runner } = reviewRunner({ threadsError: "sem permissão" });
+		const outcome = resolveFindingThreads({
+			target: TARGET,
+			findings: Object.values(state.findings),
+			runner,
+		});
+
+		expect(outcome.failed).toEqual([{ id: "a", reason: "sem permissão" }]);
+		expect(state.findings.a.github?.resolvedAt).toBeUndefined();
+	});
+
+	test("syncResolvedThreads resolve o alvo via gh pr view", () => {
+		const state = stateWith([finding({ id: "a", commentId: 700 })]);
+		const { runner, calls } = reviewRunner({
+			threads: [{ id: "THREAD_700", commentId: 700 }],
+		});
+
+		const outcome = syncResolvedThreads({ state, ids: ["a"], runner, now: NOW });
+
+		expect(outcome.available).toBe(true);
+		expect(outcome.resolved).toHaveLength(1);
+		expect(calls.some((args) => args[0] === "pr" && args[1] === "view")).toBe(true);
+	});
+
+	test("syncResolvedThreads sem vínculo remoto não chama o gh", () => {
+		const state = stateWith([finding({ id: "a" })]);
+		const { runner, calls } = reviewRunner();
+
+		const outcome = syncResolvedThreads({ state, ids: ["a"], runner });
+
+		expect(outcome.checked).toBe(0);
+		expect(calls).toHaveLength(0);
 	});
 });

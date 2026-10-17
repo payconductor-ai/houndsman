@@ -112,7 +112,7 @@ describe("buildStateFromFindings", () => {
 		}
 	});
 
-	test("finding que sumiu fica ausente e vira done se era 'execute'", () => {
+	test("finding que sumiu vira done (corrigido entre revisões)", () => {
 		const project = makeProject({ "src/f.ts": DUPLICATED });
 		try {
 			const reader = fileReader(project.cwd);
@@ -121,7 +121,7 @@ describe("buildStateFromFindings", () => {
 				{ branch: "main", readFile: reader },
 			);
 			const id = Object.keys(first.findings)[0];
-			applyFindingUpdate(first.findings[id], { decision: "execute" });
+			expect(first.findings[id].decision).toBe("pending");
 
 			const second = buildStateFromFindings([], {
 				branch: "main",
@@ -130,6 +130,54 @@ describe("buildStateFromFindings", () => {
 			});
 			expect(second.findings[id].present).toBe(false);
 			expect(second.findings[id].execState).toBe("done");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("finding ausente e marcado como 'ignore' preserva o estado", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const first = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "r", line: 2 })],
+				{ branch: "main", readFile: reader },
+			);
+			const id = Object.keys(first.findings)[0];
+			applyFindingUpdate(first.findings[id], { decision: "ignore" });
+
+			const second = buildStateFromFindings([], {
+				branch: "main",
+				readFile: reader,
+				previous: first,
+			});
+			expect(second.findings[id].present).toBe(false);
+			expect(second.findings[id].execState).toBe("pending");
+			expect(second.findings[id].decision).toBe("ignore");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("arquivo fora da revisão (orçamento/skipped) não vira done", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const first = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "r", line: 2 })],
+				{ branch: "main", readFile: reader },
+			);
+			const id = Object.keys(first.findings)[0];
+
+			const second = buildStateFromFindings([], {
+				branch: "main",
+				readFile: reader,
+				previous: first,
+				// Nenhum arquivo foi revisado neste ciclo: ausência não prova resolução.
+				reviewedPaths: new Set(["src/outro.ts"]),
+			});
+			expect(second.findings[id].present).toBe(false);
+			expect(second.findings[id].execState).toBe("pending");
 		} finally {
 			project.cleanup();
 		}

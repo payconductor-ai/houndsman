@@ -95,12 +95,11 @@ nenhum script à mão.
 
 O skill tem **4 capabilities**, todas em `/houndsman`:
 
-- **`hunt`** — revisa a PR (default: `/houndsman` = `/houndsman hunt`).
+- **`hunt`** — revisa a PR.
 - **`train`** — mantém/atualiza as regras dos watchdogs.
-- **`fix`** — corrige os findings marcados (`/houndsman fix`).
-- **`verify`** — confere se as violações foram resolvidas (`/houndsman verify`), sem re-revisar.
+- **`fix`** — corrige os findings marcados.
+- **`verify`** — confere se as violações foram resolvidas, sem re-revisar.
 
-- Revisão normal: `/houndsman` ou `/houndsman hunt`.
 - Revisar outra branch: `/houndsman hunt feature/minha-branch`.
 - Validar na UI: `houndsman server --open` — marque os findings a executar (`execute`).
 

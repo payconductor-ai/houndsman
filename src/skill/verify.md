@@ -43,7 +43,8 @@ bun run houndsman findings verify --apply    # marca os resolvidos como done (pi
 
 - Sem `--apply`: **só relatório** (grava o artefato `verify.md` no storage). Nada muda na triagem.
 - Com `--apply`: os findings com status **`resolved`** viram `execState: done` (histórico
-  `by: "verify"`). `persisting` e `uncertain` **não** são tocados.
+  `by: "verify"`) e a **thread correspondente é resolvida no GitHub** (quando há comentário e a
+  conversa ainda está aberta; fail-open). `persisting` e `uncertain` **não** são tocados.
 
 Filtros (como no `findings list`): `--severity`, `--watchdog`, `--file`, `--decision`. `--all`
 inclui ausentes. `--no-jev` desliga o tier LLM. `--fail-on-persisting` sai com código 1 se algum

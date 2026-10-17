@@ -30,6 +30,7 @@ import { ReviewScopeResolver, type RunClassification } from "./engine/review-sco
 import type { BudgetSelection, ClassificationResult } from "./file-classifier";
 import { buildStateFromFindings, fileReader } from "./findings-state";
 import { resolveSha } from "./git-revision";
+import { syncResolvedThreads } from "./github-review";
 import {
 	type JevCandidate,
 	type JevCandidatesFile,
@@ -590,12 +591,44 @@ export function finalize(
 		branch,
 		readFile: fileReader(process.cwd()),
 		previous: ctx.storage.readFindings(ctx.review.id),
+		reviewedPaths: new Set([
+			...reports.flatMap((report) => report.reviewedFiles),
+			// Arquivo deletado: o achado deixou de existir junto com ele.
+			...classification.deleted,
+		]),
 		now,
 		headSha: classification.headSha,
 		reviewed: classification.headSha
 			? { headSha: classification.headSha, at: now }
 			: undefined,
 	});
+
+	// Findings corrigidos entre revisões (ausentes + done) têm a conversa do PR
+	// resolvida automaticamente; as já resolvidas no GitHub são puladas. Só
+	// toca o `gh` quando há vínculo remoto pendente (fail-open).
+	const threadIds = Object.values(state.findings)
+		.filter(
+			(finding) =>
+				!finding.present &&
+				finding.execState === "done" &&
+				finding.github &&
+				finding.github.kind !== "comment" &&
+				!finding.github.resolvedAt,
+		)
+		.map((finding) => finding.id);
+	if (threadIds.length > 0) {
+		const sync = syncResolvedThreads({ state, ids: threadIds, now });
+		if (!sync.available) {
+			messages.push(`GitHub: threads não sincronizadas (${sync.reason}).`);
+		} else if (sync.checked > 0) {
+			const failures =
+				sync.failed.length > 0 ? `, ${sync.failed.length} falha(s)` : "";
+			messages.push(
+				`GitHub: ${sync.resolved.length} thread(s) resolvida(s), ${sync.skipped.length} já resolvida(s)/pulada(s)${failures}.`,
+			);
+		}
+	}
+
 	ctx.storage.writeFindings(ctx.review.id, state);
 	ctx.storage.updateReview(ctx.review.id, {
 		base: opts.base,

@@ -76,6 +76,10 @@ export type GitHubLink = {
 	pr: number;
 	/** Quando foi enviado (ISO). */
 	at: string;
+	/** Node ID da thread de revisão (GraphQL) — base para resolver a conversa. */
+	threadId?: string;
+	/** Quando a thread foi marcada como resolvida no GitHub (ISO). */
+	resolvedAt?: string;
 };
 
 /** Marco da revisão que originou o estado: commit revisado + quando. */
@@ -283,6 +287,12 @@ export type BuildStateOptions = {
 	reviewed?: FindingsReviewed;
 	/** SHA usado para carimbar `foundAtSha` de findings novos/re-reportados. */
 	headSha?: string;
+	/**
+	 * Arquivos efetivamente revisados neste ciclo (união de `reviewedFiles`).
+	 * Quando presente, só findings ausentes desses arquivos viram `done` — o que
+	 * ficou fora do orçamento/skipped não pode ser dado como resolvido.
+	 */
+	reviewedPaths?: ReadonlySet<string>;
 	now?: string;
 };
 
@@ -303,14 +313,21 @@ export function buildStateFromFindings(
 
 	const result: Record<string, FindingState> = {};
 	// 1. Preserva o estado anterior (marca como ausente até provar o contrário).
+	const reviewedPaths = options.reviewedPaths;
 	for (const prev of Object.values(previous?.findings ?? {})) {
+		// Ausente do novo relatório ⇒ corrigido manualmente entre revisões (ou
+		// some junto com o trecho): vira `done`. `ignore` é decisão explícita de
+		// não corrigir — preserva o estado original. Arquivo fora da revisão
+		// (orçamento/skipped) também preserva: ausência não prova resolução.
+		const wasReviewed = !reviewedPaths || reviewedPaths.has(prev.file);
+		const resolvedByReview =
+			wasReviewed && prev.present && prev.decision !== "ignore";
+		const queuedAndGone =
+			wasReviewed && prev.decision === "execute" && prev.execState === "pending";
 		result[prev.id] = {
 			...prev,
 			present: false,
-			execState:
-				prev.execState === "pending" && prev.decision === "execute"
-					? "done"
-					: prev.execState,
+			execState: resolvedByReview || queuedAndGone ? "done" : prev.execState,
 			updatedAt: now,
 		};
 	}

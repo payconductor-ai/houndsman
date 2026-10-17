@@ -30,6 +30,7 @@ import {
 	resolvePrTarget,
 	type SubmitSelection,
 	submitFindings,
+	syncResolvedThreads,
 } from "../core/github-review";
 import { pingFindingsStatus } from "../core/run-status";
 import { systemClock } from "../core/services/clock";
@@ -215,6 +216,10 @@ export class RunRepository {
 		if (resolution.status !== "found") return null;
 		const finding = state.findings[resolution.id];
 		applyFindingUpdate(finding, body);
+		// "Done" na UI é resolução local: resolve a conversa no PR (fail-open).
+		if (body.execState === "done") {
+			syncResolvedThreads({ state, ids: [finding.id] });
+		}
 		reorder(state);
 		state.updatedAt = systemClock();
 		this.storage.writeFindings(review.id, state);

@@ -287,7 +287,7 @@ export type SubmitOutcome = {
 };
 
 type PostResult =
-	| { ok: true; commentId: number; url?: string }
+	| { ok: true; commentId: number; url?: string; threadId?: string }
 	| { ok: false; reason: string };
 
 type ReviewHandle = {
@@ -382,7 +382,10 @@ const ADD_THREAD_MUTATION = `mutation($review: ID!, $path: String!, $line: Int!,
 		side: RIGHT,
 		body: $body
 	}) {
-		thread { comments(first: 1) { nodes { databaseId resourcePath } } }
+		thread {
+			id
+			comments(first: 1) { nodes { id databaseId resourcePath } }
+		}
 	}
 }`;
 
@@ -491,7 +494,12 @@ function addReviewThread(
 	if (commentId === undefined) {
 		return { ok: false, reason: "resposta sem comentário." };
 	}
-	return { ok: true, commentId, url: githubUrl(comment?.resourcePath) };
+	return {
+		ok: true,
+		commentId,
+		url: githubUrl(comment?.resourcePath),
+		threadId: typeof thread?.id === "string" ? thread.id : undefined,
+	};
 }
 
 /** Finaliza a revisão pendente com o evento indicado e um corpo resumo. */
@@ -602,8 +610,16 @@ export function submitFindings(options: {
 		commentId: number,
 		url: string | undefined,
 		kind: "line" | "file" | "comment",
+		threadId?: string,
 	): void => {
-		finding.github = { commentId, url, kind, pr: target.number, at: now };
+		finding.github = {
+			commentId,
+			url,
+			kind,
+			pr: target.number,
+			at: now,
+			threadId,
+		};
 		finding.updatedAt = now;
 	};
 
@@ -672,7 +688,7 @@ export function submitFindings(options: {
 
 		const attempt = addReviewThread(runner, review.nodeId, finding, candidate.line);
 		if (attempt.ok) {
-			link(finding, attempt.commentId, attempt.url, "line");
+			link(finding, attempt.commentId, attempt.url, "line", attempt.threadId);
 			outcome.posted.push({
 				id: candidate.id,
 				kind: "line",
@@ -755,4 +771,216 @@ export function submitFindings(options: {
 	}
 
 	return outcome;
+}
+
+// ---------------------------------------------------------------------------
+// Resolução das threads (findings resolvidos localmente)
+// ---------------------------------------------------------------------------
+
+type ThreadInfo = { id: string; isResolved: boolean };
+
+/** Threads do PR indexadas pelo `databaseId` do comentário. */
+type ThreadsLookup =
+	| { ok: true; threads: Map<number, ThreadInfo> }
+	| { ok: false; reason: string };
+
+const THREADS_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+	repository(owner: $owner, name: $name) {
+		pullRequest(number: $number) {
+			reviewThreads(last: 100) {
+				nodes {
+					id
+					isResolved
+					comments(first: 50) { nodes { databaseId } }
+				}
+			}
+		}
+	}
+}`;
+
+const RESOLVE_THREAD_MUTATION = `mutation($thread: ID!) {
+	resolveReviewThread(input: { threadId: $thread }) {
+		thread { id isResolved }
+	}
+}`;
+
+/** Indexa as threads do PR por comentário (`databaseId`). */
+function lookupThreads(runner: GhRunner, target: PrTarget): ThreadsLookup {
+	const [owner, name] = target.repo.split("/");
+	if (!owner || !name) return { ok: false, reason: "repositório inválido." };
+
+	const result = runGraphql(runner, THREADS_QUERY, {
+		owner,
+		name,
+		number: target.number,
+	});
+	if (!result.ok) return result;
+
+	const repository = asRecord(result.data.repository);
+	const pullRequest = asRecord(repository?.pullRequest);
+	const reviewThreads = asRecord(pullRequest?.reviewThreads);
+	const threads = new Map<number, ThreadInfo>();
+	const nodes = Array.isArray(reviewThreads?.nodes) ? reviewThreads.nodes : [];
+	for (const value of nodes) {
+		const node = asRecord(value);
+		const id = typeof node?.id === "string" ? node.id : undefined;
+		if (!id) continue;
+		const isResolved = node?.isResolved === true;
+		const comments = asRecord(node?.comments);
+		const commentNodes = Array.isArray(comments?.nodes) ? comments.nodes : [];
+		for (const entry of commentNodes) {
+			const comment = asRecord(entry);
+			if (typeof comment?.databaseId === "number") {
+				threads.set(comment.databaseId, { id, isResolved });
+			}
+		}
+	}
+	return { ok: true, threads };
+}
+
+export type ThreadSyncOutcome = {
+	/** Findings com comentário de revisão avaliados. */
+	checked: number;
+	/** Threads resolvidas nesta execução. */
+	resolved: { id: string; threadId: string }[];
+	/** Já resolvidas no GitHub ou sem thread (ex.: comentário geral). */
+	skipped: { id: string; reason: string }[];
+	failed: { id: string; reason: string }[];
+	/** Ids cujo vínculo local mudou (`threadId`/`resolvedAt`) — persistir o estado. */
+	updated: string[];
+};
+
+/** Resultado do sync de alto nível (inclui indisponibilidade do `gh`/PR). */
+export type ResolvedThreadsSync = ThreadSyncOutcome & {
+	available: boolean;
+	reason?: string;
+};
+
+const EMPTY_THREAD_OUTCOME = (): ThreadSyncOutcome => ({
+	checked: 0,
+	resolved: [],
+	skipped: [],
+	failed: [],
+	updated: [],
+});
+
+/**
+ * Resolve no GitHub as conversas dos findings indicados, pulando as que já
+ * estão resolvidas. Muta `finding.github` (`threadId`/`resolvedAt`) para evitar
+ * reconsultas — o caller persiste o estado. Fail-open: devolve `failed`/`skipped`
+ * por finding, nunca lança.
+ */
+export function resolveFindingThreads(options: {
+	runner: GhRunner;
+	target: PrTarget;
+	findings: readonly FindingState[];
+	now?: string;
+}): ThreadSyncOutcome {
+	const { runner, target } = options;
+	const now = options.now ?? systemClock();
+	const outcome = EMPTY_THREAD_OUTCOME();
+
+	// Comentário geral (issue comment) não tem thread resolvível.
+	const linked = options.findings.filter(
+		(finding) => finding.github && finding.github.kind !== "comment",
+	);
+	outcome.checked = linked.length;
+	if (linked.length === 0) return outcome;
+
+	const lookup = lookupThreads(runner, target);
+	if (!lookup.ok) {
+		for (const finding of linked) {
+			outcome.failed.push({ id: finding.id, reason: lookup.reason });
+		}
+		return outcome;
+	}
+
+	const handled = new Set<string>();
+	const updated = new Set<string>();
+	const markUpdated = (id: string): void => {
+		if (updated.has(id)) return;
+		updated.add(id);
+		outcome.updated.push(id);
+	};
+	for (const finding of linked) {
+		const link = finding.github;
+		if (!link) continue;
+		const thread = lookup.threads.get(link.commentId);
+		if (!thread) {
+			outcome.skipped.push({
+				id: finding.id,
+				reason: "thread não encontrada no PR.",
+			});
+			continue;
+		}
+		if (handled.has(thread.id)) {
+			outcome.skipped.push({
+				id: finding.id,
+				reason: "mesma thread de outro finding.",
+			});
+			continue;
+		}
+		handled.add(thread.id);
+
+		if (link.threadId !== thread.id) {
+			link.threadId = thread.id;
+			markUpdated(finding.id);
+		}
+		if (thread.isResolved) {
+			if (!link.resolvedAt) {
+				link.resolvedAt = now;
+				markUpdated(finding.id);
+			}
+			outcome.skipped.push({ id: finding.id, reason: "já resolvida no GitHub." });
+			continue;
+		}
+
+		const result = runGraphql(runner, RESOLVE_THREAD_MUTATION, { thread: thread.id });
+		if (result.ok) {
+			link.resolvedAt = now;
+			finding.updatedAt = now;
+			markUpdated(finding.id);
+			outcome.resolved.push({ id: finding.id, threadId: thread.id });
+		} else {
+			outcome.failed.push({ id: finding.id, reason: result.reason });
+		}
+	}
+	return outcome;
+}
+
+/**
+ * Sincroniza as threads dos findings já resolvidos localmente (`done`):
+ * resolve o alvo via `gh pr view` e delega ao `resolveFindingThreads`.
+ * Fail-open — sem `gh`/login/PR devolve `available:false` sem lançar.
+ */
+export function syncResolvedThreads(options: {
+	state: FindingsStateFile;
+	ids: readonly string[];
+	runner?: GhRunner;
+	now?: string;
+}): ResolvedThreadsSync {
+	const runner = options.runner ?? defaultGhRunner;
+	const findings = options.ids
+		.map((id) => options.state.findings[id])
+		.filter(
+			(finding): finding is FindingState =>
+				Boolean(finding?.github) && finding?.github?.kind !== "comment",
+		);
+	if (findings.length === 0) return { available: true, ...EMPTY_THREAD_OUTCOME() };
+
+	const target = resolvePrTarget(runner, options.state.branch);
+	if (!target.ok) {
+		const outcome = EMPTY_THREAD_OUTCOME();
+		outcome.checked = findings.length;
+		return { available: false, reason: target.reason, ...outcome };
+	}
+	return {
+		available: true,
+		...resolveFindingThreads({
+			runner,
+			target: target.target,
+			findings,
+			now: options.now,
+		}),
+	};
 }

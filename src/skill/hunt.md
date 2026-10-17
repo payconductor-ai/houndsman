@@ -174,8 +174,9 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. 
 6. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` ao final
    (não bloqueiam)
 7. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
-   finding, preservados entre execuções
-
+   finding, preservados entre execuções9. Marca como **`done`** os findings que sumiram do relatório (corrigidos manualmente entre
+   revisões) e **resolve as conversas correspondentes no GitHub** — só as ainda abertas, e
+   falha-aberto (sem `gh`/PR o relatório segue igual)
 Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
 comandos `findings` levam do achado à correção.
 

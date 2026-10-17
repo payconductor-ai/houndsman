@@ -36,6 +36,7 @@ import {
 	type SubmitPreview,
 	type SubmitSelection,
 	submitFindings,
+	syncResolvedThreads,
 } from "../github-review";
 import { VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
@@ -214,6 +215,25 @@ function pingStatus(ctx: CommandContext, state: FindingsStateFile): void {
 	pingFindingsStatus(ctx.storage, ctx.review.id, state);
 }
 
+/**
+ * Resolve no GitHub as threads dos findings recém-resolvidos localmente.
+ * Fail-open (`gh` ausente/sem PR ⇒ só a mensagem). Devolve a linha para o
+ * output ou `null` quando não há vínculo remoto pendente.
+ */
+function syncThreadsOutput(ctx: CommandContext, ids: readonly string[]): string | null {
+	if (ids.length === 0) return null;
+	const state = loadState(ctx);
+	const outcome = syncResolvedThreads({ state, ids });
+	if (outcome.checked === 0) return null;
+	if (outcome.updated.length > 0) ctx.storage.writeFindings(ctx.review.id, state);
+	if (!outcome.available) {
+		return `GitHub: threads não sincronizadas (${outcome.reason}).`;
+	}
+	const failures =
+		outcome.failed.length > 0 ? `, ${outcome.failed.length} falha(s)` : "";
+	return `GitHub: ${outcome.resolved.length} thread(s) resolvida(s), ${outcome.skipped.length} já resolvida(s)/pulada(s)${failures}.`;
+}
+
 /** Aplica uma atualização a um finding e persiste. */
 function updateOne(
 	ctx: CommandContext,
@@ -309,10 +329,17 @@ function execute(
 			}
 			const finding = updateOne(ctx, input, update);
 			pingStatus(ctx, loadState(ctx));
+			const threads =
+				update.execState === "done" ? syncThreadsOutput(ctx, [finding.id]) : null;
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(finding, null, 2)
-					: `Atualizado: \`${finding.id}\` → ${finding.decision}/${finding.execState}.`,
+					: [
+							`Atualizado: \`${finding.id}\` → ${finding.decision}/${finding.execState}.`,
+							threads,
+						]
+							.filter(Boolean)
+							.join("\n"),
 				exitCode: 0,
 			};
 		}
@@ -320,8 +347,17 @@ function execute(
 			const ids = requireIds(parsed, "done");
 			const updated = updateMany(ctx, ids, { execState: "done" });
 			pingStatus(ctx, loadState(ctx));
+			const threads = syncThreadsOutput(
+				ctx,
+				updated.map((finding) => finding.id),
+			);
 			return {
-				output: `Marcados como done: ${updated.map((f) => f.id).join(", ")}.`,
+				output: [
+					`Marcados como done: ${updated.map((f) => f.id).join(", ")}.`,
+					threads,
+				]
+					.filter(Boolean)
+					.join("\n"),
 				exitCode: 0,
 			};
 		}
@@ -511,6 +547,9 @@ async function executeVerify(
 		pingStatus(ctx, current);
 	}
 
+	// Resolvidos localmente ⇒ resolve as conversas correspondentes no PR.
+	const threads = syncThreadsOutput(ctx, applied);
+
 	const output = parsed.bools.has("--json")
 		? JSON.stringify(
 				{
@@ -534,6 +573,7 @@ async function executeVerify(
 				parsed.bools.has("--apply")
 					? `Aplicados (done): ${applied.length > 0 ? applied.join(", ") : "—"}.`
 					: "",
+				threads,
 			]
 				.filter(Boolean)
 				.join("\n");
