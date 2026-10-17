@@ -100,54 +100,34 @@ O skill tem **4 capabilities**, todas em `/houndsman`:
 - **`fix`** — corrige os findings marcados (`/houndsman fix`).
 - **`verify`** — confere se as violações foram resolvidas (`/houndsman verify`), sem re-revisar.
 
-- Revisão normal: `/houndsman` ou `/houndsman hunt` (a branch é detectada; base default `main`).
+- Revisão normal: `/houndsman` ou `/houndsman hunt`.
 - Revisar outra branch: `/houndsman hunt feature/minha-branch`.
-- Validar e triar na UI: `houndsman server --open` — marque os achados a executar (`execute`).
+- Validar na UI: `houndsman server --open` — marque os findings a executar (`execute`).
 
 ---
 
-## Triando os findings (opcional)
+## Validando os findings (opcional)
 
-Depois do `--finalize`, cada finding tem um `id` curto e um `fingerprint` de **conteúdo**
-no storage global. Você decide o que fazer com cada um — pela
-**UI local** ou pelo **agente** (auto-fix) — sem abrir o JSON à mão:
+Você decide o que fazer com cada finding pela **UI local**, informando se quer `Executar` ou `Ignorar`
 
 ```bash
 bun run houndsman server --open     # UI: triar, comentar, marcar feito, ler artefatos
 ```
 
-- **decision:** `pending` · `execute` · `ignore` (+ comentário).
-- **execState:** `pending` · `in_progress` · `done` · `stale`.
-
-**Auto-fix pelo agente** — as linhas mudam depois do fix, e o motor reancora por conteúdo:
-
-```bash
-bun run houndsman findings batch --json     # grupo atual (agrupamento automático) + outros
-# ... o agente corrige apenas esse grupo ...
-bun run houndsman findings sync             # reancora por conteúdo
-bun run houndsman findings done <id>
-bun run houndsman findings verify           # confere o que resolveu (barato, sem re-revisar)
-```
-
-> A partir da 2ª revisão o `hunt` é **incremental**: revisa só os arquivos que mudaram desde
-> o último `--finalize` e **carrega** os findings dos arquivos inalterados. `--full` força
-> o review completo.
-
-> A identidade do finding é o **conteúdo** (fingerprint), não a linha: itens deslocados
-> pelo fix não se perdem. O estado mora no storage global (`<HOUNDSMAN_HOME>/houndsman.db`).
+> A partir da 2ª revisão o `hunt` é **incremental**: revisa apenas os arquivos que mudaram desde
+> a última revisão. `--full` força o review completo.
 
 ---
 
 ## Mantendo a configuração
 
 - **Persistência** → por default, SQLite global em `<HOUNDSMAN_HOME>/houndsman.db`
-  (`HOUNDSMAN_HOME` sobrescreve o diretório de dados). Para voltar ao backend de arquivos,
-  troque só o provider — a interface `StorageProvider` é a mesma:
+  (`HOUNDSMAN_HOME` sobrescreve o diretório de dados). Caso queira storage base em arquivos, na config, troque provider para `file`:
 
   ```ts
   export const houndsmanConfig = {
     // ...
-    storage: { provider: "file", path: "./houndsman-runs" },
+    storage: { provider: "file", path: "./houndsman/runs" },
   };
   ```
 
@@ -162,8 +142,6 @@ bun run houndsman findings verify           # confere o que resolveu (barato, se
 
   O `update` reescreve **só** `.houndsman/core/**` e `.houndsman/.gitignore`. Seus arquivos
   (`watchdogs/`, `exclusions.ts`, `doc-mappings.ts`, `houndsman.config.ts`) nunca são tocados.
-- **Recomeçar a camada do zero** → `houndsman setup --force` (sobrescreve só os arquivos do
-  usuário; sem `--force` o `setup` é idempotente).
 
 ---
 
