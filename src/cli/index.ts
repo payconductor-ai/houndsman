@@ -7,6 +7,9 @@
  * cwd) e orquestra funções/classes de `core/`. Não importa nenhum caminho do
  * projeto consumidor estaticamente.
  *
+ * Cada comando carrega seus módulos por import dinâmico (lazy) — o startup não
+ * paga por `server`, Jev (axios) ou `orchestrator` que o comando não usa.
+ *
  * Comandos:
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
  *   --finalize           Passo 3 — consolidar os findings em review.md
@@ -23,20 +26,9 @@
  *   `--config <path>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking`.
  */
 
-import { runContextCommand } from "../core/commands/context";
-import { runFindingsCommand, runVerifyCommand } from "../core/commands/findings";
-import { parseReviewArgs } from "../core/commands/review";
-import { runSetupCommand } from "../core/commands/setup";
-import { runLibTests } from "../core/commands/test";
-import { runUpdateCommand } from "../core/commands/update";
-import { renderWatchdogContext } from "../core/commands/watchdog";
 import { type HoundsmanConfig, resolveArtifactDir } from "../core/config";
 import { loadConfig } from "../core/config-loader";
-import { JevClient } from "../core/jev";
-import { finalize, prepare, resolveBranch } from "../core/orchestrator";
 import { relFromRoot } from "../core/paths";
-import { checkRegistry } from "../core/registry-check";
-import { startServer } from "../server";
 
 const HELP = `Uso: houndsman [comando] [flags]
 
@@ -85,7 +77,8 @@ function readFlag(args: string[], flag: string): string | undefined {
 }
 
 /** Passo 0 — contexto da PR via `gh`. */
-function runContext(config: HoundsmanConfig, args: string[]): void {
+async function runContext(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const { runContextCommand } = await import("../core/commands/context");
 	const { paths, context } = runContextCommand(config, {
 		branch: readFlag(args, "--branch"),
 		dir: readFlag(args, "--dir"),
@@ -114,6 +107,7 @@ function runContext(config: HoundsmanConfig, args: string[]): void {
 
 /** Valida a configuração do projeto e o ambiente. */
 async function runDoctor(config: HoundsmanConfig): Promise<void> {
+	const { checkRegistry } = await import("../core/registry-check");
 	console.log("→ Validando configuração do projeto...");
 	const { problems, warnings, jevQuestions } = checkRegistry(config);
 
@@ -142,6 +136,7 @@ async function runDoctor(config: HoundsmanConfig): Promise<void> {
  * Fail-open — nunca altera o exit code (`doctor` é diagnóstico).
  */
 async function reportJevCredential(): Promise<void> {
+	const { JevClient } = await import("../core/jev");
 	const client = new JevClient();
 	if (!client.isConfigured()) {
 		console.log("  ⚠️  TYPESAFE_API_KEY (opcional — pré-análise Jev)");
@@ -158,7 +153,8 @@ async function reportJevCredential(): Promise<void> {
 }
 
 /** Contexto de um watchdog. */
-function runWatchdog(config: HoundsmanConfig, args: string[]): void {
+async function runWatchdog(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const { renderWatchdogContext } = await import("../core/commands/watchdog");
 	const id = args.find((arg) => !arg.startsWith("-"));
 
 	if (!id || renderWatchdogContext(config, id) === null) {
@@ -185,6 +181,9 @@ function runWatchdog(config: HoundsmanConfig, args: string[]): void {
  * o JSON. O `verify` é assíncrono (consulta opcional ao Jev) — roteado à parte.
  */
 async function runFindings(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const { runFindingsCommand, runVerifyCommand } = await import(
+		"../core/commands/findings"
+	);
 	const sub = args.find((arg) => !arg.startsWith("-"));
 	const result =
 		sub === "verify"
@@ -213,7 +212,8 @@ function openBrowser(url: string): void {
 }
 
 /** Subcomando `server` — sobe a UI local de triagem. */
-function runServer(config: HoundsmanConfig, args: string[]): void {
+async function runServer(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const { startServer } = await import("../server");
 	const port = Number(readFlag(args, "--port")) || 7331;
 	const host = readFlag(args, "--host") ?? "127.0.0.1";
 	const { url } = startServer({ config, port, host });
@@ -224,6 +224,9 @@ function runServer(config: HoundsmanConfig, args: string[]): void {
 
 /** Passo 1/3 — preparar ou finalizar. */
 async function runReview(config: HoundsmanConfig, args: string[]): Promise<void> {
+	const [{ parseReviewArgs }, { finalize, prepare, resolveBranch }] = await Promise.all(
+		[import("../core/commands/review"), import("../core/orchestrator")],
+	);
 	const opts = parseReviewArgs(args, resolveArtifactDir(config));
 	const branch = resolveBranch(opts);
 
@@ -246,13 +249,16 @@ export async function main(): Promise<void> {
 	const rest = command ? argv.slice(1) : argv;
 
 	if (command === "test") {
+		const { runLibTests } = await import("../core/commands/test");
 		process.exit(runLibTests());
 	}
 	if (command === "setup") {
+		const { runSetupCommand } = await import("../core/commands/setup");
 		await runSetupCommand({ cwd: process.cwd(), args: rest });
 		return;
 	}
 	if (command === "update") {
+		const { runUpdateCommand } = await import("../core/commands/update");
 		await runUpdateCommand({ cwd: process.cwd(), args: rest });
 		return;
 	}
@@ -268,20 +274,20 @@ export async function main(): Promise<void> {
 
 	switch (command) {
 		case "context":
-			runContext(config, rest);
+			await runContext(config, rest);
 			return;
 		case "doctor":
 		case "check":
 			await runDoctor(config);
 			return;
 		case "watchdog":
-			runWatchdog(config, rest);
+			await runWatchdog(config, rest);
 			return;
 		case "findings":
 			await runFindings(config, rest);
 			return;
 		case "server":
-			runServer(config, rest);
+			await runServer(config, rest);
 			return;
 		case undefined:
 			await runReview(config, rest);

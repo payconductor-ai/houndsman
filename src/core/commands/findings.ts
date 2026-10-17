@@ -36,21 +36,13 @@ import {
 	syncState,
 } from "../findings-state";
 import { buildFixBatch, type FixBatchResult } from "../fix-batch";
-import { JevCandidatesStore, JevClient, JevVerifier } from "../jev";
 import { relFromRoot, VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
 import { pingFindingsStatus } from "../run-status";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "../types";
-import {
-	applyJev,
-	applyResolutions,
-	selectVerifiable,
-	summarizeVerify,
-	type VerifyEntry,
-	type VerifyStatus,
-	type VerifySummary,
-	verifyLocal,
-} from "../verify";
+// Tipos são apagados no transpile (custo zero). Os **valores** de `../verify` e de
+// `../jev` (axios) entram por import dinâmico — só o subcomando `verify` os usa.
+import type { VerifyEntry, VerifyStatus, VerifySummary } from "../verify";
 
 export type FindingsCommandResult = {
 	output: string;
@@ -542,6 +534,12 @@ async function executeVerify(
 	const { dir, branch } = resolveDir(config, parsed);
 	const store = FindingsStateStore.at(dir, branch);
 	const state = loadState(config, parsed);
+
+	// Lazy: `../verify` (leve) e `../jev` (axios) só entram no caminho do verify.
+	const [
+		{ selectVerifiable, verifyLocal, summarizeVerify, applyJev, applyResolutions },
+		{ JevCandidatesStore, JevClient, JevVerifier },
+	] = await Promise.all([import("../verify"), import("../jev")]);
 
 	const findings = selectVerifiable(state, filterFrom(parsed));
 	const entries = verifyLocal(findings, fileReader(process.cwd()));
