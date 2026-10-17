@@ -21,7 +21,7 @@ mudanças antes de push.
 | 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
 | 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog) |
-| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + `state.json` + `run.json` |
+| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + triagem/status no storage |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 > Depois do passo 3, a correção dos achados é a capability **`fix`** — ver `fix.md`.
@@ -70,14 +70,18 @@ leia o `context-brief.md` indicado na saída; siga as instruções e grave
 houndsman --base main
 ```
 
-Gera em `.houndsman/.runs/<branch-slug>/`:
+Grava os artefatos no **storage global** (SQLite em `<HOUNDSMAN_HOME>/houndsman.db`) e o
+staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 
 | Artefato | Conteúdo |
 |---|---|
-| `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) + churn |
-| `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) |
-| `briefs/<watchdog>.md` | Instruções prontas para cada subagente (arquivos por risco) |
-| `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento |
+| `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) + churn (storage) |
+| `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) (storage) |
+| `briefs/<watchdog>.md` | Instruções prontas para cada subagente (staging) |
+| `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento (storage) |
+
+> O prepare imprime o caminho absoluto do diretório de briefs e cada brief traz o
+> `outputPath` do JSON que o subagente deve gravar. Nada é gravado em `.houndsman/.runs`.
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).
@@ -111,7 +115,7 @@ as regras atômicas dos watchdogs. Respostas acima do limiar viram **candidatos*
 
 ### Review incremental (da 2ª revisão em diante)
 
-Cada `--finalize` grava o **commit revisado** (`reviewed.headSha` no `state.json`). No prepare
+Cada `--finalize` grava o **commit revisado** (`reviewedSha` da review no storage). No prepare
 seguinte, se o `HEAD` descende desse commit (sem rebase), o motor revisa **só o delta** — os
 arquivos alterados desde a última revisão — e **carrega** os findings dos arquivos inalterados
 (carry-over), sem re-revisá-los. O `manifest.json` traz o bloco `incremental` (`from`,
@@ -131,11 +135,11 @@ Um subagente por brief. Despache em **ondas** (ex.: até 8 subagentes por bloco 
 calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief:
 
 ```
-Leia e execute o brief: .houndsman/.runs/<branch-slug>/briefs/<watchdog-id>.md
+Leia e execute o brief: <caminho absoluto impresso pelo prepare>/briefs/<watchdog-id>.md
 Você é o watchdog <watchdog-id> do {{projectName}}.
 ```
 
-Cada subagente grava `findings/<watchdog-id>.json` (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
+Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
 Sem achados → `"findings": []` (arquivo obrigatório). Arquivos na seção **Fora do orçamento**
 não são lidos: registre-os em `skipped`.
 
@@ -150,17 +154,17 @@ não são lidos: registre-os em `skipped`.
 houndsman --finalize
 ```
 
-Falha com mensagem clara se faltar algum `findings/<watchdog>.json`. Quando todos existem:
+Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. Quando todos existem:
 1. Valida o schema de cada JSON
 2. Deduplica achados por `(file, line, rule)` mesclando watchdogs sobrepostos
 3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit
-4. Grava `.houndsman/.runs/<branch-slug>/review.md` + tabela de cobertura
+4. Grava o artefato `review.md` no storage + tabela de cobertura
 5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
 6. Agrupa os achados **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
 7. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
    (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
-8. Grava `.houndsman/.runs/<branch-slug>/state.json` — a **triagem**: um `id` curto e um
-   `fingerprint` de conteúdo por finding, preservados entre execuções
+8. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
+   finding, preservados entre execuções
 
 Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
 comandos `findings` levam do achado à correção.
@@ -212,15 +216,15 @@ houndsman context (gh)         ──►  context.json ──► subagente ─�
         ↓
 git diff --name-status (base...head)
         ↓
-[1] houndsman                  ──►  classification.json + candidates.json + briefs/ + manifest.json
+[1] houndsman                  ──►  storage (classification/candidates/manifest) + briefs/ no staging
         ↓
-[2] N subagentes em paralelo   ──►  findings/<watchdog>.json
+[2] N subagentes em paralelo   ──►  findings/<watchdog>.json no staging
         ↓
-[3] houndsman --finalize       ──►  review.md + state.json + run.json (review_done)
+[3] houndsman --finalize       ──►  review.md + triagem no storage (review_done)
         ↓
 [4] server (UI)                ──►  validar a revisão + marcar decision: execute
         ↓
-[5] fix                        ──►  correções + state.json/run.json (fix_done)
+[5] fix                        ──►  correções + triagem/status no storage (fix_done)
 ```
 
 ---
@@ -244,8 +248,12 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 
-Flags do review: `--base` · `--head` · `--branch` · `--dir` · `--clean` · `--full` (força
+Flags do review: `--base` · `--head` · `--branch` · `--clean` · `--full` (força
 completo) · `--no-jev` · `--fail-on-blocking` (com `--finalize`).
+
+> Persistência: SQLite global em `<HOUNDSMAN_HOME>/houndsman.db`. O staging dos subagentes
+> (`briefs/`, `findings/`, contexto) vive em `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo
+> depois do `--finalize`.
 
 ---
 

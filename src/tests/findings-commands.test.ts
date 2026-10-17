@@ -1,51 +1,106 @@
 import { describe, expect, test } from "bun:test";
-import {
-	existsSync,
-	mkdirSync,
-	mkdtempSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runFindingsCommand, runVerifyCommand } from "../core/commands/findings";
+import { buildStateFromFindings, fileReader } from "../core/findings-state";
+import {
+	dedupeFindings,
+	parseWatchdogReport,
+	type WatchdogReport,
+} from "../core/report-builder";
+import { buildRepoIdentity } from "../core/storage/repo-identity";
+import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
+import type { RepoIdentity } from "../core/storage/types";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
 
-/** Run fake em disco: classification.json + findings/alpha.json. */
-function makeRun(findings: unknown[]): { dir: string; cleanup: () => void } {
+/** Ambiente temporário: banco + review semeada com os findings informados. */
+type Env = {
+	storage: SQLiteStorageProvider;
+	repo: RepoIdentity;
+	reviewId: string;
+	dir: string;
+	cleanup: () => void;
+};
+
+let activeEnv: Env | null = null;
+
+function makeRun(reports: WatchdogReport[], branch = "main"): Env {
 	const dir = mkdtempSync(join(tmpdir(), "houndsman-findings-"));
-	const outDir = join(dir, "main");
-	mkdirSync(join(outDir, "findings"), { recursive: true });
-	writeFileSync(
-		join(outDir, "classification.json"),
-		JSON.stringify({ watchdogs: { alpha: ["src/alpha/f.ts"] } }),
+	const storage = new SQLiteStorageProvider(join(dir, "houndsman.db"));
+	const repo = buildRepoIdentity(null, dir);
+	const review = storage.getOrCreateReview({ repo, branch, slug: branch });
+	const state = buildStateFromFindings(dedupeFindings(reports), {
+		branch,
+		readFile: fileReader(process.cwd()),
+	});
+	storage.writeFindings(review.id, state);
+	const env: Env = {
+		storage,
+		repo,
+		reviewId: review.id,
+		dir,
+		cleanup: () => {
+			storage.close();
+			rmSync(dir, { recursive: true, force: true });
+		},
+	};
+	activeEnv = env;
+	return env;
+}
+
+function reportOf(
+	watchdogId: string,
+	findings: unknown[],
+	files: string[],
+): WatchdogReport {
+	const report = parseWatchdogReport(
+		{ watchdogId, reviewedFiles: files, skipped: [], findings },
+		`${watchdogId}.json`,
 	);
-	writeFileSync(
-		join(outDir, "findings", "alpha.json"),
-		JSON.stringify({
-			watchdogId: "alpha",
-			reviewedFiles: ["src/alpha/f.ts"],
-			skipped: [],
-			findings,
-		}),
-	);
-	return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+	if (!report) throw new Error("relatório de teste inválido");
+	return report;
 }
 
 const ONE_FINDING = [
-	{
-		rule: "Nunca usar any",
-		severity: "blocking",
-		file: "src/alpha/f.ts",
-		line: 2,
-		message: "any detectado",
-		action: "tipar",
-	},
+	reportOf(
+		"alpha",
+		[
+			{
+				rule: "Nunca usar any",
+				severity: "blocking",
+				file: "src/alpha/f.ts",
+				line: 2,
+				message: "any detectado",
+				action: "tipar",
+			},
+		],
+		["src/alpha/f.ts"],
+	),
 ];
 
+/** Remove `--dir` (flag extinta) dos args legados usados nos testes. */
+function stripDir(args: string[]): string[] {
+	const out: string[] = [];
+	for (let i = 0; i < args.length; i++) {
+		if (args[i] === "--dir") {
+			i++;
+			continue;
+		}
+		out.push(args[i]);
+	}
+	return out;
+}
+
+/** Executa o comando contra o ambiente ativo. */
 function run(args: string[]) {
-	return runFindingsCommand(fakeHoundsmanConfig, args);
+	if (!activeEnv) throw new Error("makeRun não foi chamado");
+	return runFindingsCommand(
+		fakeHoundsmanConfig,
+		activeEnv.storage,
+		activeEnv.repo,
+		stripDir(args),
+	);
 }
 
 describe("findings command", () => {
@@ -196,11 +251,18 @@ describe("findings command", () => {
 			expect(missing.output).toContain("não encontrado");
 
 			const empty = mkdtempSync(join(tmpdir(), "houndsman-empty-"));
+			const emptyStorage = new SQLiteStorageProvider(join(empty, "db.sqlite"));
 			try {
-				const absent = run(["list", "--dir", empty, "--branch", "main"]);
+				const absent = runFindingsCommand(
+					fakeHoundsmanConfig,
+					emptyStorage,
+					buildRepoIdentity(null, empty),
+					["list", "--branch", "main"],
+				);
 				expect(absent.exitCode).toBe(1);
 				expect(absent.output).toContain("--finalize");
 			} finally {
+				emptyStorage.close();
 				rmSync(empty, { recursive: true, force: true });
 			}
 		} finally {
@@ -208,13 +270,14 @@ describe("findings command", () => {
 		}
 	});
 
-	test("path devolve o caminho do state.json", () => {
+	test("path devolve a referência do storage", () => {
 		const run0 = makeRun(ONE_FINDING);
 		try {
 			run(["list", "--dir", run0.dir, "--branch", "main"]);
 			const result = run(["path", "--dir", run0.dir, "--branch", "main"]);
 			expect(result.exitCode).toBe(0);
-			expect(result.output.replace(/\\/g, "/")).toContain("main/state.json");
+			expect(result.output).toContain("sqlite:");
+			expect(result.output).toContain(run0.reviewId);
 		} finally {
 			run0.cleanup();
 		}
@@ -232,20 +295,10 @@ describe("findings command", () => {
 	});
 
 	test("batch agrupa a fila e devolve o grupo atual + outros grupos", () => {
-		const dir = mkdtempSync(join(tmpdir(), "houndsman-batch-"));
-		const outDir = join(dir, "main");
-		mkdirSync(join(outDir, "findings"), { recursive: true });
-		writeFileSync(
-			join(outDir, "classification.json"),
-			JSON.stringify({ watchdogs: { alpha: ["src/a.ts"], beta: ["src/b.ts"] } }),
-		);
-		writeFileSync(
-			join(outDir, "findings", "alpha.json"),
-			JSON.stringify({
-				watchdogId: "alpha",
-				reviewedFiles: ["src/a.ts"],
-				skipped: [],
-				findings: [
+		const env = makeRun([
+			reportOf(
+				"alpha",
+				[
 					{
 						rule: "R1",
 						severity: "blocking",
@@ -279,15 +332,11 @@ describe("findings command", () => {
 						action: "a",
 					},
 				],
-			}),
-		);
-		writeFileSync(
-			join(outDir, "findings", "beta.json"),
-			JSON.stringify({
-				watchdogId: "beta",
-				reviewedFiles: ["src/b.ts"],
-				skipped: [],
-				findings: [
+				["src/a.ts"],
+			),
+			reportOf(
+				"beta",
+				[
 					{
 						rule: "R5",
 						severity: "attention",
@@ -305,26 +354,16 @@ describe("findings command", () => {
 						action: "a",
 					},
 				],
-			}),
-		);
+				["src/b.ts"],
+			),
+		]);
 		try {
-			const list = JSON.parse(
-				run(["list", "--dir", dir, "--branch", "main", "--json"]).output,
-			);
+			const list = JSON.parse(run(["list", "--branch", "main", "--json"]).output);
 			for (const item of list) {
-				run([
-					"set",
-					item.id,
-					"--decision",
-					"execute",
-					"--dir",
-					dir,
-					"--branch",
-					"main",
-				]);
+				run(["set", item.id, "--decision", "execute", "--branch", "main"]);
 			}
 
-			const result = run(["batch", "--dir", dir, "--branch", "main", "--json"]);
+			const result = run(["batch", "--branch", "main", "--json"]);
 			expect(result.exitCode).toBe(0);
 			const parsed = JSON.parse(result.output);
 			expect(parsed.dimension).toBe("file");
@@ -336,7 +375,7 @@ describe("findings command", () => {
 				expect.objectContaining({ key: "file:src/b.ts", count: 2 }),
 			]);
 
-			const markdown = run(["batch", "--dir", dir, "--branch", "main"]);
+			const markdown = run(["batch", "--branch", "main"]);
 			expect(markdown.output).toContain("Grupo atual");
 			expect(markdown.output).toContain("Outros grupos");
 
@@ -344,25 +383,23 @@ describe("findings command", () => {
 				"batch",
 				"--group",
 				"file:src/b.ts",
-				"--dir",
-				dir,
 				"--branch",
 				"main",
 				"--json",
 			]);
 			expect(JSON.parse(scoped.output).current.key).toBe("file:src/b.ts");
 		} finally {
-			rmSync(dir, { recursive: true, force: true });
+			env.cleanup();
 		}
 	});
 
-	test("mutações fazem ping no run.json (status)", () => {
+	test("mutações fazem ping no status da review", () => {
 		const run0 = makeRun(ONE_FINDING);
 		try {
 			const id = JSON.parse(
 				run(["list", "--dir", run0.dir, "--branch", "main", "--json"]).output,
 			)[0].id;
-			const runJson = join(run0.dir, "main", "run.json");
+			const status = () => run0.storage.getReview(run0.reviewId)?.status;
 
 			run([
 				"set",
@@ -374,7 +411,7 @@ describe("findings command", () => {
 				"--branch",
 				"main",
 			]);
-			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("review_done");
+			expect(status()).toBe("review_done");
 
 			run([
 				"set",
@@ -386,10 +423,10 @@ describe("findings command", () => {
 				"--branch",
 				"main",
 			]);
-			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("fixing");
+			expect(status()).toBe("fixing");
 
 			run(["done", id, "--dir", run0.dir, "--branch", "main"]);
-			expect(JSON.parse(readFileSync(runJson, "utf8")).status).toBe("fix_done");
+			expect(status()).toBe("fix_done");
 		} finally {
 			run0.cleanup();
 		}
@@ -400,55 +437,44 @@ describe("findings verify", () => {
 	const FILE = "src/tests/fixtures/fake-project.ts";
 
 	/** Run fake apontando para um arquivo real (relativo ao cwd → âncora resolvível). */
-	function makeVerifyRun(): { dir: string; outDir: string; cleanup: () => void } {
-		const dir = mkdtempSync(join(tmpdir(), "houndsman-verify-"));
-		const outDir = join(dir, "main");
-		mkdirSync(join(outDir, "findings"), { recursive: true });
-		writeFileSync(
-			join(outDir, "classification.json"),
-			JSON.stringify({ watchdogs: { alpha: [FILE] } }),
+	function makeVerifyRun(): Env {
+		return makeRun(
+			[
+				reportOf(
+					"alpha",
+					[
+						{
+							rule: "regra",
+							severity: "attention",
+							file: FILE,
+							line: 1,
+							message: "msg",
+							action: "ação",
+						},
+					],
+					[FILE],
+				),
+			],
+			"main",
 		);
-		writeFileSync(
-			join(outDir, "findings", "alpha.json"),
-			JSON.stringify({
-				watchdogId: "alpha",
-				reviewedFiles: [FILE],
-				skipped: [],
-				findings: [
-					{
-						rule: "regra",
-						severity: "attention",
-						file: FILE,
-						line: 1,
-						message: "msg",
-						action: "ação",
-					},
-				],
-			}),
-		);
-		return {
-			dir,
-			outDir,
-			cleanup: () => rmSync(dir, { recursive: true, force: true }),
-		};
 	}
 
 	test("reporta persisting e grava o verify.md (tier local)", async () => {
 		const run0 = makeVerifyRun();
 		try {
-			const result = await runVerifyCommand(fakeHoundsmanConfig, [
-				"verify",
-				"--dir",
-				run0.dir,
-				"--branch",
-				"main",
-				"--json",
-			]);
+			const result = await runVerifyCommand(
+				fakeHoundsmanConfig,
+				run0.storage,
+				run0.repo,
+				["verify", "--branch", "main", "--json"],
+			);
 			expect(result.exitCode).toBe(0);
 			const parsed = JSON.parse(result.output);
 			expect(parsed.summary.persisting).toBe(1);
 			expect(parsed.entries[0].basis).toBe("anchor");
-			expect(existsSync(join(run0.outDir, "verify.md"))).toBe(true);
+			expect(
+				run0.storage.readArtifact(run0.reviewId, "verify.md")?.content,
+			).toContain("# Verificação");
 		} finally {
 			run0.cleanup();
 		}
@@ -457,17 +483,13 @@ describe("findings verify", () => {
 	test("sem --apply não altera o estado", async () => {
 		const run0 = makeVerifyRun();
 		try {
-			await runVerifyCommand(fakeHoundsmanConfig, [
+			await runVerifyCommand(fakeHoundsmanConfig, run0.storage, run0.repo, [
 				"verify",
-				"--dir",
-				run0.dir,
 				"--branch",
 				"main",
 			]);
-			const state = JSON.parse(
-				readFileSync(join(run0.outDir, "state.json"), "utf8"),
-			) as { findings: Record<string, { execState: string }> };
-			const only = Object.values(state.findings)[0];
+			const state = run0.storage.readFindings(run0.reviewId);
+			const only = Object.values(state?.findings ?? {})[0];
 			expect(only.execState).toBe("pending");
 		} finally {
 			run0.cleanup();

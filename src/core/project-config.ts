@@ -2,17 +2,16 @@
  * Configuração do projeto (domínio) — resolve defaults e expõe o registry.
  *
  * Evita o "data clump" de passar `HoundsmanConfig` para dezenas de funções:
- * quem precisa de `artifactDir`/orçamento/concorrência/watchdogs pede aqui.
+ * quem precisa de orçamento/concorrência/watchdogs pede aqui.
  * O contrato do consumidor (`houndsman.config.ts`) não muda.
  */
 
-import type { HoundsmanConfig } from "./config";
+import type { HoundsmanConfig, HoundsmanStorage } from "./config";
 import {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 } from "./defaults";
-import { ARTIFACT_DIR } from "./paths";
 import { WatchdogRegistry } from "./watchdog-registry";
 
 /** Configuração resolvida do projeto. */
@@ -29,8 +28,8 @@ export class ProjectConfig<TId extends string = string> {
 		return this.raw.projectName;
 	}
 
-	get artifactDir(): string {
-		return this.raw.artifactDir ?? ARTIFACT_DIR;
+	get storage(): HoundsmanStorage {
+		return this.raw.storage ?? {};
 	}
 
 	get maxFilesPerBrief(): number {

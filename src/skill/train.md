@@ -118,7 +118,7 @@ Cada informação tem o seu campo — não espelhe a regra em vários lugares:
 |---|---|
 | `.houndsman/watchdogs/<id>.ts` | **Fonte de verdade**: `defineWatchdog` com `rules` (severidade + texto), `scope`, `description`, `reviewFocus`, `exclude`, `breakingChange`, `contextFiles`, `classify` |
 | `.houndsman/watchdogs/index.ts` | `WATCHDOG_DEFINITIONS` — as **chaves definem os ids** (`WatchdogId`); `watchdogIds` é derivado |
-| `houndsman.config.ts` | `houndsmanConfig` do projeto — `projectName`, `artifactDir`, `watchdogs`, `exclusions`, `docMappings` (descoberto em runtime) |
+| `houndsman.config.ts` | `houndsmanConfig` do projeto — `projectName`, `storage`, `watchdogs`, `exclusions`, `docMappings` (descoberto em runtime) |
 | `.houndsman/exclusions.ts` | `EXCLUSION_PATTERNS` + `isExcluded` |
 | `.houndsman/doc-mappings.ts` | `DOC_MAPPINGS` (path → docs) |
 | `.houndsman/core/types.ts` | Snapshot gerado dos tipos + helpers (autocontido) |

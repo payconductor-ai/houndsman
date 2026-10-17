@@ -1150,13 +1150,16 @@ describe("jev-candidates", () => {
 
 describe("parseReviewArgs", () => {
 	test("lê flags de valor e booleanas", () => {
-		const opts = parseReviewArgs(
-			["--base", "develop", "--branch", "feature/x", "--finalize", "--clean"],
-			"tmp/artifacts",
-		);
+		const opts = parseReviewArgs([
+			"--base",
+			"develop",
+			"--branch",
+			"feature/x",
+			"--finalize",
+			"--clean",
+		]);
 		expect(opts.base).toBe("develop");
 		expect(opts.branch).toBe("feature/x");
-		expect(opts.dir).toBe("tmp/artifacts");
 		expect(opts.finalize).toBe(true);
 		expect(opts.clean).toBe(true);
 		expect(opts.failOnBlocking).toBe(false);

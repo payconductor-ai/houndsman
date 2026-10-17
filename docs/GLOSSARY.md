@@ -39,28 +39,29 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 
 ## 3. Artefatos da revisão
 
-Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
+Runs, findings e artefatos ficam no **storage global** (`<HOUNDSMAN_HOME>/houndsman.db`). O
+staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 
 | Termo | Significado |
 | --- | --- |
-| **branch-slug** | Branch com `/` → `-` e minúscula; nomeia a pasta da execução (`feature/x` → `feature-x`). |
+| **branch-slug** | Branch com `/` → `-` e minúscula; identifica a run na URL da UI (`feature/x` → `feature-x`). |
 | **`classification.json`** | Classificação: watchdogs ativados por arquivo, status (A/M/D/R) e churn. |
 | **`brief`** | O documento de instruções do watchdog (escopo, regras, docs, arquivos, candidatos). Renderizado por `renderBrief`. |
-| **`briefs/<id>.md`** | O brief gravado em disco — o prompt do subagente. |
-| **`findings/<id>.json`** | Achados **daquele** watchdog (schema em `OUTPUT-FORMAT.md`). |
+| **`briefs/<id>.md`** | O brief no staging global — o prompt do subagente. |
+| **`findings/<id>.json`** | Achados **daquele** watchdog no staging (schema em `OUTPUT-FORMAT.md`). |
 | **finding / achado** | Uma violação: `rule`, `severity`, `file`, `line?`, `message`, `action`, `evidence?`. |
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
-| **`state.json`** | Estado de triagem dos findings da run (ids, decisão, execução, histórico) — ver seção 11. |
-| **`run.json`** | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + `startedAt`/`updatedAt` — exibido na UI; ver seção 11. |
+| **registro de review** | Identidade (repo/branch), commit revisado, status (`reviewing`/`review_done`/`fixing`/`fix_done`) e timestamps. |
+| **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 11. |
 | **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 11. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
 | **`context-brief.md`** | Instruções para o subagente que resume o contexto. |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
 | **`OUTPUT-FORMAT.md`** | Contrato do JSON de saída do watchdog — o **único** output consumido pelo pipeline. |
-| **`artifactDir`** | Pasta-raiz dos artefatos (default `.houndsman/.runs`). |
+| **`storage`** | `{ provider: "sqlite" \| "file", path? }` — default SQLite global. |
 
 ## 4. Campos de `classification.json` e `manifest.json`
 
@@ -169,7 +170,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **`houndsman findings <sub>`** | Triagem/correção dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`batch`/`path`). |
 | **`houndsman server`** | UI local de triagem e leitura de artefatos (`--port`, `--host`, `--open`). |
 | **`--base` / `--head`** | Extremos do diff (default `main` / `HEAD`). |
-| **`--branch` / `--dir`** | Branch alvo / pasta de artefatos. |
+| **`--branch`** | Branch alvo. |
 | **`--clean`** | Descarta findings anteriores antes de preparar. |
 | **`--fail-on-blocking`** | Exit `1` se houver `blocking` no `--finalize`. |
 | **`--config <path>`** | Sobrepõe a descoberta do `houndsman.config.*`. |
@@ -178,7 +179,7 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 
 | Termo | Significado |
 | --- | --- |
-| **finding id** | Id curto aleatório de um finding, persistido no `state.json` e exibido no `review.md`. |
+| **finding id** | Id curto aleatório de um finding (aceita prefixo único no CLI), persistido no storage e exibido no `review.md`. |
 | **fingerprint** | Hash de `arquivo + regra + âncora` — identidade **estável** entre re-execuções do `--finalize`. |
 | **âncora (anchor)** | Linha ofensora normalizada + contexto (linha anterior/seguinte). A `line` é **cache**, não identidade. |
 | **line drift** | Deslocamento de linhas após um auto-fix; resolvido reancorando por conteúdo (`findings sync`). |
@@ -191,10 +192,10 @@ Tudo em `.houndsman/.runs/<branch-slug>/` (default de `artifactDir`).
 | **fila de correção** | Findings `decision: execute` ainda não `done` (presentes) — base do `fix`. |
 | **lote (`findings batch`)** | Grupo atual paginado + lista dos demais grupos — unidade de trabalho do `fix`. |
 | **escopo de correção** | Eixo de agrupamento do lote (`file`/`rule`/`watchdog`), escolhido automaticamente pela coesão da fila. |
-| **run status** | `reviewing` → `review_done` → `fixing` → `fix_done` (em `run.json`). Toda ação mutante faz um **ping** (`updatedAt`); a UI deriva *timeout* de `updatedAt` (display-only, não é status). |
+| **run status** | `reviewing` → `review_done` → `fixing` → `fix_done` (na review). Toda ação mutante faz um **ping** (`updatedAt`); a UI deriva *timeout* de `updatedAt` (display-only, não é status). |
 | **review incremental** | Prepare que revisa só o delta `reviewed.headSha..HEAD` (arquivos alterados) e carrega o resto (carry-over). |
 | **carry-over** | Findings de arquivos inalterados preservados sem re-revisão (id/`foundAtSha` mantidos). |
-| **`reviewed.headSha`** | Commit da última revisão (em `state.json`) — base do incremental e do diff focado do verify. |
+| **`reviewedSha`** | Commit da última revisão (na review do storage) — base do incremental e do diff focado do verify. |
 | **`foundAtSha`** | Commit em que o achado foi observado (por finding) — base do diff focado do verify. |
 | **verify / `findings verify`** | Confere se as violações foram resolvidas sem re-revisar: tier local (reancoragem) + Jev nos ambíguos. |
 | **tier local / tier Jev** | As duas camadas do verify: a local é grátis e determinística; a do Jev confirma só os casos ambíguos. |

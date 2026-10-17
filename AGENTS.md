@@ -20,6 +20,8 @@ projeto **autocontida**), carregada em runtime.
 
 - **Runtime:** Bun (obrigatório). O `bin` usa shebang `#!/usr/bin/env bun`.
 - **Deps de produção:** `axios` (cliente da pré-análise Jev) e `preact` (UI do `server`).
+- **Persistência:** SQLite global via `bun:sqlite` (sem lib extra) em `<HOUNDSMAN_HOME>`;
+  backend de arquivos disponível por config. Nada de execução vive no projeto.
 - **Publicação:** npm público, escopo da org (`@payconductor/houndsman`).
 
 ## Comandos
@@ -69,7 +71,8 @@ src/
 │   ├── orchestrator.ts      # prepare/finalize (delegam ao engine/renderers)
 │   ├── arg-parser.ts        # ArgParser compartilhado (core + cli)
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
-│   ├── findings-state.ts    # Finding/FindingsState + FindingsRepository (I/O)
+│   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
+│   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
 │   ├── report-builder.ts    # dedupe/render do relatório (funções puras)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE (funções puras)
 │   ├── verify.ts            # verificação de findings (tier local + Jev)
@@ -125,12 +128,18 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
 - **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`
   (arquivo + regra + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é cache,
   recalculada por `syncState`. Não volte a chavear por `(file, line)`.
-- O estado de triagem (`state.json`) é **local** e vive na pasta da run (`.runs/<slug>/`) —
-  já coberto pelo `.gitignore` gerado. O `server` só vincula em `127.0.0.1` (sem auth).
-- O **commit revisado** é a base do incremental e do verify: `state.json` → `reviewed.headSha`
-  (run) e `foundAtSha` (por finding). O prepare incremental revisa só `reviewed.headSha..HEAD`
-  e carrega o resto; o `findings verify` compara contra esse commit fixado — nunca contra um
-  `HEAD` arbitrário.
+- A persistência é **centralizada** em `core/storage/`. Nenhum módulo grava runs/findings/
+  artefatos em disco por conta própria: use o `StorageProvider` (SQLite default; `file` é o
+  fallback). O diretório global é `<HOUNDSMAN_HOME>` (OS data dir ou env override).
+- O staging dos subagentes (`briefs/`, `findings/`, contexto) vive em
+  `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo após o `--finalize`. O `server` só vincula em
+  `127.0.0.1` (sem auth) e roda `PRAGMA optimize` + `VACUUM` no start (fail-open).
+- O **commit revisado** é a base do incremental e do verify: `reviewedSha` (review) e
+  `foundAtSha` (por finding). O prepare incremental revisa só `reviewedSha..HEAD` e carrega o
+  resto; o `findings verify` compara contra esse commit fixado — nunca contra um `HEAD`
+  arbitrário.
+- Assinatura de findings: PK UUID no banco, `short_id` (10 hex) como identidade de exibição.
+  Comandos que aceitam id resolvem prefixo único; a linha nunca é identidade.
 
 ## Convenções
 

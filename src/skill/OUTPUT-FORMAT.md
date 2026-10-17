@@ -1,20 +1,22 @@
 # Formato de Saída dos Watchdogs
 
 Todo watchdog DEVE gravar **um arquivo JSON** com seus achados. O `report-builder.ts`
-consolida os JSONs em `.houndsman/.runs/<branch-slug>/review.md`.
+consolida os JSONs no artefato `review.md` do storage global.
 
 > **Não** escrever markdown livre no chat. O único output consumido pelo pipeline é o JSON.
 
 ## Caminho do arquivo
 
-O caminho exato é informado no brief do watchdog (gerado por `houndsman`):
+O caminho exato é informado no brief do watchdog (gerado por `houndsman`). Ele aponta para o
+staging global da review:
 
 ```
-.houndsman/.runs/<branch-slug>/findings/<watchdogId>.json
+<HOUNDSMAN_HOME>/work/<reviewId>/findings/<watchdogId>.json
 ```
 
-- `<branch-slug>`: branch com `/` substituído por `-` (ex.: `feature/x` → `feature-x`).
+- `<reviewId>`: UUID da review (estável entre prepare/finalize).
 - `<watchdogId>`: id do watchdog (ex.: `backend-architecture`).
+- Use exatamente o `outputPath` do brief — não invente caminhos.
 
 ## Schema
 

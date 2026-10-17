@@ -1,30 +1,31 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { HoundsmanConfig } from "../core/config";
+import { buildStateFromFindings, fileReader } from "../core/findings-state";
+import { dedupeFindings, parseWatchdogReport } from "../core/report-builder";
+import { buildRepoIdentity } from "../core/storage/repo-identity";
+import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
+import type { RepoIdentity } from "../core/storage/types";
 import { createRequestHandler, startServer } from "../server";
-import { readRunFile, runDirForSlug } from "../server/artifacts";
+import { isSlug } from "../server/artifacts";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
 
-/** Run fake em disco + config apontando para ela. */
+/** Ambiente fake: banco temporário + review `main` com um finding. */
 function makeEnv(): {
-	artifactDir: string;
+	storage: SQLiteStorageProvider;
+	repo: RepoIdentity;
+	reviewId: string;
 	config: HoundsmanConfig;
 	cleanup: () => void;
 } {
-	const artifactDir = mkdtempSync(join(tmpdir(), "houndsman-server-"));
-	const outDir = join(artifactDir, "main");
-	mkdirSync(join(outDir, "findings"), { recursive: true });
-	writeFileSync(join(outDir, "manifest.json"), JSON.stringify({ branch: "main" }));
-	writeFileSync(
-		join(outDir, "classification.json"),
-		JSON.stringify({ watchdogs: { alpha: ["src/alpha/f.ts"] } }),
-	);
-	writeFileSync(join(outDir, "review.md"), "# Review\n");
-	writeFileSync(
-		join(outDir, "findings", "alpha.json"),
-		JSON.stringify({
+	const dir = mkdtempSync(join(tmpdir(), "houndsman-server-"));
+	const storage = new SQLiteStorageProvider(join(dir, "houndsman.db"));
+	const repo = buildRepoIdentity(null, dir);
+	const review = storage.getOrCreateReview({ repo, branch: "main", slug: "main" });
+	const report = parseWatchdogReport(
+		{
 			watchdogId: "alpha",
 			reviewedFiles: ["src/alpha/f.ts"],
 			skipped: [],
@@ -38,48 +39,44 @@ function makeEnv(): {
 					action: "tipar",
 				},
 			],
-		}),
+		},
+		"alpha.json",
 	);
+	if (report) {
+		const state = buildStateFromFindings(dedupeFindings([report]), {
+			branch: "main",
+			readFile: fileReader(process.cwd()),
+		});
+		// O arquivo fake não existe no cwd → sem âncora. Fixa a linha para o
+		// cenário de comentário inline no teste de submit.
+		for (const finding of Object.values(state.findings)) finding.line = 2;
+		storage.writeFindings(review.id, state);
+	}
+	storage.writeArtifact(review.id, {
+		name: "manifest.json",
+		kind: "manifest",
+		content: JSON.stringify({ branch: "main" }),
+	});
+	storage.writeArtifact(review.id, {
+		name: "classification.json",
+		kind: "classification",
+		content: JSON.stringify({ watchdogs: { alpha: ["src/alpha/f.ts"] } }),
+	});
+	storage.writeArtifact(review.id, {
+		name: "review.md",
+		kind: "review",
+		content: "# Review\n",
+	});
 	return {
-		artifactDir,
-		config: { ...fakeHoundsmanConfig, artifactDir },
-		cleanup: () => rmSync(artifactDir, { recursive: true, force: true }),
+		storage,
+		repo,
+		reviewId: review.id,
+		config: fakeHoundsmanConfig,
+		cleanup: () => {
+			storage.close();
+			rmSync(dir, { recursive: true, force: true });
+		},
 	};
-}
-
-/** Semeia um `state.json` com um finding inline (tem linha) na run. */
-function seedState(artifactDir: string, branch: string): void {
-	writeFileSync(
-		join(artifactDir, branch, "state.json"),
-		JSON.stringify({
-			version: 2,
-			branch,
-			slug: branch,
-			updatedAt: "2026-01-01T00:00:00.000Z",
-			order: ["f1"],
-			findings: {
-				f1: {
-					id: "f1",
-					fingerprint: "fp1",
-					watchdogIds: ["alpha"],
-					rule: "Nunca usar any",
-					severity: "blocking",
-					file: "src/alpha/f.ts",
-					line: 2,
-					message: "any detectado",
-					action: "tipar",
-					anchor: null,
-					count: 1,
-					present: true,
-					decision: "pending",
-					execState: "pending",
-					createdAt: "2026-01-01T00:00:00.000Z",
-					updatedAt: "2026-01-01T00:00:00.000Z",
-					history: [],
-				},
-			},
-		}),
-	);
 }
 
 const get = (handler: (r: Request) => Promise<Response>, path: string) =>
@@ -89,7 +86,7 @@ describe("server API", () => {
 	test("GET /api/runs lista as runs com resumo", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const res = await get(handler, "/api/runs");
 			expect(res.status).toBe(200);
 			const body = (await res.json()) as {
@@ -106,7 +103,7 @@ describe("server API", () => {
 	test("GET findings reconstrói do artefato e PATCH atualiza o estado", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const list = await get(handler, "/api/runs/main/findings?all=1");
 			const body = (await list.json()) as {
 				findings: { id: string; decision: string }[];
@@ -148,7 +145,7 @@ describe("server API", () => {
 	test("PATCH expõe o run status em /api/runs", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const before = (await (await get(handler, "/api/runs")).json()) as {
 				runs: { status: string | null }[];
 			};
@@ -178,7 +175,7 @@ describe("server API", () => {
 	test("POST sync devolve o resultado da reancoragem", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			await get(handler, "/api/runs/main/findings?all=1");
 			const res = await handler(
 				new Request("http://localhost/api/runs/main/sync", { method: "POST" }),
@@ -195,6 +192,8 @@ describe("server API", () => {
 		const env = makeEnv();
 		try {
 			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
 				ghRunner: () => ({
 					ok: true,
 					code: 0,
@@ -224,8 +223,9 @@ describe("server API", () => {
 	test("POST submit posta comentários e grava o vínculo no estado", async () => {
 		const env = makeEnv();
 		try {
-			seedState(env.artifactDir, "main");
 			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
 				ghRunner: (args) =>
 					args[0] === "pr"
 						? {
@@ -276,7 +276,7 @@ describe("server API", () => {
 	test("artifacts serve arquivos da run e barra o resto", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const ok = await get(handler, "/api/runs/main/artifacts/manifest.json");
 			expect(ok.status).toBe(200);
 			expect(await ok.json()).toEqual({ branch: "main" });
@@ -295,23 +295,17 @@ describe("server API", () => {
 		}
 	});
 
-	test("readRunFile barra path traversal", () => {
-		const env = makeEnv();
-		try {
-			const dir = runDirForSlug(env.artifactDir, "main");
-			expect(dir).not.toBeNull();
-			expect(readRunFile(dir as string, "../../../etc/passwd")).toBeNull();
-			expect(readRunFile(dir as string, "manifest.json")).toContain("main");
-			expect(runDirForSlug(env.artifactDir, "../main")).toBeNull();
-		} finally {
-			env.cleanup();
-		}
+	test("valida o slug usado nas rotas", () => {
+		expect(isSlug("main")).toBe(true);
+		expect(isSlug("feature-x")).toBe(true);
+		expect(isSlug("../main")).toBe(false);
+		expect(isSlug("a/b")).toBe(false);
 	});
 
 	test("GET / serve o shell e /assets/app.js empacota o cliente", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const shell = await get(handler, "/");
 			expect(await shell.text()).toContain('id="app"');
 
@@ -328,7 +322,7 @@ describe("server API", () => {
 	test("serve sem cache (no-store) e busta o bundle com um build id", async () => {
 		const env = makeEnv();
 		try {
-			const handler = createRequestHandler(env.config);
+			const handler = createRequestHandler(env.config, env);
 			const shell = await get(handler, "/");
 			expect(shell.headers.get("cache-control")).toContain("no-store");
 			expect(await shell.text()).toContain("/assets/app.js?v=");
@@ -346,7 +340,12 @@ describe("startServer", () => {
 		const env = makeEnv();
 		let server: ReturnType<typeof startServer>["server"] | undefined;
 		try {
-			const started = startServer({ config: env.config, port: 0 });
+			const started = startServer({
+				config: env.config,
+				port: 0,
+				storage: env.storage,
+				repo: env.repo,
+			});
 			server = started.server;
 			const res = await fetch(`${started.url}/api/health`);
 			expect(res.status).toBe(200);

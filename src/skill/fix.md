@@ -4,7 +4,7 @@
 > (`.agents/skills/houndsman/SKILL.md` e `.claude/skills/houndsman/SKILL.md`).
 
 Corrige os achados de uma revisão **já finalizada** (`hunt`): lê a triagem, aplica as
-correções marcadas e mantém o estado de triagem em dia — **sem editar o `state.json` à mão**.
+correções marcadas e mantém o estado de triagem em dia — **sem editar o banco à mão**.
 
 Invocação: `/houndsman fix`. Não revisa nem altera regras; consome o que o `hunt` produziu.
 
@@ -15,8 +15,8 @@ Invocação: `/houndsman fix`. Não revisa nem altera regras; consome o que o `h
   `findings set <id> --decision execute`.
 - "Corrija os findings", "aplica as correções", "resolve os bloqueantes".
 
-> **Pré-requisito:** existe `.houndsman/.runs/<branch-slug>/state.json` da run atual
-> (gerado no `--finalize`). Se não existir, a revisão não foi finalizada — rode o `hunt` antes.
+> **Pré-requisito:** existe uma review com findings no storage global (gerada no
+> `--finalize`). Se não existir, a revisão não foi finalizada — rode o `hunt` antes.
 > A triagem (`execute`) é feita na UI (`bun run houndsman server --open`) ou via `findings set`,
 > e é o que alimenta a fila de correção.
 
@@ -153,7 +153,7 @@ Subagente serve para **isolar contexto**, não para paralelizar. Regras:
   colidem.
 - O subagente recebe **só** o grupo atual (findings + arquivo) e devolve um resumo compacto
   (ids corrigidos / não corrigidos + motivo). Assim o agente principal não carrega o arquivo.
-- A escrita do `state.json` fica **centralizada no agente principal**: o subagente apenas
+- A escrita da triagem fica **centralizada no agente principal**: o subagente apenas
   lê/edita; `sync` / `done` / `set` são do orquestrador. Nada de `findings` dentro do subagente.
 - Grupos pequenos (1–2 findings) o próprio agente corrige inline.
 
@@ -196,7 +196,7 @@ Arquivo: <file>
 
 - ❌ Carregar a fila inteira de uma vez (`findings list` sem filtro) — use `findings batch`.
 - ❌ Corrigir vários grupos em paralelo (subagentes simultâneos sobre arquivos que se relacionam).
-- ❌ Editar `.houndsman/.runs/<slug>/state.json` à mão — use os comandos `findings`.
+- ❌ Editar o banco/storage à mão — use os comandos `findings`.
 - ❌ Corrigir findings `pending` ou `ignore` sem o usuário marcar `execute`.
 - ❌ Chavear por `(file, line)` — a confiança é o **fingerprint** de conteúdo.
 - ❌ Correção cosmética para "sumir" com o finding sem atender a `rule`.

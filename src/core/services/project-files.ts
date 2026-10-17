@@ -6,7 +6,14 @@
  * manter o comportamento fail-open do motor.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
 /** Leitor de arquivos relativos à raiz do projeto (injetável nos testes). */
@@ -65,6 +72,11 @@ export class ProjectFiles {
 	/** Cria o diretório (recursivo). */
 	ensureDir(path: string): void {
 		mkdirSync(this.resolve(path), { recursive: true });
+	}
+
+	/** Remove um diretório (recursivo, best-effort). */
+	removeDir(path: string): void {
+		rmSync(this.resolve(path), { recursive: true, force: true });
 	}
 
 	/** `true` se o caminho existe. */

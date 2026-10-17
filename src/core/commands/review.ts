@@ -6,24 +6,23 @@
 
 import { ArgParser } from "../arg-parser";
 import { defaultOptions, type ReviewOptions } from "../orchestrator";
-import { ARTIFACT_DIR } from "../paths";
 
 /** Converte argv (sem o subcomando) nas opções de prepare/finalize. */
-export function parseReviewArgs(
-	args: string[],
-	artifactDir: string = ARTIFACT_DIR,
-): ReviewOptions {
+export function parseReviewArgs(args: string[]): ReviewOptions {
 	const parser = ArgParser.from(args);
-	const opts = defaultOptions(artifactDir);
+	if (parser.has("--dir")) {
+		throw new Error(
+			"--dir foi removido; configure `storage` no houndsman.config.ts.",
+		);
+	}
+	const opts = defaultOptions();
 
 	const base = parser.value("--base");
 	const head = parser.value("--head");
 	const branch = parser.value("--branch");
-	const dir = parser.value("--dir");
 	if (base) opts.base = base;
 	if (head) opts.head = head;
 	if (branch) opts.branch = branch;
-	if (dir) opts.dir = dir;
 
 	if (parser.has("--finalize") || parser.has("--report-only")) opts.finalize = true;
 	if (parser.has("--fail-on-blocking")) opts.failOnBlocking = true;

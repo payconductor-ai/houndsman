@@ -5,7 +5,7 @@
  * **do usuário**:
  *
  *   .houndsman/
- *   ├── .gitignore          AUTO — ignora core/ e .runs/ (gerados/temporários)
+ *   ├── .gitignore          AUTO — ignora core/ (gerado)
  *   ├── core/types.ts       AUTO — snapshot dos tipos + helpers
  *   ├── core/skill/*.md     AUTO — docs do skill (com {{projectName}} resolvido)
  *   ├── watchdogs/*.ts      USUÁRIO
@@ -16,13 +16,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { SKILL_DIR, SKILL_FILE } from "../assets";
-import {
-	ARTIFACT_DIR,
-	CORE_DIR,
-	CORE_SKILL_DIR,
-	OUTPUT_FORMAT_PATH,
-	PROJECT_DIR,
-} from "../paths";
+import { CORE_DIR, CORE_SKILL_DIR, OUTPUT_FORMAT_PATH, PROJECT_DIR } from "../paths";
 
 export type Harness = "agents" | "claude";
 
@@ -87,9 +81,9 @@ import type { HoundsmanConfig } from "./${CORE_DIR}/types";
 /**
  * Configuração do houndsman para ${projectName}.
  *
- * Caminhos são resolvidos pela camada: artefatos em ${ARTIFACT_DIR} e schema de
- * output em ${OUTPUT_FORMAT_PATH}. Ajuste watchdogs, exclusões e mapeamentos de
- * docs conforme o projeto.
+ * Runs, findings e artefatos vivem no storage global (SQLite por default) —
+ * fora do projeto. O schema de output fica em ${OUTPUT_FORMAT_PATH}. Ajuste
+ * watchdogs, exclusões e mapeamentos de docs conforme o projeto.
  */
 export const houndsmanConfig = {
 	projectName: "${projectName}",
@@ -182,10 +176,16 @@ export type HoundsmanConcurrency = {
 	jev?: number;
 };
 
+/** Backend de persistência (reviews, findings e artefatos). */
+export type HoundsmanStorage = {
+	provider?: "sqlite" | "file";
+	path?: string;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
-	artifactDir?: string;
+	storage?: HoundsmanStorage;
 	watchdogIds?: readonly TId[];
 	watchdogs: Record<TId, WatchdogDefinition>;
 	exclusions: readonly RegExp[];
@@ -267,10 +267,9 @@ export function isExcluded(filePath: string): boolean {
 const DOC_MAPPINGS_TEMPLATE = `/**
  * Mapeamento de padrões nos paths → documentação relevante.
  * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
- */
-export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
-	[/^src\\//, ["AGENTS.md"]],
-];
+ */\`core/\` é regenerado por \`houndsman update\`.
+# Runs, findings e artefatos vivem no storage global (fora do projeto).
+core
 `;
 
 const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`

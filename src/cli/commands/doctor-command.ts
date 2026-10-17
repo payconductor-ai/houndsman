@@ -1,6 +1,7 @@
 /** Comando `doctor` (alias `check`) — valida config, ambiente e credencial Jev. */
 
 import { checkRegistry } from "../../core/registry-check";
+import { storageLocation } from "../../core/storage/paths";
 import type { CliContext, Command } from "./command";
 
 export class DoctorCommand implements Command {
@@ -28,6 +29,10 @@ export class DoctorCommand implements Command {
 		context.out("\n→ Ambiente:");
 		context.out(`  ${Bun.which("git") ? "✅" : "❌"} git`);
 		context.out(`  ${Bun.which("gh") ? "✅" : "⚠️ "} gh (opcional — contexto da PR)`);
+		context.out("\n→ Persistência:");
+		context.out(`  provider: ${engine.storage.kind}`);
+		context.out(`  ${storageLocation(engine.config)}`);
+		context.out(`  repo: ${engine.repo.key}`);
 		await this.reportJevCredential(context);
 		return 0;
 	}

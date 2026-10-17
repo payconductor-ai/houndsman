@@ -52,6 +52,22 @@ export class GitRepository {
 		return branch.length > 0 ? branch : null;
 	}
 
+	/** Raiz do repositório; `null` fora de um repo git. */
+	rootPath(): string | null {
+		const result = this.tryRun(["rev-parse", "--show-toplevel"]);
+		if (!result.ok) return null;
+		const root = result.stdout.trim();
+		return root.length > 0 ? root : null;
+	}
+
+	/** URL de um remote (default `origin`); `null` se ausente. */
+	remoteUrl(name = "origin"): string | null {
+		const result = this.tryRun(["remote", "get-url", name]);
+		if (!result.ok) return null;
+		const url = result.stdout.trim();
+		return url.length > 0 ? url : null;
+	}
+
 	/**
 	 * `true` se `ancestor` é ancestral de `descendant`. Qualquer outro desfecho
 	 * (ref desconhecida, exit ≠ 0) devolve `false` — cai no review completo.

@@ -16,10 +16,20 @@ export class FindingsCommand implements Command {
 		const sub = ArgParser.from(args).command();
 		const result =
 			sub === "verify"
-				? await runVerifyCommand(engine.config, args)
+				? await runVerifyCommand(engine.config, engine.storage, engine.repo, args)
 				: sub === "submit"
-					? await runSubmitCommand(engine.config, args)
-					: runFindingsCommand(engine.config, args);
+					? await runSubmitCommand(
+							engine.config,
+							engine.storage,
+							engine.repo,
+							args,
+						)
+					: runFindingsCommand(
+							engine.config,
+							engine.storage,
+							engine.repo,
+							args,
+						);
 
 		if (result.exitCode !== 0) context.err(result.output);
 		else context.out(result.output);

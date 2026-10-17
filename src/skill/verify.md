@@ -4,15 +4,15 @@
 > (`.agents/skills/houndsman/SKILL.md` e `.claude/skills/houndsman/SKILL.md`).
 
 Confere se os findings de uma revisão **já finalizada** foram resolvidos — **sem re-revisar a
-PR**. Invocação: `/houndsman verify`. Consome o `state.json` do `hunt`; não revisa nem altera
-regras.
+PR**. Invocação: `/houndsman verify`. Consome a triagem persistida pelo `hunt`; não revisa nem
+altera regras.
 
 **Quando usar:**
 
 - Depois de corrigir achados (`fix`), para confirmar que as violações sumiram.
 - As violações foram resolvidas? · confere se ainda está lá · valida o fix.
 
-> **Pré-requisito:** existe `.houndsman/.runs/<branch-slug>/state.json` (gerado no `--finalize`).
+> **Pré-requisito:** existe uma review com findings persistidos (gerada no `--finalize`).
 
 ---
 
@@ -38,10 +38,10 @@ completa.
 ```bash
 bun run houndsman findings verify            # relatório (não altera o estado)
 bun run houndsman findings verify --json     # saída estruturada
-bun run houndsman findings verify --apply    # marca os resolvidos como done (ping no run.json)
+bun run houndsman findings verify --apply    # marca os resolvidos como done (ping no status)
 ```
 
-- Sem `--apply`: **só relatório** (grava `verify.md` na pasta da run). Nada muda no `state.json`.
+- Sem `--apply`: **só relatório** (grava o artefato `verify.md` no storage). Nada muda na triagem.
 - Com `--apply`: os findings com status **`resolved`** viram `execState: done` (histórico
   `by: "verify"`). `persisting` e `uncertain` **não** são tocados.
 

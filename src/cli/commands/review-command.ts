@@ -1,7 +1,6 @@
 /** Comando default — prepara ou finaliza a revisão. */
 
 import { parseReviewArgs } from "../../core/commands/review";
-import { resolveArtifactDir } from "../../core/config";
 import type { CliContext, Command } from "./command";
 
 export class ReviewCommand implements Command {
@@ -9,7 +8,7 @@ export class ReviewCommand implements Command {
 
 	async run(args: string[], context: CliContext): Promise<number> {
 		const engine = await context.engine();
-		const options = parseReviewArgs(args, resolveArtifactDir(engine.config));
+		const options = parseReviewArgs(args);
 		const result = await engine.session(options).run();
 
 		for (const message of result.messages) context.out(message);

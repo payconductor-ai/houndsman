@@ -1,9 +1,9 @@
 /**
  * Servidor local do houndsman (`Bun.serve`) — UI de triagem + artefatos.
  *
- * Serve um SPA Preact (bundle em memória) + uma API JSON sobre o `state.json`
- * das runs em `.houndsman/.runs/`. Sem dependências além do Bun e do Preact.
- * Bind padrão em `127.0.0.1` — ferramenta local, sem autenticação.
+ * Serve um SPA Preact (bundle em memória) + uma API JSON sobre o storage global
+ * (SQLite por default), escopada ao repositório do cwd. Sem dependências além do
+ * Bun e do Preact. Bind padrão em `127.0.0.1` — ferramenta local, sem autenticação.
  */
 
 import { mediaPath } from "../core/assets";
@@ -14,6 +14,9 @@ import {
 	type GhRunner,
 	type SubmitSelection,
 } from "../core/github-review";
+import { createStorage } from "../core/storage/factory";
+import { resolveRepoIdentity } from "../core/storage/repo-identity";
+import type { RepoIdentity, StorageProvider } from "../core/storage/types";
 import { buildClientBundle } from "./client-build";
 import { RunRepository } from "./run-repository";
 
@@ -53,7 +56,11 @@ function notFound(detail = "não encontrado"): Response {
 // ---------------------------------------------------------------------------
 
 /** Repositório das runs (dados) — ver `run-repository.ts`. */
-type ServerDeps = { ghRunner?: GhRunner };
+type ServerDeps = {
+	ghRunner?: GhRunner;
+	storage?: StorageProvider;
+	repo?: RepoIdentity;
+};
 
 // ---------------------------------------------------------------------------
 // Rotas
@@ -152,7 +159,10 @@ export class HoundsmanServer {
 	private readonly ghRunner: GhRunner;
 
 	constructor(config: HoundsmanConfig, deps: ServerDeps = {}) {
-		this.runs = RunRepository.fromConfig(config);
+		this.runs = new RunRepository(
+			deps.storage ?? createStorage(config),
+			deps.repo ?? resolveRepoIdentity(),
+		);
 		this.ghRunner = deps.ghRunner ?? defaultGhRunner;
 	}
 
@@ -173,10 +183,25 @@ export class HoundsmanServer {
 		server: BunServer;
 		url: string;
 	} {
+		// Manutenção do banco no start: compacta o que sobrou de runs antigas.
+		try {
+			this.runs.maintain();
+		} catch (error) {
+			console.warn(
+				`[houndsman] VACUUM falhou (seguindo sem compactar): ${
+					error instanceof Error ? error.message : String(error)
+				}`,
+			);
+		}
 		const host = options.host ?? "127.0.0.1";
 		const port = options.port ?? 7331;
 		const server = Bun.serve({ hostname: host, port, fetch: this.handler });
 		return { server, url: `http://${host}:${server.port}` };
+	}
+
+	/** Fecha o provider (após `server.stop()`). */
+	dispose(): void {
+		this.runs.dispose();
 	}
 }
 
@@ -194,11 +219,18 @@ export type ServerOptions = {
 	host?: string;
 	/** Runner do `gh` (injetável nos testes). */
 	ghRunner?: GhRunner;
+	/** Provider/storage injetável (testes). */
+	storage?: StorageProvider;
+	repo?: RepoIdentity;
 };
 
 /** Sobe o servidor e devolve a instância + URL. */
 export function startServer(options: ServerOptions): { server: BunServer; url: string } {
-	return new HoundsmanServer(options.config, { ghRunner: options.ghRunner }).start({
+	return new HoundsmanServer(options.config, {
+		ghRunner: options.ghRunner,
+		storage: options.storage,
+		repo: options.repo,
+	}).start({
 		port: options.port,
 		host: options.host,
 	});

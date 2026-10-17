@@ -1,19 +1,20 @@
 /**
  * Subcomando `context` — coleta o contexto da PR via `gh` (Passo 0).
  *
- * Biblioteca: grava os artefatos e devolve os dados; o CLI faz o log/exit.
+ * Biblioteca: grava no staging da review + artefato no storage; o CLI faz o
+ * log/exit.
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { type HoundsmanConfig, resolveArtifactDir } from "../config";
+import type { HoundsmanConfig } from "../config";
 import {
-	type ContextPaths,
 	collectPrContext,
-	contextPaths,
 	currentBranch,
 	type PrContextRaw,
 	renderContextBrief,
 } from "../pr-context";
+import { sanitizeBranch } from "../report-builder";
+import type { RepoIdentity, StorageProvider } from "../storage/types";
+import { type ContextPaths, ReviewWorkArea } from "../storage/work-area";
 
 export type ContextRunResult = {
 	paths: ContextPaths;
@@ -22,18 +23,27 @@ export type ContextRunResult = {
 
 /** Coleta a PR atual e grava `context.json` + `context-brief.md`. */
 export function runContextCommand(
-	config: HoundsmanConfig,
-	opts: { branch?: string; dir?: string } = {},
+	_config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
+	opts: { branch?: string } = {},
 ): ContextRunResult {
 	const branch = opts.branch ?? currentBranch();
-	const dir = opts.dir ?? resolveArtifactDir(config);
-	const paths = contextPaths(dir, branch);
-
-	mkdirSync(paths.dir, { recursive: true });
+	const review = storage.getOrCreateReview({
+		repo,
+		branch,
+		slug: sanitizeBranch(branch),
+	});
+	const work = new ReviewWorkArea(review);
+	const paths = work.contextPaths;
 
 	const context = collectPrContext(branch);
-	writeFileSync(paths.context, `${JSON.stringify(context, null, 2)}\n`);
-	writeFileSync(paths.brief, `${renderContextBrief(context, branch, paths)}\n`);
+	work.writeContext(context, renderContextBrief(context, branch, paths));
+	storage.writeArtifact(review.id, {
+		name: "context.json",
+		kind: "context",
+		content: `${JSON.stringify(context, null, 2)}\n`,
+	});
 
 	return { paths, context };
 }

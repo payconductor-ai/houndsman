@@ -26,13 +26,16 @@ import {
 	writeUserLayer,
 } from "../core/commands/scaffold";
 import { defineHoundsmanConfig } from "../core/config";
-import { defaultOptions, finalize, prepare } from "../core/orchestrator";
+import { defaultOptions, finalize, prepare, reviewContext } from "../core/orchestrator";
+import { displayPath } from "../core/paths";
 import {
 	type MergedFinding,
 	renderDomainReport,
 	renderReport,
 	type WatchdogReport,
 } from "../core/report-builder";
+import { resolveRepoIdentity } from "../core/storage/repo-identity";
+import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 import { defineWatchdog } from "../core/types";
 import * as facade from "../index";
 
@@ -56,7 +59,6 @@ const baselineWatchdog = defineWatchdog({
 
 const baselineConfig = defineHoundsmanConfig({
 	projectName: "Baseline",
-	artifactDir: ".houndsman/.runs",
 	watchdogs: { alpha: baselineWatchdog },
 	exclusions: [/^dist\//],
 	docMappings: [[/^src\//, ["README.md"]]],
@@ -75,6 +77,10 @@ function normalizeArtifacts(text: string): string {
 			'"$1": "<timestamp>"',
 		)
 		.replace(/"\d{4}-\d{2}-\d{2}T[^"]*"/g, '"<timestamp>"')
+		.replace(
+			/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g,
+			"<uuid>",
+		)
 		.replace(/\b[0-9a-f]{40}\b/g, "<sha>")
 		.replace(/\b[0-9a-f]{16}\b/g, "<fingerprint>")
 		.replace(/\b[0-9a-f]{10}\b/g, "<id>")
@@ -128,7 +134,7 @@ describe("baseline — brief", () => {
 			overflow: ["src/alpha/c.ts"],
 			deleted: ["src/alpha/old.ts"],
 			branch: "feature/x",
-			outputPath: ".houndsman/.runs/feature-x/findings/alpha.json",
+			outputPath: "/workspace/work/review-x/findings/alpha.json",
 			outputFormatPath: ".houndsman/core/skill/OUTPUT-FORMAT.md",
 			docs: ["AGENTS.md", "README.md"],
 			context: {
@@ -317,6 +323,8 @@ describe("baseline — artefatos de prepare/finalize", () => {
 	test("gera classification, brief, manifest, review e state", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "houndsman-baseline-run-"));
 		const originalCwd = process.cwd();
+		const originalHome = process.env.HOUNDSMAN_HOME;
+		let storage: SQLiteStorageProvider | null = null;
 
 		try {
 			git(cwd, ["init", "-b", "main"]);
@@ -343,30 +351,55 @@ describe("baseline — artefatos de prepare/finalize", () => {
 			git(cwd, ["commit", "-m", "change"]);
 
 			const opts = {
-				...defaultOptions(".houndsman/.runs"),
+				...defaultOptions(),
 				base,
 				head: "HEAD",
 				noJev: true,
 			};
 
+			process.env.HOUNDSMAN_HOME = join(cwd, ".home");
 			process.chdir(cwd);
 
-			const prepared = await prepare(opts, "main", baselineConfig);
-			expect(normalizeArtifacts(prepared.messages.join("\n"))).toMatchSnapshot();
+			const config = {
+				...baselineConfig,
+				storage: {
+					provider: "sqlite" as const,
+					path: join(cwd, "houndsman.db"),
+				},
+			};
+			storage = new SQLiteStorageProvider(join(cwd, "houndsman.db"));
+			const repo = resolveRepoIdentity();
+			const review = storage.getOrCreateReview({
+				repo,
+				branch: "main",
+				slug: "main",
+			});
+			const ctx = reviewContext(storage, review);
+			const homeDisplay = displayPath(cwd);
+			const escapedCwd = cwd.replace(/\\/g, "\\\\");
+			const normalize = (text: string): string =>
+				normalizeArtifacts(
+					text
+						.replaceAll(escapedCwd, "<cwd>")
+						.replaceAll(cwd, "<cwd>")
+						.replaceAll(cwd.replace(/\\/g, "/"), "<cwd>")
+						.replaceAll(cwd.replace(/\\/g, "/").toLowerCase(), "<cwd>")
+						.replaceAll(homeDisplay, "<cwd>"),
+				);
 
-			const runDir = join(cwd, ".houndsman", ".runs", "main");
-			for (const file of [
-				"classification.json",
-				"manifest.json",
-				"briefs/alpha.md",
-			]) {
-				expect(
-					normalizeArtifacts(readFileSync(join(runDir, file), "utf8")),
-				).toMatchSnapshot(file);
+			const prepared = await prepare(opts, "main", config, ctx);
+			expect(normalize(prepared.messages.join("\n"))).toMatchSnapshot();
+
+			for (const name of ["classification.json", "manifest.json"]) {
+				const artifact = storage.readArtifact(review.id, name);
+				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);
 			}
+			expect(
+				normalize(readFileSync(ctx.work.briefFile("alpha"), "utf8")),
+			).toMatchSnapshot("briefs/alpha.md");
 
 			writeFileSync(
-				join(runDir, "findings", "alpha.json"),
+				ctx.work.findingFile("alpha"),
 				`${JSON.stringify(
 					{
 						watchdogId: "alpha",
@@ -389,21 +422,24 @@ describe("baseline — artefatos de prepare/finalize", () => {
 				)}\n`,
 			);
 
-			const finalized = finalize(opts, "main", baselineConfig);
-			expect(normalizeArtifacts(finalized.messages.join("\n"))).toMatchSnapshot();
+			const finalized = finalize(opts, "main", config, ctx);
+			expect(normalize(finalized.messages.join("\n"))).toMatchSnapshot();
 
-			for (const file of [
-				"review.md",
-				"review.alpha.md",
-				"state.json",
-				"run.json",
-			]) {
-				expect(
-					normalizeArtifacts(readFileSync(join(runDir, file), "utf8")),
-				).toMatchSnapshot(file);
+			for (const name of ["review.md", "review.alpha.md"]) {
+				const artifact = storage.readArtifact(review.id, name);
+				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);
 			}
+			expect(
+				normalize(JSON.stringify(storage.readFindings(review.id), null, 2)),
+			).toMatchSnapshot("state.json");
+			expect(
+				normalize(JSON.stringify(storage.getReview(review.id), null, 2)),
+			).toMatchSnapshot("run.json");
 		} finally {
+			storage?.close();
 			process.chdir(originalCwd);
+			if (originalHome === undefined) delete process.env.HOUNDSMAN_HOME;
+			else process.env.HOUNDSMAN_HOME = originalHome;
 			rmSync(cwd, { recursive: true, force: true });
 		}
 	}, 30_000);
@@ -433,12 +469,19 @@ const REQUIRED_EXPORTS = [
 	"GitRepository",
 	"ProjectConfig",
 	"ProjectFiles",
-	"RunLayout",
 	"Watchdog",
 	"WatchdogRegistry",
 	"systemClock",
 	"HoundsmanServer",
 	"HoundsmanEngine",
+	"ReviewWorkArea",
+	"SQLiteStorageProvider",
+	"FileStorageProvider",
+	"createStorage",
+	"createMemoryStorage",
+	"resolveRepoIdentity",
+	"buildRepoIdentity",
+	"normalizeRemote",
 	"ReviewSession",
 	"ReviewScopeResolver",
 	"buildCarryover",
@@ -447,7 +490,6 @@ const REQUIRED_EXPORTS = [
 	"ArgParser",
 	"ProjectScaffolder",
 	"FixBatchBuilder",
-	"Verifier",
 	"BriefRenderer",
 	"ReportRenderer",
 	"ManifestWriter",
@@ -455,7 +497,6 @@ const REQUIRED_EXPORTS = [
 	"assetPath",
 	"buildAnchor",
 	"buildStateFromFindings",
-	"buildStateFromRunDir",
 	"checkRegistry",
 	"churnOf",
 	"classifyEntries",
@@ -492,14 +533,12 @@ const REQUIRED_EXPORTS = [
 	"resolveConfigPath",
 	"resolveJevConcurrency",
 	"resolveMaxFilesPerBrief",
-	"runDir",
 	"runFindingsCommand",
 	"runVerifyCommand",
 	"selectByBudget",
 	"severityRank",
 	"sortByRisk",
 	"startServer",
-	"stateFile",
 	"summarize",
 	"syncState",
 ] as const;

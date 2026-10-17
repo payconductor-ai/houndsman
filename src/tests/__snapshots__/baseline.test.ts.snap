@@ -4,7 +4,7 @@ exports[`baseline — brief defaultRenderBrief (contexto, churn, overflow, candi
 "# Brief — Alpha (\`alpha\`)
 
 **Branch:** feature/x
-**Output obrigatório:** \`.houndsman/.runs/feature-x/findings/alpha.json\`
+**Output obrigatório:** \`/workspace/work/review-x/findings/alpha.json\`
 **Schema do output:** \`.houndsman/core/skill/OUTPUT-FORMAT.md\`
 
 ## Objetivo
@@ -382,10 +382,16 @@ export type HoundsmanConcurrency = {
 	jev?: number;
 };
 
+/** Backend de persistência (reviews, findings e artefatos). */
+export type HoundsmanStorage = {
+	provider?: "sqlite" | "file";
+	path?: string;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
-	artifactDir?: string;
+	storage?: HoundsmanStorage;
 	watchdogIds?: readonly TId[];
 	watchdogs: Record<TId, WatchdogDefinition>;
 	exclusions: readonly RegExp[];
@@ -412,10 +418,9 @@ export function defineHoundsmanConfig<TId extends string>(
 "/**
  * Mapeamento de padrões nos paths → documentação relevante.
  * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
- */
-export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
-	[/^src\\//, ["AGENTS.md"]],
-];
+ */\`core/\` é regenerado por \`houndsman update\`.
+# Runs, findings e artefatos vivem no storage global (fora do projeto).
+core
 "
 ,
   ".houndsman/exclusions.ts": 
@@ -486,9 +491,9 @@ import type { HoundsmanConfig } from "./.houndsman/core/types";
 /**
  * Configuração do houndsman para acme.
  *
- * Caminhos são resolvidos pela camada: artefatos em .houndsman/.runs e schema de
- * output em .houndsman/core/skill/OUTPUT-FORMAT.md. Ajuste watchdogs, exclusões e mapeamentos de
- * docs conforme o projeto.
+ * Runs, findings e artefatos vivem no storage global (SQLite por default) —
+ * fora do projeto. O schema de output fica em .houndsman/core/skill/OUTPUT-FORMAT.md. Ajuste
+ * watchdogs, exclusões e mapeamentos de docs conforme o projeto.
  */
 export const houndsmanConfig = {
 	projectName: "acme",
@@ -511,15 +516,15 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "3c6f261de0ca6d31",
+    "sha256": "06aedccd5688aaa8",
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "7cc26ec5e1917a62",
+    "sha256": "0b9bf28cd4d95f40",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "5d6a4b56b1033970",
+    "sha256": "7ce23b97d9609ac2",
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
@@ -527,31 +532,31 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/fix.md",
-    "sha256": "f16c0383ad1767fb",
+    "sha256": "9f10b2d846dc7db5",
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "7e7d7e5535381b9b",
+    "sha256": "f69365e1592ad9dc",
   },
   {
     "file": ".houndsman/core/skill/train.md",
-    "sha256": "564a1fd38d8e4836",
+    "sha256": "d774215c68d15159",
   },
   {
     "file": ".houndsman/core/skill/verify.md",
-    "sha256": "f8fcf8e12b142482",
+    "sha256": "7ae6e1ca8bf0a868",
   },
 ]
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 1`] = `
 "Discovery: 1 watchdog(s) ativado(s), 3 arquivo(s), 1 deletado(s).
-Briefs: .houndsman/.runs/main/briefs/
+Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
 Jev: pulado (desativado (--no-jev)).
 Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
 
-Próximo passo: despachar os sub-agentes (um por brief em .houndsman/.runs/main/briefs/).
+Próximo passo: despachar os sub-agentes (um por brief em <cwd>/.home/work/<uuid>/briefs/).
 Quando os findings estiverem gravados: bun run houndsman --finalize"
 `;
 
@@ -631,8 +636,8 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
         "src/alpha/b.ts"
       ],
       "overflow": 0,
-      "brief": ".houndsman/.runs/main/briefs/alpha.md",
-      "findings": ".houndsman/.runs/main/findings/alpha.json",
+      "brief": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\briefs\\\\alpha.md",
+      "findings": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\findings\\\\alpha.json",
       "status": "pending"
     }
   ],
@@ -657,7 +662,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "# Brief — Alpha (\`alpha\`)
 
 **Branch:** main
-**Output obrigatório:** \`.houndsman/.runs/main/findings/alpha.json\`
+**Output obrigatório:** \`<cwd>\\.home\\work\\<uuid>\\findings\\alpha.json\`
 **Schema do output:** \`.houndsman/core/skill/OUTPUT-FORMAT.md\`
 
 ## Objetivo
@@ -697,8 +702,8 @@ src/alpha/**
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 2`] = `
-"Triagem: .houndsman/.runs/main/state.json — 1 finding(s).
-Relatório: .houndsman/.runs/main/review.md — 1 bloqueante(s), 0 atenção."
+"Triagem: sqlite:<cwd>\\houndsman.db#<uuid> — 1 finding(s).
+Relatório: sqlite:<cwd>\\houndsman.db#<uuid> — 1 bloqueante(s), 0 atenção."
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: review.md 1`] = `
@@ -764,10 +769,6 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
   "order": [
     "<id>"
   ],
-  "reviewed": {
-    "headSha": "<sha>",
-    "at": "<timestamp>"
-  },
   "findings": {
     "<id>": {
       "id": "<id>",
@@ -796,19 +797,29 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
       "updatedAt": "<timestamp>",
       "history": []
     }
+  },
+  "reviewed": {
+    "headSha": "<sha>",
+    "at": "<timestamp>"
   }
-}
-"
+}"
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: run.json 1`] = `
 "{
-  "version": 1,
-  "slug": "main",
+  "id": "<uuid>",
+  "repoKey": "path:<cwd>",
+  "repoRoot": "<cwd>",
   "branch": "main",
+  "slug": "main",
+  "base": "<sha>",
+  "head": "HEAD",
+  "headSha": "<sha>",
+  "reviewedSha": "<sha>",
+  "reviewedAt": "<timestamp>",
   "status": "review_done",
   "startedAt": "<timestamp>",
+  "createdAt": "<timestamp>",
   "updatedAt": "<timestamp>"
-}
-"
+}"
 `;

@@ -27,6 +27,20 @@ export type HoundsmanConcurrency = {
 	jev?: number;
 };
 
+/** Backend de persistência (reviews, findings e artefatos). */
+export type HoundsmanStorage = {
+	/**
+	 * Provider de storage (default: `sqlite`). `file` mantém o formato antigo
+	 * em arquivos, mas sob o diretório global do houndsman.
+	 */
+	provider?: "sqlite" | "file";
+	/**
+	 * Caminho do banco (sqlite) ou raiz das runs (file). Default:
+	 * `<HOUNDSMAN_HOME>/houndsman.db` / `<HOUNDSMAN_HOME>/runs`.
+	 */
+	path?: string;
+};
+
 /**
  * Configuração completa do motor de revisão para um projeto.
  *
@@ -35,8 +49,8 @@ export type HoundsmanConcurrency = {
 export type HoundsmanConfig<TId extends string = string> = {
 	/** Nome legível do projeto (usado em prompts e docs). */
 	projectName: string;
-	/** Diretório dos artefatos (default: `ARTIFACT_DIR` da camada). */
-	artifactDir?: string;
+	/** Persistência das runs e artefatos (default: SQLite global). */
+	storage?: HoundsmanStorage;
 	/**
 	 * Ids dos watchdogs — **derivados** das chaves de `watchdogs` por
 	 * `defineHoundsmanConfig` (não informar manualmente).
@@ -70,11 +84,6 @@ export function defineHoundsmanConfig<TId extends string>(
 	input: HoundsmanConfigInput<TId>,
 ): HoundsmanConfig<TId> {
 	return { ...input, watchdogIds: Object.keys(input.watchdogs) as TId[] };
-}
-
-/** Diretório dos artefatos — o valor do projeto ou o default da camada. */
-export function resolveArtifactDir(config: HoundsmanConfig): string {
-	return new ProjectConfig(config).artifactDir;
 }
 
 /**

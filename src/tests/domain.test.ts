@@ -102,7 +102,7 @@ describe("ProjectConfig", () => {
 	test("resolve defaults e valores do projeto", () => {
 		const project = new ProjectConfig(fakeHoundsmanConfig);
 		expect(project.projectName).toBe("Fake Project");
-		expect(project.artifactDir).toBe("tmp/fake-review");
+		expect(project.storage).toEqual({});
 		expect(project.maxFilesPerBrief).toBe(40);
 		expect(project.jevConcurrency).toBe(5);
 		expect(project.alwaysIncludeDocs).toEqual(["README.md"]);

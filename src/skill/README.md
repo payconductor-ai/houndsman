@@ -57,26 +57,31 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 ### Flags
 
 `--config <path>` · `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
-`--branch <nome>` · `--dir <dir>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking` (no `--finalize`).
+`--branch <nome>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking` (no `--finalize`).
 
 ## Artefatos
 
-Tudo em `.houndsman/.runs/<branch-slug>/` (default do `artifactDir`, `.houndsman/.runs`):
+Runs, findings e artefatos vivem no **storage global** (SQLite em `<HOUNDSMAN_HOME>/houndsman.db`):
+
+| Item | Conteúdo |
+|---|---|
+| review | Repo (`origin` normalizado), branch, slug, base/head, commit revisado, status e timestamps |
+| findings | Decisão/execução + fingerprint + âncora + histórico + vínculo com o GitHub |
+| `classification.json` | Watchdogs ativados + status (A/M/D/R) + churn |
+| `candidates.json` | Candidatos da pré-análise Jev |
+| `manifest.json` | Resumo (watchdogs, arquivos, deletados, contexto, orçamento, churn) |
+| `review.md` / `review.<watchdog>.md` | Relatório consolidado e por domínio |
+| `verify.md` | Relatório do `findings verify` |
+| `context.json` / `context-summary.json` | Contexto da PR |
+
+O **staging dos subagentes** fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo após o
+`--finalize`:
 
 | Arquivo | Conteúdo |
 |---|---|
-| `classification.json` | Watchdogs ativados + status (A/M/D/R) + churn |
-| `candidates.json` | Candidatos da pré-análise Jev |
-| `context.json` | Payload bruto da PR via `gh` (ou marcador de indisponível) |
-| `context-summary.json` | Resumo do subagente (objetivo/motivação/alterações) |
 | `briefs/<watchdog>.md` | Instruções prontas para cada sub-agente (arquivos por risco) |
-| `manifest.json` | Resumo (watchdogs, arquivos, deletados, status, contexto, orçamento, churn) |
 | `findings/<watchdog>.json` | Saída dos sub-agentes (schema `OUTPUT-FORMAT.md`) |
-| `review.md` | Relatório final (achados agrupados por arquivo) |
-| `review.<watchdog>.md` | Relatório por domínio (só quando há achados) |
-| `state.json` | Estado de triagem dos findings (decisão/execução + fingerprint + commit revisado) |
-| `run.json` | Status do run (`reviewing`/`review_done`/`fixing`/`fix_done`) + timestamps |
-| `verify.md` | Relatório do `findings verify` (resolvidos/persistem/incertos) |
+| `context.json` / `context-brief.md` / `context-summary.json` | Contexto da PR |
 
 ## Estrutura
 
@@ -101,10 +106,11 @@ src/
 │   ├── doc-discoverer.ts    # descoberta de docs
 │   ├── report-builder.ts    # dedupe/render do relatório
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
-│   ├── findings-state.ts    # estado de triagem (state.json) + store atômico
+│   ├── findings-state.ts    # estado de triagem + funções puras
 │   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff por intervalo
 │   ├── verify.ts            # verificação de findings (tier local + Jev)
-│   ├── run-status.ts        # run.json (reviewing/review_done/fixing/fix_done)
+│   ├── run-status.ts        # status da review (reviewing/review_done/fixing/fix_done)
+│   ├── storage/            # StorageProvider (SQLite default + arquivos) + staging
 │   ├── fix-batch.ts         # agrupamento/paginação do lote (findings batch)
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── commands/            # context · review · watchdog · setup · update · test
@@ -118,7 +124,7 @@ src/
 ```
 houndsman.config.ts           # HoundsmanConfig (dados; descoberto em runtime)
 .houndsman/
-├── .gitignore                # AUTO — ignora core/ e .runs/
+├── .gitignore                # AUTO — ignora core/ (nada de execução fica no projeto)
 ├── core/                     # AUTO — sincronizado por `houndsman update`
 │   ├── types.ts              # snapshot dos tipos + helpers (autocontido)
 │   └── skill/*.md            # documentação do skill

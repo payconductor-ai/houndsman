@@ -9,10 +9,11 @@ import { mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { GitResult, GitRunner } from "../core/git-runner";
-import { RunLayout } from "../core/run-layout";
 import { GhClient, type GhRunner } from "../core/services/gh-client";
 import { GitRepository } from "../core/services/git-repository";
 import { ProjectFiles } from "../core/services/project-files";
+import type { ReviewRecord } from "../core/storage/types";
+import { ReviewWorkArea } from "../core/storage/work-area";
 
 /** Runner roteado por `args.join(" ")`, registrando as chamadas. */
 function fakeGit(routes: Record<string, GitResult>): {
@@ -163,48 +164,42 @@ describe("ProjectFiles", () => {
 	});
 });
 
-describe("RunLayout", () => {
-	test("centraliza os caminhos da run (slug normalizado)", () => {
-		const layout = new RunLayout(".houndsman/.runs", "feature/x");
-		expect(layout.slug).toBe("feature-x");
-		expect(layout.outDir.replace(/\\/g, "/")).toBe(".houndsman/.runs/feature-x");
-		expect(layout.briefsDir.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/briefs",
+/** Review fake para testar o layout do staging. */
+function reviewFixture(): ReviewRecord {
+	return {
+		id: "review-uuid",
+		repoKey: "path:/tmp/repo",
+		repoRoot: "/tmp/repo",
+		branch: "feature/x",
+		slug: "feature-x",
+		status: null,
+		createdAt: "2026-01-01T00:00:00.000Z",
+		updatedAt: "2026-01-01T00:00:00.000Z",
+	};
+}
+
+describe("ReviewWorkArea", () => {
+	test("centraliza os caminhos do staging (slug normalizado)", () => {
+		const work = new ReviewWorkArea(reviewFixture(), "./work");
+		const root = work.root.replace(/\\/g, "/");
+		expect(root).toBe("work/review-uuid");
+		expect(work.briefsDir.replace(/\\/g, "/")).toBe("work/review-uuid/briefs");
+		expect(work.findingsDir.replace(/\\/g, "/")).toBe("work/review-uuid/findings");
+		expect(work.findingFile("alpha").replace(/\\/g, "/")).toBe(
+			"work/review-uuid/findings/alpha.json",
 		);
-		expect(layout.findingsDir.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/findings",
-		);
-		expect(layout.stateFile.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/state.json",
-		);
-		expect(layout.runStatusFile.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/run.json",
-		);
-		expect(layout.classificationFile.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/classification.json",
-		);
-		expect(layout.domainReportFile("alpha").replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/review.alpha.md",
-		);
-		expect(layout.findingFile("alpha").replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/findings/alpha.json",
-		);
-		expect(layout.briefFile("alpha").replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/feature-x/briefs/alpha.md",
+		expect(work.briefFile("alpha").replace(/\\/g, "/")).toBe(
+			"work/review-uuid/briefs/alpha.md",
 		);
 	});
 
-	test("contextPaths compartilha a pasta da run", () => {
-		const paths = new RunLayout(".houndsman/.runs", "main").contextPaths;
-		expect(paths.dir.replace(/\\/g, "/")).toBe(".houndsman/.runs/main");
-		expect(paths.context.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/main/context.json",
-		);
+	test("contextPaths compartilha a pasta da review", () => {
+		const paths = new ReviewWorkArea(reviewFixture(), "./work").contextPaths;
+		expect(paths.dir.replace(/\\/g, "/")).toBe("work/review-uuid");
+		expect(paths.context.replace(/\\/g, "/")).toBe("work/review-uuid/context.json");
 		expect(paths.summary.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/main/context-summary.json",
+			"work/review-uuid/context-summary.json",
 		);
-		expect(paths.brief.replace(/\\/g, "/")).toBe(
-			".houndsman/.runs/main/context-brief.md",
-		);
+		expect(paths.brief.replace(/\\/g, "/")).toBe("work/review-uuid/context-brief.md");
 	});
 });

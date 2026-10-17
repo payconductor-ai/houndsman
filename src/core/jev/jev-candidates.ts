@@ -36,6 +36,50 @@ export type JevCandidatesFile = {
 
 const SEVERITY_SET = new Set<string>(SEVERITY_ORDER);
 
+/** Serializa o artefato `candidates.json` (sempre com quebra de linha final). */
+export function serializeCandidates(data: JevCandidatesFile): string {
+	return `${JSON.stringify(data, null, 2)}\n`;
+}
+
+/** Valida/parseia o JSON bruto do artefato; null se inválido. */
+export function parseCandidates(
+	raw: unknown,
+	validIds: readonly string[] = [],
+): JevCandidatesFile | null {
+	if (typeof raw !== "object" || raw === null) return null;
+	const value = raw as Record<string, unknown>;
+	const idSet = validIds.length > 0 ? new Set(validIds) : null;
+	const isCandidate = (entry: unknown): entry is JevCandidate => {
+		if (typeof entry !== "object" || entry === null) return false;
+		const c = entry as Record<string, unknown>;
+		return (
+			typeof c.watchdogId === "string" &&
+			(idSet === null || idSet.has(c.watchdogId)) &&
+			typeof c.rule === "string" &&
+			typeof c.severity === "string" &&
+			SEVERITY_SET.has(c.severity) &&
+			typeof c.file === "string" &&
+			typeof c.confidence === "number" &&
+			typeof c.questionKey === "string"
+		);
+	};
+	const candidates = Array.isArray(value.candidates)
+		? value.candidates.filter(isCandidate)
+		: [];
+	return {
+		available: value.available === true,
+		reason: typeof value.reason === "string" ? value.reason : undefined,
+		model: typeof value.model === "string" ? value.model : undefined,
+		threshold: typeof value.threshold === "number" ? value.threshold : undefined,
+		analyzedFiles:
+			typeof value.analyzedFiles === "number" ? value.analyzedFiles : undefined,
+		candidates,
+		skipped: Array.isArray(value.skipped)
+			? (value.skipped as JevSkippedFile[])
+			: undefined,
+	};
+}
+
 /** Persistência do artefato `candidates.json` para um diretório de review. */
 export class JevCandidatesStore {
 	/** Limiar padrão de confiança (`noul`) para virar candidato. */
@@ -57,49 +101,19 @@ export class JevCandidatesStore {
 
 	/** Grava o `candidates.json` (sempre com candidatos válidos apenas). */
 	write(data: JevCandidatesFile): void {
-		writeFileSync(this.filePath, `${JSON.stringify(data, null, 2)}\n`);
+		writeFileSync(this.filePath, serializeCandidates(data));
 	}
 
 	/** Lê o `candidates.json`; null se ausente/inválido. */
 	read(): JevCandidatesFile | null {
 		if (!existsSync(this.filePath)) return null;
 		try {
-			const raw = JSON.parse(readFileSync(this.filePath, "utf8")) as Record<
-				string,
-				unknown
-			>;
-			const candidates = Array.isArray(raw.candidates)
-				? raw.candidates.filter((c) => this.isCandidate(c))
-				: [];
-			return {
-				available: raw.available === true,
-				reason: typeof raw.reason === "string" ? raw.reason : undefined,
-				model: typeof raw.model === "string" ? raw.model : undefined,
-				threshold: typeof raw.threshold === "number" ? raw.threshold : undefined,
-				analyzedFiles:
-					typeof raw.analyzedFiles === "number" ? raw.analyzedFiles : undefined,
-				candidates,
-				skipped: Array.isArray(raw.skipped)
-					? (raw.skipped as JevSkippedFile[])
-					: undefined,
-			};
+			return parseCandidates(
+				JSON.parse(readFileSync(this.filePath, "utf8")),
+				this.watchdogIdSet ? [...this.watchdogIdSet] : [],
+			);
 		} catch {
 			return null;
 		}
-	}
-
-	private isCandidate(value: unknown): value is JevCandidate {
-		if (typeof value !== "object" || value === null) return false;
-		const c = value as Record<string, unknown>;
-		return (
-			typeof c.watchdogId === "string" &&
-			(this.watchdogIdSet === null || this.watchdogIdSet.has(c.watchdogId)) &&
-			typeof c.rule === "string" &&
-			typeof c.severity === "string" &&
-			SEVERITY_SET.has(c.severity) &&
-			typeof c.file === "string" &&
-			typeof c.confidence === "number" &&
-			typeof c.questionKey === "string"
-		);
 	}
 }

@@ -18,8 +18,7 @@ Flags:
   --base <branch>     Base do diff (default: main)
   --head <ref>        Head do diff (default: HEAD)
   --branch <nome>     Branch alvo (default: detecta do git)
-  --dir <dir>         Diretório dos artefatos
-  --clean             Descarta findings anteriores
+  --clean             Descarta findings brutos do staging anterior
   --full              Força review completo (ignora o modo incremental)
   --no-jev            Desativa a pré-análise Jev
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
@@ -40,4 +39,9 @@ Flags de findings:
   --apply             (verify) Marca os resolvidos como done
   --fail-on-persisting (verify) Exit 1 se algum blocking persistir
   --include-sent      (submit) Reenvia findings já enviados à PR
-  --dry-run           (submit) Só a prévia do envio, sem postar`;
+  --dry-run           (submit) Só a prévia do envio, sem postar
+
+Persistência:
+  Runs, findings e artefatos ficam no storage global (SQLite em
+  <HOUNDSMAN_HOME>/houndsman.db). Use storage.provider: "file" na config para
+  voltar ao backend de arquivos. Nada é gravado em .houndsman/.runs.`;

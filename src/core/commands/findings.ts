@@ -1,24 +1,18 @@
 /**
  * Subcomando `findings` — triagem dos findings da revisão (biblioteca).
  *
- * Lê/grava o `state.json` da run (`findings-state.ts`). Devolve o texto pronto
- * (markdown ou JSON) + exit code; o CLI decide o log/exit. O agente do usuário
- * usa `list`/`set`/`done` (e `batch` para lotes de correção) para interagir sem abrir o JSON à mão.
+ * Lê/grava o estado de triagem no storage (SQLite por default). Devolve o texto
+ * pronto (markdown ou JSON) + exit code; o CLI decide o log/exit. O agente do
+ * usuário usa `list`/`set`/`done` (e `batch` para lotes de correção) para
+ * interagir sem abrir o banco à mão.
  *
- * Se o `state.json` não existir, é re-construído a partir de
- * `findings/*.json` + `classification.json` (não exige `--finalize`).
+ * Ids aceitam prefixo único (exato primeiro) — útil porque o id curto convive
+ * com o UUID interno no banco.
  */
 
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-import {
-	type HoundsmanConfig,
-	resolveArtifactDir,
-	resolveJevConcurrency,
-} from "../config";
+import { type HoundsmanConfig, resolveJevConcurrency } from "../config";
 import {
 	applyFindingUpdate,
-	buildStateFromRunDir,
 	FINDING_DECISIONS,
 	FINDING_EXEC_STATES,
 	type FindingDecision,
@@ -26,11 +20,11 @@ import {
 	type FindingState,
 	type FindingsFilter,
 	type FindingsStateFile,
-	FindingsStateStore,
 	type FindingUpdate,
 	fileReader,
 	filterFindings,
-	runDir,
+	reorder,
+	resolveFindingId,
 	summarize,
 	syncState,
 } from "../findings-state";
@@ -43,14 +37,17 @@ import {
 	type SubmitSelection,
 	submitFindings,
 } from "../github-review";
-import { relFromRoot, VERIFY_FILE } from "../paths";
+import { VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
 import { BatchPresenter } from "../renderers/batch-presenter";
 import { FindingsPresenter } from "../renderers/findings-presenter";
 import { VerifyPresenter } from "../renderers/verify-presenter";
 import { pingFindingsStatus } from "../run-status";
+import { systemClock } from "../services/clock";
 import { FixBatchBuilder } from "../services/fix-batch-builder";
 import { Verifier } from "../services/verifier";
+import type { RepoIdentity, ReviewRecord, StorageProvider } from "../storage/types";
+import { ReviewWorkArea } from "../storage/work-area";
 import { SEVERITY_ORDER, type Severity } from "../types";
 
 export type FindingsCommandResult = {
@@ -65,7 +62,6 @@ const VALUE_FLAGS = new Set([
 	"--severity",
 	"--file",
 	"--branch",
-	"--dir",
 	"--limit",
 	"--comment",
 	"--by",
@@ -85,6 +81,11 @@ function parseArgs(args: string[]): ParsedArgs {
 	const parsed: ParsedArgs = { positionals: [], values: {}, bools: new Set() };
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
+		if (arg === "--dir") {
+			throw new Error(
+				"--dir foi removido; configure `storage` no houndsman.config.ts.",
+			);
+		}
 		if (arg.startsWith("--")) {
 			if (VALUE_FLAGS.has(arg)) {
 				const value = args[i + 1];
@@ -101,36 +102,63 @@ function parseArgs(args: string[]): ParsedArgs {
 	return parsed;
 }
 
-/** Diretório da run + branch resolvida. */
-function resolveDir(
-	config: HoundsmanConfig,
+/** Contexto de uma review (storage + registro + staging). */
+type CommandContext = {
+	storage: StorageProvider;
+	review: ReviewRecord;
+	work: ReviewWorkArea;
+};
+
+/** Resolve a review da branch atual (explícita ou via git). */
+function openContext(
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	parsed: ParsedArgs,
-): { dir: string; branch: string } {
-	return {
-		dir: parsed.values["--dir"] ?? resolveArtifactDir(config),
-		branch: parsed.values["--branch"] ?? currentBranch(),
-	};
-}
-
-/** Lê o estado da run; reconstrói dos findings se ausente. Lança se impossível. */
-function loadState(config: HoundsmanConfig, parsed: ParsedArgs): FindingsStateFile {
-	const { dir, branch } = resolveDir(config, parsed);
-	const store = FindingsStateStore.at(dir, branch);
-	const existing = store.read();
-	if (existing) return existing;
-
-	const built = buildStateFromRunDir(
-		runDir(dir, branch),
-		branch,
-		fileReader(process.cwd()),
-	);
-	if (!built) {
+): CommandContext {
+	const branch = parsed.values["--branch"] ?? currentBranch();
+	const review = storage.findReview(repo.key, branch);
+	if (!review) {
 		throw new Error(
-			`Nenhum estado de triagem para '${branch}'. Rode \`houndsman --finalize\` primeiro.`,
+			`Nenhuma revisão para '${branch}'. Rode \`houndsman --finalize\` primeiro.`,
 		);
 	}
-	store.write(built);
-	return built;
+	return { storage, review, work: new ReviewWorkArea(review) };
+}
+
+/** Lê o estado de triagem; lança se a review ainda não tem findings. */
+function loadState(ctx: CommandContext): FindingsStateFile {
+	const state = ctx.storage.readFindings(ctx.review.id);
+	if (!state) {
+		throw new Error(
+			`Nenhum estado de triagem para '${ctx.review.branch}'. Rode \`houndsman --finalize\` primeiro.`,
+		);
+	}
+	return state;
+}
+
+/** Lê-modifica-grava o estado, atualizando `updatedAt` e a ordem. */
+function mutateState(
+	ctx: CommandContext,
+	mutator: (state: FindingsStateFile) => void,
+): FindingsStateFile {
+	const state = loadState(ctx);
+	mutator(state);
+	state.updatedAt = systemClock();
+	reorder(state);
+	ctx.storage.writeFindings(ctx.review.id, state);
+	return state;
+}
+
+/** Resolve um id (exato ou prefixo único), lançando erro explicativo. */
+function requireFindingId(state: FindingsStateFile, input: string): string {
+	const resolution = resolveFindingId(state, input);
+	if (resolution.status === "found") return resolution.id;
+	if (resolution.status === "ambiguous") {
+		throw new Error(
+			`Id '${input}' ambíguo — candidatos: ${resolution.matches.join(", ")}.`,
+		);
+	}
+	throw new Error(`Finding '${input}' não encontrado.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,64 +209,52 @@ function filterFrom(parsed: ParsedArgs): FindingsFilter {
 	};
 }
 
-/** Faz ping no `run.json` (status derivado do estado atual) após uma mutação. */
-function pingStatus(config: HoundsmanConfig, parsed: ParsedArgs): void {
-	const { dir, branch } = resolveDir(config, parsed);
-	const state = FindingsStateStore.at(dir, branch).read();
-	if (state) pingFindingsStatus(runDir(dir, branch), state);
+/** Faz ping no status da review (derivado do estado atual) após uma mutação. */
+function pingStatus(ctx: CommandContext, state: FindingsStateFile): void {
+	pingFindingsStatus(ctx.storage, ctx.review.id, state);
 }
 
 /** Aplica uma atualização a um finding e persiste. */
 function updateOne(
-	config: HoundsmanConfig,
-	parsed: ParsedArgs,
-	id: string,
+	ctx: CommandContext,
+	input: string,
 	update: FindingUpdate,
 ): FindingState {
-	const { dir, branch } = resolveDir(config, parsed);
-	const store = FindingsStateStore.at(dir, branch);
 	let updated: FindingState | undefined;
-	store.update((state) => {
-		const finding = state.findings[id];
-		if (!finding) return;
-		updated = applyFindingUpdate(finding, update);
+	mutateState(ctx, (state) => {
+		const id = requireFindingId(state, input);
+		updated = applyFindingUpdate(state.findings[id], update);
 	});
-	if (!updated) throw new Error(`Finding '${id}' não encontrado.`);
+	if (!updated) throw new Error(`Finding '${input}' não encontrado.`);
 	return updated;
 }
 
 /** Aplica a mesma atualização a vários ids (done/reset). */
 function updateMany(
-	config: HoundsmanConfig,
-	parsed: ParsedArgs,
-	ids: string[],
+	ctx: CommandContext,
+	inputs: string[],
 	update: FindingUpdate,
 ): FindingState[] {
-	const { dir, branch } = resolveDir(config, parsed);
-	const store = FindingsStateStore.at(dir, branch);
 	const updated: FindingState[] = [];
-	store.update((state) => {
+	mutateState(ctx, (state) => {
+		const ids = inputs.map((input) => requireFindingId(state, input));
 		for (const id of ids) {
-			const finding = state.findings[id];
-			if (!finding) continue;
-			updated.push(applyFindingUpdate(finding, update));
+			updated.push(applyFindingUpdate(state.findings[id], update));
 		}
 	});
-	const missing = ids.filter((id) => !updated.some((f) => f.id === id));
-	if (missing.length > 0) {
-		throw new Error(`Findings não encontrados: ${missing.join(", ")}.`);
-	}
 	return updated;
 }
 
 /** Executa um subcomando de `findings` e devolve o texto + exit code. */
 export function runFindingsCommand(
 	config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	args: string[],
 ): FindingsCommandResult {
-	const parsed = parseArgs(args);
 	try {
-		return execute(config, parsed);
+		const parsed = parseArgs(args);
+		return execute(config, storage, repo, parsed);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -247,10 +263,16 @@ export function runFindingsCommand(
 	}
 }
 
-function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandResult {
+function execute(
+	_config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
+	parsed: ParsedArgs,
+): FindingsCommandResult {
+	const ctx = openContext(storage, repo, parsed);
 	switch (parsed.sub ?? "list") {
 		case "list": {
-			const state = loadState(config, parsed);
+			const state = loadState(ctx);
 			const filtered = filterFindings(state, filterFrom(parsed));
 			const limit = Number(parsed.values["--limit"]);
 			const findings =
@@ -263,11 +285,11 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			};
 		}
 		case "show": {
-			const state = loadState(config, parsed);
-			const id = parsed.positionals[0];
-			if (!id) throw new Error("Informe o id: houndsman findings show <id>");
+			const state = loadState(ctx);
+			const input = parsed.positionals[0];
+			if (!input) throw new Error("Informe o id: houndsman findings show <id>");
+			const id = requireFindingId(state, input);
 			const finding = state.findings[id];
-			if (!finding) throw new Error(`Finding '${id}' não encontrado.`);
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(finding, null, 2)
@@ -276,16 +298,17 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			};
 		}
 		case "set": {
-			const id = parsed.positionals[0];
-			if (!id) throw new Error("Informe o id: houndsman findings set <id> [flags]");
+			const input = parsed.positionals[0];
+			if (!input)
+				throw new Error("Informe o id: houndsman findings set <id> [flags]");
 			const update = updateFrom(parsed);
 			if (!hasUpdate(update)) {
 				throw new Error(
 					"Nada para atualizar (use --decision, --exec ou --comment).",
 				);
 			}
-			const finding = updateOne(config, parsed, id, update);
-			pingStatus(config, parsed);
+			const finding = updateOne(ctx, input, update);
+			pingStatus(ctx, loadState(ctx));
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(finding, null, 2)
@@ -295,8 +318,8 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 		}
 		case "done": {
 			const ids = requireIds(parsed, "done");
-			const updated = updateMany(config, parsed, ids, { execState: "done" });
-			pingStatus(config, parsed);
+			const updated = updateMany(ctx, ids, { execState: "done" });
+			pingStatus(ctx, loadState(ctx));
 			return {
 				output: `Marcados como done: ${updated.map((f) => f.id).join(", ")}.`,
 				exitCode: 0,
@@ -304,28 +327,26 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 		}
 		case "reset": {
 			const ids = requireIds(parsed, "reset");
-			const updated = updateMany(config, parsed, ids, {
+			const updated = updateMany(ctx, ids, {
 				decision: "pending",
 				execState: "pending",
 				comment: "",
 			});
-			pingStatus(config, parsed);
+			pingStatus(ctx, loadState(ctx));
 			return {
 				output: `Triagem reiniciada: ${updated.map((f) => f.id).join(", ")}.`,
 				exitCode: 0,
 			};
 		}
 		case "sync": {
-			const { dir, branch } = resolveDir(config, parsed);
-			const store = FindingsStateStore.at(dir, branch);
-			const state = loadState(config, parsed);
+			const state = loadState(ctx);
 			const result = syncState(state, fileReader(process.cwd()));
-			store.write(state);
-			pingStatus(config, parsed);
+			ctx.storage.writeFindings(ctx.review.id, state);
+			pingStatus(ctx, state);
 			const output = parsed.bools.has("--json")
 				? JSON.stringify(result, null, 2)
 				: [
-						`Sync — ${branch}: ${result.ok} ok, ${result.moved.length} movido(s), ${result.stale.length} stale.`,
+						`Sync — ${ctx.review.branch}: ${result.ok} ok, ${result.moved.length} movido(s), ${result.stale.length} stale.`,
 						result.moved.length > 0
 							? `Movidos: ${result.moved.join(", ")}`
 							: "",
@@ -338,7 +359,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			return { output, exitCode: 0 };
 		}
 		case "summary": {
-			const state = loadState(config, parsed);
+			const state = loadState(ctx);
 			const summary = summarize(state);
 			return {
 				output: parsed.bools.has("--json")
@@ -348,12 +369,13 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			};
 		}
 		case "path": {
-			const { dir, branch } = resolveDir(config, parsed);
-			const path = FindingsStateStore.at(dir, branch).filePath;
-			return { output: relFromRoot(path), exitCode: 0 };
+			return {
+				output: ctx.storage.location(ctx.review.id),
+				exitCode: 0,
+			};
 		}
 		case "batch": {
-			const state = loadState(config, parsed);
+			const state = loadState(ctx);
 			const severity = parsed.values["--severity"];
 			const offset = Number(parsed.values["--offset"]);
 			const result = fixBatchBuilder.build(state, {
@@ -412,11 +434,13 @@ function requireIds(parsed: ParsedArgs, sub: string): string[] {
  */
 export async function runVerifyCommand(
 	config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	args: string[],
 ): Promise<FindingsCommandResult> {
-	const parsed = parseArgs(args);
 	try {
-		return await executeVerify(config, parsed);
+		const parsed = parseArgs(args);
+		return await executeVerify(config, storage, repo, parsed);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -427,11 +451,12 @@ export async function runVerifyCommand(
 
 async function executeVerify(
 	config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	parsed: ParsedArgs,
 ): Promise<FindingsCommandResult> {
-	const { dir, branch } = resolveDir(config, parsed);
-	const store = FindingsStateStore.at(dir, branch);
-	const state = loadState(config, parsed);
+	const ctx = openContext(storage, repo, parsed);
+	const state = loadState(ctx);
 
 	// Lazy: `../jev` (axios) só entra no caminho do verify.
 	const verifier = new Verifier();
@@ -471,23 +496,31 @@ async function executeVerify(
 	}
 
 	const summary = verifier.summarize(entries);
-	const reportPath = join(runDir(dir, branch), VERIFY_FILE);
-	writeFileSync(
-		reportPath,
-		`${presenters.verify.render(state, entries, summary, { jevChecked, jevReason })}\n`,
-	);
+	const location = ctx.storage.location(ctx.review.id);
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: VERIFY_FILE,
+		kind: "verify",
+		content: `${presenters.verify.render(state, entries, summary, { jevChecked, jevReason })}\n`,
+	});
 
 	let applied: string[] = [];
 	if (parsed.bools.has("--apply")) {
-		store.update((current) => {
-			applied = verifier.applyResolutions(current, entries);
+		const current = mutateState(ctx, (draft) => {
+			applied = verifier.applyResolutions(draft, entries);
 		});
-		pingStatus(config, parsed);
+		pingStatus(ctx, current);
 	}
 
 	const output = parsed.bools.has("--json")
 		? JSON.stringify(
-				{ branch, summary, jevChecked, jevReason, applied, entries },
+				{
+					branch: ctx.review.branch,
+					summary,
+					jevChecked,
+					jevReason,
+					applied,
+					entries,
+				},
 				null,
 				2,
 			)
@@ -497,7 +530,7 @@ async function executeVerify(
 					jevReason,
 				}),
 				"",
-				`Relatório: ${relFromRoot(reportPath)}`,
+				`Relatório: ${location} (${VERIFY_FILE})`,
 				parsed.bools.has("--apply")
 					? `Aplicados (done): ${applied.length > 0 ? applied.join(", ") : "—"}.`
 					: "",
@@ -587,11 +620,13 @@ function renderSubmitOutcome(outcome: SubmitOutcome, json: boolean): string {
  */
 export async function runSubmitCommand(
 	config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	args: string[],
 ): Promise<FindingsCommandResult> {
-	const parsed = parseArgs(args);
 	try {
-		return await executeSubmit(config, parsed);
+		const parsed = parseArgs(args);
+		return await executeSubmit(config, storage, repo, parsed);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -601,10 +636,13 @@ export async function runSubmitCommand(
 }
 
 async function executeSubmit(
-	config: HoundsmanConfig,
+	_config: HoundsmanConfig,
+	storage: StorageProvider,
+	repo: RepoIdentity,
 	parsed: ParsedArgs,
 ): Promise<FindingsCommandResult> {
-	const state = loadState(config, parsed);
+	const ctx = openContext(storage, repo, parsed);
+	const state = loadState(ctx);
 	const selection = submitSelection(parsed);
 	const target = resolvePrTarget(defaultGhRunner, state.branch);
 	const preview = buildSubmitPreview(state, target, selection);
@@ -621,11 +659,8 @@ async function executeSubmit(
 		runner: defaultGhRunner,
 		selection,
 	});
-	FindingsStateStore.at(
-		parsed.values["--dir"] ?? resolveArtifactDir(config),
-		state.branch,
-	).write(state);
-	pingStatus(config, parsed);
+	ctx.storage.writeFindings(ctx.review.id, state);
+	pingStatus(ctx, state);
 
 	return {
 		output: renderSubmitOutcome(outcome, json),

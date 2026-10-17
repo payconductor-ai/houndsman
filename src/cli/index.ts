@@ -22,8 +22,8 @@
  *   test                 Roda a suíte de testes da lib
  *   watchdog <id>        Contexto de um watchdog (`--rules`, `--json`)
  *
- * Flags: `--base <b>` · `--head <ref>` · `--branch <b>` · `--dir <d>` ·
- *   `--config <path>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking`.
+ * Flags: `--base <b>` · `--head <ref>` · `--branch <b>` · `--config <path>` ·
+ *   `--clean` · `--full` · `--no-jev` · `--fail-on-blocking`.
  */
 
 import { loadConfig } from "../core/config-loader";

@@ -74,8 +74,9 @@ No seu harness (Claude Code / agents), invoque o skill:
 /houndsman hunt
 ```
 
-O skill orquestra tudo e grava o relatório em `.houndsman/.runs/<branch-slug>/review.md`.
-Não precisa rodar nenhum script à mão.
+O skill orquestra tudo e persiste o relatório no storage global (SQLite em
+`<HOUNDSMAN_HOME>/houndsman.db`); a UI lê os artefatos direto do storage. Não precisa rodar
+nenhum script à mão.
 
 ---
 
@@ -86,9 +87,9 @@ Não precisa rodar nenhum script à mão.
    ├─ Passo 0  contexto da PR (gh, opcional)
    ├─ Passo 1  classifica o diff → briefs por watchdog (incremental quando possível)
    ├─ Passo 2  N subagentes revisam em paralelo
-   ├─ Passo 3  consolida em review.md + state.json
+   ├─ Passo 3  consolida em review.md + triagem no storage
    ├─ Passo 4  valida na UI (server) e marca os achados a executar
-   ├─ Passo 5  fix corrige o grupo atual → run.json (fix_done)
+   ├─ Passo 5  fix corrige o grupo atual → status fix_done
    └─ Passo 6  verify confere o que resolveu, sem re-revisar
 ```
 
@@ -111,7 +112,7 @@ O skill tem **4 capabilities**, todas em `/houndsman`:
 ## Triando os findings (opcional)
 
 Depois do `--finalize`, cada finding tem um `id` curto e um `fingerprint` de **conteúdo**
-no `.houndsman/.runs/<branch-slug>/state.json`. Você decide o que fazer com cada um — pela
+no storage global. Você decide o que fazer com cada um — pela
 **UI local** ou pelo **agente** (auto-fix) — sem abrir o JSON à mão:
 
 ```bash
@@ -136,11 +137,22 @@ bun run houndsman findings verify           # confere o que resolveu (barato, se
 > o review completo.
 
 > A identidade do finding é o **conteúdo** (fingerprint), não a linha: itens deslocados
-> pelo fix não se perdem. O estado é local e mora em `.runs/<slug>/state.json` (gitignored).
+> pelo fix não se perdem. O estado mora no storage global (`<HOUNDSMAN_HOME>/houndsman.db`).
 
 ---
 
 ## Mantendo a configuração
+
+- **Persistência** → por default, SQLite global em `<HOUNDSMAN_HOME>/houndsman.db`
+  (`HOUNDSMAN_HOME` sobrescreve o diretório de dados). Para voltar ao backend de arquivos,
+  troque só o provider — a interface `StorageProvider` é a mesma:
+
+  ```ts
+  export const houndsmanConfig = {
+    // ...
+    storage: { provider: "file", path: "./houndsman-runs" },
+  };
+  ```
 
 - **Alterar regras** → use a capability **`train`** (`/houndsman train`). Ela prova no código
   que o padrão existe (evidência) antes de editar e roda as validações.

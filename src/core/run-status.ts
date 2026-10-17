@@ -1,23 +1,20 @@
 /**
- * Status do run (biblioteca) — persistido em `.houndsman/.runs/<slug>/run.json`.
+ * Status do run (biblioteca) — colunas da review no storage.
  *
  * Diz à UI em que pé está uma run: `reviewing` (revisando) → `review_done`
  * (revisão finalizada) → `fixing` (corrigindo) → `fix_done` (correção finalizada).
  *
- * Toda ação que muda o estado faz um **ping** no `updatedAt`, mantendo o arquivo
- * "quente". Timeout é **display-only** (a UI compara `updatedAt` com o agora) —
- * não é um status persistido.
+ * Toda ação que muda o estado faz um **ping** no `updatedAt`. Timeout é
+ * **display-only** (a UI compara `updatedAt` com o agora) — não é um status
+ * persistido.
  */
 
-import { join } from "node:path";
 import type { FindingsStateFile } from "./findings-state";
-import { RUN_STATUS_FILE } from "./paths";
-import { sanitizeBranch } from "./report-builder";
 import { systemClock } from "./services/clock";
-import { ProjectFiles } from "./services/project-files";
+import type { ReviewRecord, ReviewStatus, StorageProvider } from "./storage/types";
 
 /** Estados de execução de uma run (persistidos). */
-export type RunStatus = "reviewing" | "review_done" | "fixing" | "fix_done";
+export type RunStatus = ReviewStatus;
 
 /** Valores canônicos de status (ordem de exibição/lifecycle). */
 export const RUN_STATUSES: readonly RunStatus[] = [
@@ -27,56 +24,34 @@ export const RUN_STATUSES: readonly RunStatus[] = [
 	"fix_done",
 ];
 
-export const RUN_STATUS_VERSION = 1;
-
-/** Conteúdo do `run.json`. */
-export type RunStatusFile = {
-	version: 1;
-	slug: string;
-	branch: string;
-	status: RunStatus;
-	/** Início do ciclo de revisão atual (reiniciado a cada `prepare`). */
-	startedAt: string;
-	/** Última ação importante (ping). */
-	updatedAt: string;
-};
-
-/** Caminho do `run.json` dentro da pasta da run. */
-export function runStatusPath(runDir: string): string {
-	return join(runDir, RUN_STATUS_FILE);
-}
-
-/** Lê o `run.json` da run (null se ausente/inválido). */
-export function readRunStatus(runDir: string): RunStatusFile | null {
-	return new ProjectFiles().readJson<RunStatusFile>(runStatusPath(runDir));
+/** Lê o status atual (null se a review não existir). */
+export function readRunStatus(
+	storage: StorageProvider,
+	reviewId: string,
+): ReviewRecord | null {
+	return storage.getReview(reviewId);
 }
 
 export type WriteRunStatusOptions = {
-	branch: string;
 	status: RunStatus;
 	/** Reinicia o `startedAt` — usado no início de uma nova revisão. */
 	resetStartedAt?: boolean;
 	now?: string;
 };
 
-/** Grava/atualiza o `run.json` (ping no `updatedAt`). */
+/** Grava/atualiza o status da review (ping no `updatedAt`). */
 export function writeRunStatus(
-	runDir: string,
+	storage: StorageProvider,
+	reviewId: string,
 	options: WriteRunStatusOptions,
-): RunStatusFile {
-	const files = new ProjectFiles();
-	const now = options.now ?? systemClock();
-	const previous = readRunStatus(runDir);
-	const file: RunStatusFile = {
-		version: RUN_STATUS_VERSION,
-		slug: sanitizeBranch(options.branch),
-		branch: options.branch,
+): ReviewRecord {
+	const updated = storage.updateReview(reviewId, {
 		status: options.status,
-		startedAt: options.resetStartedAt ? now : (previous?.startedAt ?? now),
-		updatedAt: now,
-	};
-	files.write(runStatusPath(runDir), `${JSON.stringify(file, null, 2)}\n`);
-	return file;
+		resetStartedAt: options.resetStartedAt,
+		updatedAt: options.now ?? systemClock(),
+	});
+	if (!updated) throw new Error(`Review '${reviewId}' não encontrada.`);
+	return updated;
 }
 
 /**
@@ -105,14 +80,14 @@ export function statusAfterFindingsChange(
 	return previous ?? "review_done";
 }
 
-/** Ping: deriva o status da mudança nos findings e grava o `run.json`. */
+/** Ping: deriva o status da mudança nos findings e grava na review. */
 export function pingFindingsStatus(
-	runDir: string,
+	storage: StorageProvider,
+	reviewId: string,
 	state: FindingsStateFile,
-): RunStatusFile {
-	const previous = readRunStatus(runDir)?.status ?? null;
-	return writeRunStatus(runDir, {
-		branch: state.branch,
+): ReviewRecord {
+	const previous = storage.getReview(reviewId)?.status ?? null;
+	return writeRunStatus(storage, reviewId, {
 		status: statusAfterFindingsChange(previous, state),
 	});
 }

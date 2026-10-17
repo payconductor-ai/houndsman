@@ -1,20 +1,20 @@
 /**
- * Manifesto da run (biblioteca) — monta e grava o `manifest.json`.
+ * Manifesto da run (biblioteca) — monta e grava o artefato `manifest.json`.
  *
  * Concentra o resumo do que foi ativado (watchdogs, orçamento, churn, contexto,
- * Jev e incremental), hoje espalhado em helpers do orquestrador.
+ * Jev e incremental). O manifesto vive no storage; os caminhos de briefs e
+ * findings apontam para o staging da review.
  */
 
 import { Classification } from "../domain/classification";
 import type { ClassificationResult } from "../file-classifier";
 import type { JevCandidatesFile } from "../jev";
-import { OUTPUT_FORMAT_PATH, relFromRoot } from "../paths";
-import { readContextSummary } from "../pr-context";
+import { OUTPUT_FORMAT_PATH } from "../paths";
 import type { ProjectConfig } from "../project-config";
 import type { MergedFinding } from "../report-builder";
-import type { RunLayout } from "../run-layout";
 import { systemClock } from "../services/clock";
-import { ProjectFiles } from "../services/project-files";
+import type { ReviewRecord, StorageProvider } from "../storage/types";
+import type { ReviewWorkArea } from "../storage/work-area";
 
 /** Opções do manifesto (subset do `ReviewOptions`). */
 export type ManifestOptions = {
@@ -32,12 +32,22 @@ export type ManifestClassification = ClassificationResult & {
 
 /** Escreve o `manifest.json` de uma run. */
 export class ManifestWriter {
-	private readonly layout: RunLayout;
+	private readonly storage: StorageProvider;
+	private readonly review: ReviewRecord;
+	private readonly work: ReviewWorkArea;
 	private readonly project: ProjectConfig;
 	private readonly options: ManifestOptions;
 
-	constructor(layout: RunLayout, project: ProjectConfig, options: ManifestOptions) {
-		this.layout = layout;
+	constructor(
+		storage: StorageProvider,
+		review: ReviewRecord,
+		work: ReviewWorkArea,
+		project: ProjectConfig,
+		options: ManifestOptions,
+	) {
+		this.storage = storage;
+		this.review = review;
+		this.work = work;
 		this.project = project;
 		this.options = options;
 	}
@@ -60,16 +70,16 @@ export class ManifestWriter {
 				name: this.project.watchdogs.nameOf(id),
 				files: selection.selected,
 				overflow: selection.overflow.length,
-				brief: relFromRoot(this.layout.briefFile(id)),
-				findings: relFromRoot(this.layout.findingFile(id)),
+				brief: this.work.briefFile(id),
+				findings: this.work.findingFile(id),
 				status: pending.includes(id) ? "pending" : "done",
 			};
 		});
 
-		const summary = readContextSummary(this.layout.contextPaths.summary);
+		const summary = this.work.readContextSummary();
 		const manifest = {
-			branch: this.layout.branch,
-			slug: this.layout.slug,
+			branch: this.review.branch,
+			slug: this.review.slug,
 			base: this.options.base,
 			head: this.options.head,
 			headSha: classification.headSha,
@@ -104,9 +114,10 @@ export class ManifestWriter {
 			excludedCount: classification.excludedCount,
 		};
 
-		new ProjectFiles().write(
-			this.layout.manifestFile,
-			`${JSON.stringify(manifest, null, 2)}\n`,
-		);
+		this.storage.writeArtifact(this.review.id, {
+			name: "manifest.json",
+			kind: "manifest",
+			content: `${JSON.stringify(manifest, null, 2)}\n`,
+		});
 	}
 }

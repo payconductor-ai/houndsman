@@ -38,12 +38,12 @@ A camada separa o que é **auto-gerado** do que é **do usuário**:
 | `.houndsman/doc-mappings.ts` | usuário | path → documentação de contexto |
 | `.houndsman/core/types.ts` | **auto** | Snapshot dos tipos + helpers (tipagem sem install) |
 | `.houndsman/core/skill/*.md` | **auto** | Documentação do skill |
-| `.houndsman/.gitignore` | **auto** | Ignora `core/` e `.runs/` (gerados/temporários) |
+| `.houndsman/.gitignore` | **auto** | Ignora `core/` (gerado) |
 | `.agents/skills/houndsman/SKILL.md` etc. | **auto** | `SKILL.md` do skill `/houndsman` (capabilities `hunt`/`train`/`fix`) por harness |
 
 Além disso, adiciona o script `"houndsman": "houndsman"` ao `package.json` — assim
-`bun run houndsman [...]` funciona na raiz do projeto. Os artefatos ficam em
-`.houndsman/.runs/<branch-slug>/` (auto-ignorados).
+`bun run houndsman [...]` funciona na raiz do projeto. Runs, findings e artefatos ficam no
+storage global (`<HOUNDSMAN_HOME>/houndsman.db`) — fora do projeto.
 
 Flags: `--name <projeto>` · `--harness agents,claude|both|none` · `--force` (sobrescreve só os
 arquivos do usuário). É **idempotente** — arquivos do usuário existentes são mantidos.
@@ -80,7 +80,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 | Campo | Descrição |
 |---|---|
 | `projectName` | Nome legível (prompts/docs). |
-| `artifactDir` | **Opcional** — onde gravar os artefatos (default `.houndsman/.runs`). |
+| `storage` | **Opcional** — `{ provider: "sqlite" \| "file", path? }`. Default: SQLite em `<HOUNDSMAN_HOME>/houndsman.db`. |
 | `watchdogs` | Definições dos watchdogs (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |
 | `docMappings` | Path → documentação de contexto. |

@@ -1,18 +1,16 @@
 /**
  * Estado de triagem dos findings (biblioteca).
  *
- * Persistido em `.houndsman/.runs/<slug>/state.json` (local — coberto pelo
- * `.gitignore` gerado, que ignora `.runs/`). Cada finding tem um `id` curto e um
- * `fingerprint` de conteúdo: nas re-execuções do `--finalize` o estado é
- * preservado casando por fingerprint.
+ * O dump (`state.json`) é um detalhe do provider de arquivos; no SQLite o
+ * estado é reconstruído de `findings` + `finding_history`. Cada finding tem um
+ * `id` curto e um `fingerprint` de conteúdo: nas re-execuções do `--finalize`
+ * o estado é preservado casando por fingerprint.
  *
  * A `line` é cache — `syncState` a recalcula após edições (auto-fix) e marca
  * `stale` quando a âncora some.
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import {
 	buildAnchor,
 	type FindingAnchor,
@@ -20,14 +18,7 @@ import {
 	locateAnchor,
 	reanchor,
 } from "./finding-anchor";
-import {
-	dedupeFindings,
-	type MergedFinding,
-	parseWatchdogReport,
-	sanitizeBranch,
-	type WatchdogReport,
-} from "./report-builder";
-import { RunLayout } from "./run-layout";
+import { type MergedFinding, sanitizeBranch } from "./report-builder";
 import { systemClock } from "./services/clock";
 import { type FileReader, ProjectFiles } from "./services/project-files";
 import { SEVERITY_ORDER, type Severity, severityRank } from "./types";
@@ -142,16 +133,6 @@ export const FINDINGS_STATE_VERSION = 2;
 // Caminhos
 // ---------------------------------------------------------------------------
 
-/** Diretório de artefatos da run (branch-slug). */
-export function runDir(artifactDir: string, branch: string): string {
-	return new RunLayout(artifactDir, branch).outDir;
-}
-
-/** Caminho do `state.json` da run. */
-export function stateFile(artifactDir: string, branch: string): string {
-	return new RunLayout(artifactDir, branch).stateFile;
-}
-
 /** Leitor padrão a partir do cwd (null se ausente/ilegível). */
 export function fileReader(cwd: string): FileReader {
 	return new ProjectFiles(cwd).reader();
@@ -262,6 +243,32 @@ export function filterFindings(
 			return true;
 		})
 		.sort(compareFindings);
+}
+
+/** Resultado da resolução de um id (completo ou prefixo único). */
+export type FindingIdResolution =
+	| { status: "found"; id: string }
+	| { status: "ambiguous"; matches: string[] }
+	| { status: "missing" };
+
+/**
+ * Resolve um id de finding: exato primeiro, depois prefixo único.
+ * Ambíguo devolve os candidatos para a mensagem de erro.
+ */
+export function resolveFindingId(
+	state: FindingsStateFile,
+	input: string,
+): FindingIdResolution {
+	const needle = input.trim();
+	if (needle.length === 0) return { status: "missing" };
+	if (state.findings[needle]) return { status: "found", id: needle };
+
+	const matches = Object.keys(state.findings).filter((id) =>
+		id.toLowerCase().startsWith(needle.toLowerCase()),
+	);
+	if (matches.length === 1) return { status: "found", id: matches[0] };
+	if (matches.length > 1) return { status: "ambiguous", matches };
+	return { status: "missing" };
 }
 
 // ---------------------------------------------------------------------------
@@ -377,47 +384,6 @@ export function buildStateFromFindings(
 	return state;
 }
 
-/**
- * Reconstrói o estado a partir dos artefatos da run (`classification.json` +
- * `findings/<id>.json`), sem exigir `--finalize`. Devolve null se não houver
- * findings gravados.
- */
-export function buildStateFromRunDir(
-	outDir: string,
-	branch: string,
-	readFile: FileReader,
-): FindingsStateFile | null {
-	const classificationPath = join(outDir, "classification.json");
-	if (!existsSync(classificationPath)) return null;
-
-	let activeIds: string[] = [];
-	try {
-		const classification = JSON.parse(readFileSync(classificationPath, "utf8")) as {
-			watchdogs?: Record<string, string[]>;
-		};
-		activeIds = Object.keys(classification.watchdogs ?? {});
-	} catch {
-		return null;
-	}
-
-	const reports: WatchdogReport[] = [];
-	for (const id of activeIds) {
-		const path = join(outDir, "findings", `${id}.json`);
-		if (!existsSync(path)) continue;
-		try {
-			const report = parseWatchdogReport(
-				JSON.parse(readFileSync(path, "utf8")),
-				path,
-			);
-			if (report) reports.push(report);
-		} catch {
-			// Ignora findings ilegíveis — reconstrução best-effort.
-		}
-	}
-	if (reports.length === 0) return null;
-
-	return buildStateFromFindings(dedupeFindings(reports), { branch, readFile });
-}
 // ---------------------------------------------------------------------------
 
 export type FindingUpdate = {
@@ -574,7 +540,7 @@ export class Finding {
 	}
 }
 
-/** Coleção de triagem de uma run — superfície OO sobre o `state.json`. */
+/** Coleção de triagem de uma run — superfície OO sobre o dump persistido. */
 export class FindingsState {
 	readonly file: FindingsStateFile;
 
@@ -669,11 +635,6 @@ export class FindingsRepository {
 	constructor(path: string, branch: string) {
 		this.path = path;
 		this.branch = branch;
-	}
-
-	/** Repository para a run de uma branch. */
-	static at(artifactDir: string, branch: string): FindingsRepository {
-		return new FindingsRepository(stateFile(artifactDir, branch), branch);
 	}
 
 	get filePath(): string {

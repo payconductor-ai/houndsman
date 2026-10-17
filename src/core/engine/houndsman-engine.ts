@@ -13,6 +13,9 @@ import { FileClassifier } from "../services/file-classifier";
 import { FixBatchBuilder } from "../services/fix-batch-builder";
 import { GitRepository } from "../services/git-repository";
 import { Verifier } from "../services/verifier";
+import { createStorage } from "../storage/factory";
+import { resolveRepoIdentity } from "../storage/repo-identity";
+import type { RepoIdentity, StorageProvider } from "../storage/types";
 import { ReviewSession } from "./review-session";
 
 /** Colaboradores injetáveis (testes/CLI). */
@@ -21,6 +24,8 @@ export type EngineDeps = {
 	classifier?: FileClassifier;
 	verifier?: Verifier;
 	fixBatch?: FixBatchBuilder;
+	storage?: StorageProvider;
+	repo?: RepoIdentity;
 };
 
 /** Composition root do motor. */
@@ -30,6 +35,8 @@ export class HoundsmanEngine {
 	readonly classifier: FileClassifier;
 	readonly verifier: Verifier;
 	readonly fixBatch: FixBatchBuilder;
+	readonly storage: StorageProvider;
+	readonly repo: RepoIdentity;
 
 	constructor(raw: HoundsmanConfig, deps: EngineDeps = {}) {
 		this.project = new ProjectConfig(raw);
@@ -37,6 +44,8 @@ export class HoundsmanEngine {
 		this.classifier = deps.classifier ?? new FileClassifier(raw);
 		this.verifier = deps.verifier ?? new Verifier();
 		this.fixBatch = deps.fixBatch ?? new FixBatchBuilder();
+		this.storage = deps.storage ?? createStorage(raw);
+		this.repo = deps.repo ?? resolveRepoIdentity(this.git);
 	}
 
 	/** Configuração crua (contrato do consumidor). */
@@ -46,6 +55,11 @@ export class HoundsmanEngine {
 
 	/** Abre uma sessão de revisão (prepare/finalize). */
 	session(options: ReviewOptions): ReviewSession {
-		return ReviewSession.from(this.config, options);
+		return ReviewSession.from(this.config, options, this.storage, this.repo);
+	}
+
+	/** Libera o provider (fecha o SQLite e faz checkpoint do WAL). */
+	close(): void {
+		this.storage.close();
 	}
 }

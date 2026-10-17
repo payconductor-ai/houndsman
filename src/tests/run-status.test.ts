@@ -9,6 +9,8 @@ import {
 	statusAfterFindingsChange,
 	writeRunStatus,
 } from "../core/run-status";
+import { buildRepoIdentity } from "../core/storage/repo-identity";
+import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 
 function findingState(partial: Partial<FindingState>): FindingState {
 	return {
@@ -45,53 +47,61 @@ function stateOf(findings: FindingState[]): FindingsStateFile {
 	};
 }
 
-/** Diretório temporário isolado. */
-function withTempDir(fn: (dir: string) => void): void {
+/** Banco temporário isolado + review da branch padrão. */
+function withStorage(
+	fn: (storage: SQLiteStorageProvider, reviewId: string) => void,
+): void {
 	const dir = mkdtempSync(join(tmpdir(), "houndsman-run-status-"));
+	const storage = new SQLiteStorageProvider(join(dir, "houndsman.db"));
 	try {
-		fn(dir);
+		const review = storage.getOrCreateReview({
+			repo: buildRepoIdentity(null, dir),
+			branch: "feature/x",
+			slug: "feature-x",
+		});
+		fn(storage, review.id);
 	} finally {
+		storage.close();
 		rmSync(dir, { recursive: true, force: true });
 	}
 }
 
-describe("run-status — arquivo", () => {
+describe("run-status — storage", () => {
 	test("grava, lê e preserva/restaura o startedAt", () => {
-		withTempDir((dir) => {
-			writeRunStatus(dir, {
-				branch: "feature/x",
+		withStorage((storage, reviewId) => {
+			writeRunStatus(storage, reviewId, {
 				status: "reviewing",
 				resetStartedAt: true,
 				now: "2026-01-01T00:00:00.000Z",
 			});
-			const first = readRunStatus(dir);
+			const first = readRunStatus(storage, reviewId);
 			expect(first?.status).toBe("reviewing");
 			expect(first?.slug).toBe("feature-x");
 			expect(first?.startedAt).toBe("2026-01-01T00:00:00.000Z");
 
-			writeRunStatus(dir, {
-				branch: "feature/x",
+			writeRunStatus(storage, reviewId, {
 				status: "review_done",
 				now: "2026-01-01T00:10:00.000Z",
 			});
-			const second = readRunStatus(dir);
+			const second = readRunStatus(storage, reviewId);
 			expect(second?.status).toBe("review_done");
 			expect(second?.startedAt).toBe("2026-01-01T00:00:00.000Z");
 			expect(second?.updatedAt).toBe("2026-01-01T00:10:00.000Z");
 
-			writeRunStatus(dir, {
-				branch: "feature/x",
+			writeRunStatus(storage, reviewId, {
 				status: "reviewing",
 				resetStartedAt: true,
 				now: "2026-01-01T00:20:00.000Z",
 			});
-			expect(readRunStatus(dir)?.startedAt).toBe("2026-01-01T00:20:00.000Z");
+			expect(readRunStatus(storage, reviewId)?.startedAt).toBe(
+				"2026-01-01T00:20:00.000Z",
+			);
 		});
 	});
 
-	test("readRunStatus devolve null sem arquivo", () => {
-		withTempDir((dir) => {
-			expect(readRunStatus(dir)).toBeNull();
+	test("readRunStatus devolve null para review inexistente", () => {
+		withStorage((storage) => {
+			expect(readRunStatus(storage, "missing")).toBeNull();
 		});
 	});
 });
@@ -127,7 +137,7 @@ describe("statusAfterFindingsChange", () => {
 		expect(statusAfterFindingsChange("review_done", state)).toBe("fix_done");
 	});
 
-	test("sem run.json e sem fix → fallback review_done", () => {
+	test("sem review e sem fix → fallback review_done", () => {
 		const state = stateOf([
 			findingState({ decision: "pending", execState: "pending" }),
 		]);
@@ -136,12 +146,12 @@ describe("statusAfterFindingsChange", () => {
 });
 
 describe("pingFindingsStatus", () => {
-	test("deriva do estado e grava o run.json", () => {
-		withTempDir((dir) => {
+	test("deriva do estado e grava o status na review", () => {
+		withStorage((storage, reviewId) => {
 			const state = stateOf([findingState({ execState: "in_progress" })]);
-			const file = pingFindingsStatus(dir, state);
-			expect(file.status).toBe("fixing");
-			expect(readRunStatus(dir)?.status).toBe("fixing");
+			const review = pingFindingsStatus(storage, reviewId, state);
+			expect(review.status).toBe("fixing");
+			expect(readRunStatus(storage, reviewId)?.status).toBe("fixing");
 		});
 	});
 });

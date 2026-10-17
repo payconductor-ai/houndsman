@@ -56,7 +56,6 @@ export type FakeWatchdogId = keyof typeof FAKE_WATCHDOG_DEFINITIONS;
 export const fakeHoundsmanConfig: HoundsmanConfig<FakeWatchdogId> =
 	defineHoundsmanConfig<FakeWatchdogId>({
 		projectName: "Fake Project",
-		artifactDir: "tmp/fake-review",
 		watchdogs: FAKE_WATCHDOG_DEFINITIONS,
 		exclusions: [/^dist\//, /\.lock$/],
 		docMappings: [[/^src\//, ["README.md"]]],

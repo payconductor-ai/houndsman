@@ -16,6 +16,7 @@ export type {
 	HoundsmanConcurrency,
 	HoundsmanConfig,
 	HoundsmanConfigInput,
+	HoundsmanStorage,
 } from "./core/config";
 export {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
@@ -75,6 +76,7 @@ export type {
 	FindingDecision,
 	FindingExecState,
 	FindingHistoryEntry,
+	FindingIdResolution,
 	FindingState,
 	FindingsFilter,
 	FindingsStateFile,
@@ -85,7 +87,6 @@ export type {
 export {
 	applyFindingUpdate,
 	buildStateFromFindings,
-	buildStateFromRunDir,
 	compareFindings,
 	emptyState,
 	FINDING_DECISIONS,
@@ -99,20 +100,18 @@ export {
 	filterFindings,
 	newFindingId,
 	reorder,
-	runDir,
-	stateFile,
+	resolveFindingId,
 	summarize,
 	syncState,
 } from "./core/findings-state";
 export type { GitResult, GitRunner } from "./core/git-runner";
 export {
-	ARTIFACT_DIR,
 	CORE_DIR,
 	CORE_SKILL_DIR,
+	displayPath,
 	OUTPUT_FORMAT_PATH,
 	PROJECT_DIR,
 	relFromRoot,
-	STATE_FILE,
 } from "./core/paths";
 export { ProjectConfig } from "./core/project-config";
 export { checkRegistry } from "./core/registry-check";
@@ -121,7 +120,6 @@ export { ManifestWriter } from "./core/renderers/manifest-writer";
 export { ReportRenderer } from "./core/renderers/report-renderer";
 export type { DomainReport } from "./core/report-builder";
 export { renderDomainReport } from "./core/report-builder";
-export { RunLayout } from "./core/run-layout";
 export type { Clock } from "./core/services/clock";
 export { systemClock } from "./core/services/clock";
 export { FileClassifier } from "./core/services/file-classifier";
@@ -131,6 +129,29 @@ export { GhClient } from "./core/services/gh-client";
 export { GitRepository } from "./core/services/git-repository";
 export { ProjectFiles } from "./core/services/project-files";
 export { Verifier } from "./core/services/verifier";
+export {
+	createMemoryStorage,
+	createStorage,
+} from "./core/storage/factory";
+export { FileStorageProvider } from "./core/storage/file/file-storage";
+export {
+	buildRepoIdentity,
+	normalizeRemote,
+	resolveRepoIdentity,
+} from "./core/storage/repo-identity";
+export { SQLiteStorageProvider } from "./core/storage/sqlite/sqlite-storage";
+export type {
+	ArtifactKind,
+	ArtifactRecord,
+	CreateReviewInput,
+	RepoIdentity,
+	ReviewPatch,
+	ReviewRecord,
+	ReviewStatus,
+	StorageProvider,
+	WriteArtifactInput,
+} from "./core/storage/types";
+export { ReviewWorkArea } from "./core/storage/work-area";
 export type {
 	ChurnMap,
 	ClassifyRule,

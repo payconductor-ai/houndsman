@@ -5,7 +5,7 @@
  * OPCIONAL: sem binário, sem login ou sem PR para a branch, grava
  * `context.json` com `{ available: false, reason }` e sai com código 0.
  *
- * Artefatos (em --dir, default .houndsman/.runs/<branch-slug>/):
+ * Artefatos no staging da review (`<HOUNDSMAN_HOME>/work/<reviewId>/`):
  *   context.json      payload bruto do `gh pr view` (ou marcador de indisponível)
  *   context-brief.md  instruções para o subagente resumir o contexto
  *
@@ -22,13 +22,19 @@ import {
 } from "./paths";
 import type { ContextSummary } from "./report-builder";
 import { parseContextSummary } from "./report-builder";
-import { type ContextPaths, RunLayout } from "./run-layout";
 import { systemClock } from "./services/clock";
 import { defaultGhRunner, GhClient, type GhRunner } from "./services/gh-client";
 import { GitRepository } from "./services/git-repository";
 
 export { CONTEXT_BRIEF_FILE, CONTEXT_FILE, CONTEXT_SUMMARY_FILE };
-export type { ContextPaths };
+
+/** Caminhos dos artefatos de contexto da PR (staging da review). */
+export type ContextPaths = {
+	dir: string;
+	context: string;
+	summary: string;
+	brief: string;
+};
 
 const GH_JSON_FIELDS =
 	"number,title,body,url,baseRefName,headRefName,author,commits,files";
@@ -60,8 +66,16 @@ export type PrContextRaw = {
 };
 
 /** Caminhos dos artefatos de contexto para uma branch. */
-export function contextPaths(dir: string, branch: string): ContextPaths {
-	return new RunLayout(dir, branch).contextPaths;
+export function contextFileNames(): {
+	context: string;
+	summary: string;
+	brief: string;
+} {
+	return {
+		context: CONTEXT_FILE,
+		summary: CONTEXT_SUMMARY_FILE,
+		brief: CONTEXT_BRIEF_FILE,
+	};
 }
 
 /** Detecta a branch atual; lança se não houver (o CLI decide o exit). */

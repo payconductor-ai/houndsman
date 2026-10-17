@@ -7,9 +7,13 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { buildStateFromFindings, fileReader } from "../core/findings-state";
+import { dedupeFindings, parseWatchdogReport } from "../core/report-builder";
+import { buildRepoIdentity } from "../core/storage/repo-identity";
+import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 
 /** Caminho do executável do CLI (TS, rodado pelo Bun). */
 const CLI = join(import.meta.dir, "..", "cli", "index.ts");
@@ -17,6 +21,7 @@ const CLI = join(import.meta.dir, "..", "cli", "index.ts");
 /** Config mínima, como objeto literal (o `loadConfig` deriva `watchdogIds`). */
 const CONFIG = `export default {
 	projectName: "Smoke",
+	storage: { provider: "sqlite", path: "./houndsman.db" },
 	watchdogs: {
 		alpha: {
 			id: "alpha",
@@ -33,22 +38,18 @@ const CONFIG = `export default {
 };
 `;
 
-type Project = { cwd: string; artifacts: string; cleanup: () => void };
+type Project = { cwd: string; cleanup: () => void };
 
-/** Projeto temporário: config + uma run com um finding. */
+/** Projeto temporário: config + banco com uma run e um finding. */
 function makeProject(): Project {
 	const cwd = mkdtempSync(join(tmpdir(), "houndsman-cli-"));
-	const artifacts = join(cwd, ".houndsman", ".runs");
-	const runDir = join(artifacts, "main");
-	mkdirSync(join(runDir, "findings"), { recursive: true });
 	writeFileSync(join(cwd, "houndsman.config.ts"), CONFIG);
-	writeFileSync(
-		join(runDir, "classification.json"),
-		JSON.stringify({ watchdogs: { alpha: ["src/a.ts"] } }),
-	);
-	writeFileSync(
-		join(runDir, "findings", "alpha.json"),
-		JSON.stringify({
+
+	const storage = new SQLiteStorageProvider(join(cwd, "houndsman.db"));
+	const repo = buildRepoIdentity(null, cwd);
+	const review = storage.getOrCreateReview({ repo, branch: "main", slug: "main" });
+	const report = parseWatchdogReport(
+		{
 			watchdogId: "alpha",
 			reviewedFiles: ["src/a.ts"],
 			skipped: [],
@@ -62,11 +63,22 @@ function makeProject(): Project {
 					action: "tipar",
 				},
 			],
-		}),
+		},
+		"alpha.json",
 	);
+	if (report) {
+		storage.writeFindings(
+			review.id,
+			buildStateFromFindings(dedupeFindings([report]), {
+				branch: "main",
+				readFile: fileReader(cwd),
+			}),
+		);
+	}
+	storage.close();
+
 	return {
 		cwd,
-		artifacts,
 		cleanup: () => rmSync(cwd, { recursive: true, force: true }),
 	};
 }
@@ -112,8 +124,6 @@ describe("cli smoke — imports dinâmicos", () => {
 				"findings",
 				"summary",
 				"--json",
-				"--dir",
-				project.artifacts,
 				"--branch",
 				"main",
 			]);
@@ -132,8 +142,6 @@ describe("cli smoke — imports dinâmicos", () => {
 				"submit",
 				"--dry-run",
 				"--json",
-				"--dir",
-				project.artifacts,
 				"--branch",
 				"main",
 			]);

@@ -237,14 +237,14 @@ describe("FindingsStateStore", () => {
 		const project = makeProject({ "src/f.ts": DUPLICATED });
 		const outDir = join(project.cwd, "artifacts");
 		try {
-			const store = FindingsStateStore.at(outDir, "feature/x");
+			const store = new FindingsStateStore(join(outDir, "state.json"), "feature/x");
 			const state = buildStateFromFindings(
 				[merged({ file: "src/f.ts", rule: "r", line: 2 })],
 				{ branch: "feature/x", readFile: fileReader(project.cwd) },
 			);
 			store.write(state);
 
-			expect(store.filePath).toBe(join(outDir, "feature-x", "state.json"));
+			expect(store.filePath).toBe(join(outDir, "state.json"));
 			expect(existsSync(store.filePath)).toBe(true);
 			const read = store.read();
 			expect(read?.slug).toBe("feature-x");
@@ -257,7 +257,10 @@ describe("FindingsStateStore", () => {
 	test("read devolve null quando o arquivo não existe", () => {
 		const project = makeProject({});
 		try {
-			const store = FindingsStateStore.at(join(project.cwd, "artifacts"), "main");
+			const store = new FindingsStateStore(
+				join(project.cwd, "artifacts", "state.json"),
+				"main",
+			);
 			expect(store.read()).toBeNull();
 			expect(store.update(() => {})).toBeTruthy();
 		} finally {
