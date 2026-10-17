@@ -1,6 +1,6 @@
 {
 	"name": "@payconductor/houndsman",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"description": "Orquestrador de revisão de Pull Requests: classifica o diff, despacha watchdogs especializados por domínio e consolida o relatório.",
 	"type": "module",
 	"license": "MIT",
