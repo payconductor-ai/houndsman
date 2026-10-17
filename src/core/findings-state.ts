@@ -11,8 +11,8 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
 	buildAnchor,
 	type FindingAnchor,
@@ -20,7 +20,6 @@ import {
 	locateAnchor,
 	reanchor,
 } from "./finding-anchor";
-import { STATE_FILE } from "./paths";
 import {
 	dedupeFindings,
 	type MergedFinding,
@@ -28,7 +27,12 @@ import {
 	sanitizeBranch,
 	type WatchdogReport,
 } from "./report-builder";
+import { RunLayout } from "./run-layout";
+import { systemClock } from "./services/clock";
+import { type FileReader, ProjectFiles } from "./services/project-files";
 import { SEVERITY_ORDER, type Severity, severityRank } from "./types";
+
+export type { FileReader };
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -140,27 +144,17 @@ export const FINDINGS_STATE_VERSION = 2;
 
 /** Diretório de artefatos da run (branch-slug). */
 export function runDir(artifactDir: string, branch: string): string {
-	return join(artifactDir, sanitizeBranch(branch));
+	return new RunLayout(artifactDir, branch).outDir;
 }
 
 /** Caminho do `state.json` da run. */
 export function stateFile(artifactDir: string, branch: string): string {
-	return join(runDir(artifactDir, branch), STATE_FILE);
+	return new RunLayout(artifactDir, branch).stateFile;
 }
-
-/** Leitor de arquivos relativos à raiz do projeto (injetável nos testes). */
-export type FileReader = (relativePath: string) => string | null;
 
 /** Leitor padrão a partir do cwd (null se ausente/ilegível). */
 export function fileReader(cwd: string): FileReader {
-	return (relativePath: string) => {
-		try {
-			const full = join(cwd, relativePath);
-			return existsSync(full) ? readFileSync(full, "utf8") : null;
-		} catch {
-			return null;
-		}
-	};
+	return new ProjectFiles(cwd).reader();
 }
 
 /** Id curto aleatório (hex) para um finding novo. */
@@ -174,7 +168,7 @@ export function emptyState(branch: string): FindingsStateFile {
 		version: FINDINGS_STATE_VERSION,
 		branch,
 		slug: sanitizeBranch(branch),
-		updatedAt: new Date().toISOString(),
+		updatedAt: systemClock(),
 		order: [],
 		findings: {},
 	};
@@ -297,7 +291,7 @@ export function buildStateFromFindings(
 	merged: readonly MergedFinding[],
 	options: BuildStateOptions,
 ): FindingsStateFile {
-	const now = options.now ?? new Date().toISOString();
+	const now = options.now ?? systemClock();
 	const previous = options.previous ?? null;
 
 	const result: Record<string, FindingState> = {};
@@ -437,7 +431,7 @@ export type FindingUpdate = {
 export function applyFindingUpdate(
 	finding: FindingState,
 	update: FindingUpdate,
-	now: string = new Date().toISOString(),
+	now: string = systemClock(),
 ): FindingState {
 	if (update.decision && DECISION_SET.has(update.decision)) {
 		finding.decision = update.decision;
@@ -471,7 +465,7 @@ export type SyncResult = {
 export function syncState(
 	state: FindingsStateFile,
 	readFile: FileReader,
-	now: string = new Date().toISOString(),
+	now: string = systemClock(),
 ): SyncResult {
 	const moved: string[] = [];
 	const stale: string[] = [];
@@ -521,22 +515,165 @@ export function occurrenceCount(
 }
 
 // ---------------------------------------------------------------------------
-// Store (I/O atômico)
+// Domínio (classes)
+// ---------------------------------------------------------------------------
+
+/** Um finding triável, com comportamento sobre o DTO serializável. */
+export class Finding {
+	readonly state: FindingState;
+
+	constructor(state: FindingState) {
+		this.state = state;
+	}
+
+	static from(state: FindingState): Finding {
+		return new Finding(state);
+	}
+
+	get id(): string {
+		return this.state.id;
+	}
+
+	get file(): string {
+		return this.state.file;
+	}
+
+	get line(): number | null {
+		return this.state.line;
+	}
+
+	get severity(): Severity {
+		return this.state.severity;
+	}
+
+	get decision(): FindingDecision {
+		return this.state.decision;
+	}
+
+	get execState(): FindingExecState {
+		return this.state.execState;
+	}
+
+	get present(): boolean {
+		return this.state.present;
+	}
+
+	get isDone(): boolean {
+		return this.state.execState === "done";
+	}
+
+	/** Aplica uma atualização (com histórico) e devolve o próprio finding. */
+	apply(update: FindingUpdate, now: string = systemClock()): Finding {
+		applyFindingUpdate(this.state, update, now);
+		return this;
+	}
+
+	/** Payload serializável (mesmo shape do `state.json`). */
+	toJSON(): FindingState {
+		return this.state;
+	}
+}
+
+/** Coleção de triagem de uma run — superfície OO sobre o `state.json`. */
+export class FindingsState {
+	readonly file: FindingsStateFile;
+
+	constructor(file: FindingsStateFile) {
+		this.file = file;
+	}
+
+	static from(file: FindingsStateFile): FindingsState {
+		return new FindingsState(file);
+	}
+
+	static empty(branch: string): FindingsState {
+		return new FindingsState(emptyState(branch));
+	}
+
+	get branch(): string {
+		return this.file.branch;
+	}
+
+	get reviewed(): FindingsReviewed | undefined {
+		return this.file.reviewed;
+	}
+
+	/** Findings na ordem de exibição (`order`). */
+	list(): Finding[] {
+		return this.file.order
+			.map((id) => this.file.findings[id])
+			.filter((state): state is FindingState => Boolean(state))
+			.map((state) => Finding.from(state));
+	}
+
+	/** Busca por id. */
+	get(id: string): Finding | null {
+		const state = this.file.findings[id];
+		return state ? Finding.from(state) : null;
+	}
+
+	/** Todos os findings (ordem de inserção, sem o `order`). */
+	values(): Finding[] {
+		return Object.values(this.file.findings).map((state) => Finding.from(state));
+	}
+
+	/** Somente os presentes no último relatório. */
+	present(): Finding[] {
+		return this.values().filter((finding) => finding.present);
+	}
+
+	/** Filtra pela ordem canônica (presentes → severidade → arquivo → linha). */
+	filter(filter: FindingsFilter = {}): Finding[] {
+		return filterFindings(this.file, filter).map((state) => Finding.from(state));
+	}
+
+	/** Contagens por decisão, execução e severidade. */
+	summarize(): FindingsSummary {
+		return summarize(this.file);
+	}
+
+	/** Reordena os ids pela ordenação canônica. */
+	reorder(): void {
+		reorder(this.file);
+	}
+
+	/** Aplica uma atualização a um finding e devolve-o (null se ausente). */
+	apply(id: string, update: FindingUpdate, now?: string): Finding | null {
+		const state = this.file.findings[id];
+		if (!state) return null;
+		applyFindingUpdate(state, update, now);
+		return Finding.from(state);
+	}
+
+	/** Reancora os presentes contra os arquivos atuais. */
+	sync(readFile: FileReader, now?: string): SyncResult {
+		return syncState(this.file, readFile, now);
+	}
+
+	/** Payload serializável (mesmo shape do `state.json`). */
+	toJSON(): FindingsStateFile {
+		return this.file;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Repository (I/O atômico)
 // ---------------------------------------------------------------------------
 
 /** Persistência do `state.json` — escrita atômica (tmp + rename). */
-export class FindingsStateStore {
+export class FindingsRepository {
 	private readonly path: string;
 	private readonly branch: string;
+	private readonly files = new ProjectFiles();
 
 	constructor(path: string, branch: string) {
 		this.path = path;
 		this.branch = branch;
 	}
 
-	/** Store para a run de uma branch. */
-	static at(artifactDir: string, branch: string): FindingsStateStore {
-		return new FindingsStateStore(stateFile(artifactDir, branch), branch);
+	/** Repository para a run de uma branch. */
+	static at(artifactDir: string, branch: string): FindingsRepository {
+		return new FindingsRepository(stateFile(artifactDir, branch), branch);
 	}
 
 	get filePath(): string {
@@ -545,31 +682,26 @@ export class FindingsStateStore {
 
 	/** Lê o estado; null se ausente/inválido. */
 	read(): FindingsStateFile | null {
-		if (!existsSync(this.path)) return null;
-		try {
-			const raw = JSON.parse(readFileSync(this.path, "utf8")) as FindingsStateFile;
-			if (raw?.version !== FINDINGS_STATE_VERSION || !raw.findings) return null;
-			return raw;
-		} catch {
-			return null;
-		}
+		const raw = this.files.readJson<FindingsStateFile>(this.path);
+		if (!raw || raw.version !== FINDINGS_STATE_VERSION || !raw.findings) return null;
+		return raw;
 	}
 
 	/** Grava o estado de forma atômica. */
 	write(state: FindingsStateFile): void {
-		mkdirSync(dirname(this.path), { recursive: true });
-		const tmp = `${this.path}.${process.pid}.tmp`;
-		writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`);
-		renameSync(tmp, this.path);
+		this.files.writeAtomic(this.path, `${JSON.stringify(state, null, 2)}\n`);
 	}
 
 	/** Lê-modifica-grava; parte de um estado vazio se não existir. */
 	update(mutator: (state: FindingsStateFile) => void): FindingsStateFile {
 		const state = this.read() ?? emptyState(this.branch);
 		mutator(state);
-		state.updatedAt = new Date().toISOString();
+		state.updatedAt = systemClock();
 		reorder(state);
 		this.write(state);
 		return state;
 	}
 }
+
+/** Nome anterior do repository (compatibilidade da API pública). */
+export { FindingsRepository as FindingsStateStore };

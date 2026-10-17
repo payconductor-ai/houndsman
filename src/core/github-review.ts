@@ -20,40 +20,11 @@ import {
 	type FindingState,
 	type FindingsStateFile,
 } from "./findings-state";
+import { systemClock } from "./services/clock";
+import { defaultGhRunner, type GhResult, type GhRunner } from "./services/gh-client";
 import { SEVERITY_EMOJI, type Severity } from "./types";
 
-// ---------------------------------------------------------------------------
-// Runner do `gh` (injetável nos testes)
-// ---------------------------------------------------------------------------
-
-export type GhResult = { ok: boolean; code: number; stdout: string; stderr: string };
-
-/** Executa o `gh` e devolve o resultado cru (sem lançar). */
-export type GhRunner = (args: string[]) => GhResult;
-
-/** Runner padrão: `gh` a partir do cwd; ausência do binário → `ok:false`. */
-export const defaultGhRunner: GhRunner = (args) => {
-	try {
-		const result = Bun.spawnSync(["gh", ...args], {
-			stdout: "pipe",
-			stderr: "pipe",
-		});
-		const code = result.exitCode ?? 1;
-		return {
-			ok: code === 0,
-			code,
-			stdout: new TextDecoder().decode(result.stdout).trim(),
-			stderr: new TextDecoder().decode(result.stderr).trim(),
-		};
-	} catch (error) {
-		return {
-			ok: false,
-			code: 127,
-			stdout: "",
-			stderr: error instanceof Error ? error.message : String(error),
-		};
-	}
-};
+export { type GhResult, type GhRunner, defaultGhRunner };
 
 // ---------------------------------------------------------------------------
 // Alvo (PR + repositório)
@@ -371,7 +342,7 @@ export function submitFindings(options: {
 	now?: string;
 }): SubmitOutcome {
 	const { state, target, runner } = options;
-	const now = options.now ?? new Date().toISOString();
+	const now = options.now ?? systemClock();
 	const candidates = selectSubmitCandidates(state, options.selection);
 
 	const outcome: SubmitOutcome = { posted: [], failed: [], skipped: [] };

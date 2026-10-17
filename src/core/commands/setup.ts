@@ -49,27 +49,32 @@ function ensurePackageScript(ctx: ScaffoldContext): void {
 	ctx.created.push("package.json#scripts.houndsman");
 }
 
-/** Cria a configuração inicial do projeto. */
-export async function runSetupCommand(options: SetupOptions): Promise<void> {
+/** Cria a configuração inicial do projeto. Devolve as mensagens do CLI. */
+export async function runSetupCommand(options: SetupOptions): Promise<string[]> {
 	const ctx = createScaffoldContext(
 		options.cwd,
 		options.args,
 		options.args.includes("--force"),
 	);
 
-	console.log(`→ Configurando houndsman em ${ctx.cwd} (projeto: ${ctx.projectName})`);
+	const messages = [
+		`→ Configurando houndsman em ${ctx.cwd} (projeto: ${ctx.projectName})`,
+	];
 
 	writeUserLayer(ctx);
 	syncGeneratedFiles(ctx);
 	ensurePackageScript(ctx);
 
-	for (const path of ctx.created) console.log(`  + ${path}`);
-	for (const path of ctx.skipped) console.log(`  = ${path} (mantido)`);
-	for (const path of ctx.generated) console.log(`  ~ ${path} (auto)`);
+	for (const path of ctx.created) messages.push(`  + ${path}`);
+	for (const path of ctx.skipped) messages.push(`  = ${path} (mantido)`);
+	for (const path of ctx.generated) messages.push(`  ~ ${path} (auto)`);
 
-	console.log("\nPróximos passos:");
-	console.log("  1. Ajuste `houndsman.config.ts` e `.houndsman/watchdogs/`.");
-	console.log("  2. Valide: bun run houndsman doctor");
-	console.log("  3. Prepare a revisão: bun run houndsman");
-	console.log("  ·  Sincronizar arquivos auto-gerados: bun run houndsman update");
+	messages.push(
+		"\nPróximos passos:",
+		"  1. Ajuste `houndsman.config.ts` e `.houndsman/watchdogs/`.",
+		"  2. Valide: bun run houndsman doctor",
+		"  3. Prepare a revisão: bun run houndsman",
+		"  ·  Sincronizar arquivos auto-gerados: bun run houndsman update",
+	);
+	return messages;
 }

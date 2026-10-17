@@ -6,41 +6,16 @@
  * Bind padrão em `127.0.0.1` — ferramenta local, sem autenticação.
  */
 
-import { join, resolve } from "node:path";
 import { mediaPath } from "../core/assets";
-import { type HoundsmanConfig, resolveArtifactDir } from "../core/config";
+import type { HoundsmanConfig } from "../core/config";
+import type { FindingUpdate } from "../core/findings-state";
 import {
-	applyFindingUpdate,
-	buildStateFromRunDir,
-	emptyState,
-	type FindingDecision,
-	type FindingExecState,
-	type FindingState,
-	type FindingsFilter,
-	type FindingsStateFile,
-	FindingsStateStore,
-	type FindingsSummary,
-	type FindingUpdate,
-	fileReader,
-	filterFindings,
-	reorder,
-	type SyncResult,
-	summarize,
-	syncState,
-} from "../core/findings-state";
-import {
-	buildSubmitPreview,
 	defaultGhRunner,
 	type GhRunner,
-	resolvePrTarget,
 	type SubmitSelection,
-	submitFindings,
 } from "../core/github-review";
-import { STATE_FILE } from "../core/paths";
-import { pingFindingsStatus, type RunStatus, readRunStatus } from "../core/run-status";
-import type { Severity } from "../core/types";
-import { listRunSlugs, readRunFile, readRunJson, runDirForSlug } from "./artifacts";
 import { buildClientBundle } from "./client-build";
+import { RunRepository } from "./run-repository";
 
 type BunServer = ReturnType<typeof Bun.serve>;
 
@@ -77,180 +52,8 @@ function notFound(detail = "não encontrado"): Response {
 // Estado / dados
 // ---------------------------------------------------------------------------
 
-/** Item da lista de execuções (sidebar) — já ordenado do mais recente ao antigo. */
-type RunListItem = {
-	slug: string;
-	branch: string;
-	updatedAt?: string;
-	status: RunStatus | null;
-	summary: FindingsSummary;
-};
-
-function buildForRun(dir: string, slug: string): FindingsStateFile | null {
-	const manifest = readRunJson<{ branch?: string }>(dir, "manifest.json");
-	return buildStateFromRunDir(dir, manifest?.branch ?? slug, fileReader(process.cwd()));
-}
-
-/**
- * Lê o estado da run. Se ausente, reconstrói dos artefatos e PERSISTE — os ids
- * são aleatórios, então precisam ser estáveis entre requisições.
- */
-function loadState(dir: string, slug: string): FindingsStateFile {
-	const store = new FindingsStateStore(join(dir, STATE_FILE), slug);
-	const existing = store.read();
-	if (existing) return existing;
-	const built = buildForRun(dir, slug);
-	if (built) {
-		store.write(built);
-		return built;
-	}
-	return emptyState(slug);
-}
-
-function listRuns(artifactDir: string): RunListItem[] {
-	return (
-		listRunSlugs(artifactDir)
-			.map((slug) => {
-				const dir = join(artifactDir, slug);
-				const state = loadState(dir, slug);
-				const manifest = readRunJson<{ branch?: string; generatedAt?: string }>(
-					dir,
-					"manifest.json",
-				);
-				const status = readRunStatus(dir);
-				return {
-					slug,
-					branch: state.branch || manifest?.branch || slug,
-					updatedAt: status?.updatedAt ?? state.updatedAt,
-					status: status?.status ?? null,
-					summary: summarize(state),
-				};
-			})
-			// Mais recentes primeiro (ISO 8601 compara lexicograficamente).
-			.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))
-	);
-}
-
-/**
- * Finding + caminho absoluto. O cliente monta o link `vscode://file/...` e não
- * conhece o cwd do servidor — o caminho relativo do relatório não basta.
- */
-function toClientFinding(finding: FindingState): FindingState & { absFile: string } {
-	return { ...finding, absFile: resolve(process.cwd(), finding.file) };
-}
-
-function runDetail(dir: string, slug: string): unknown {
-	const state = loadState(dir, slug);
-	const classification = readRunJson<{
-		watchdogs?: Record<string, string[]>;
-		unclassified?: string[];
-		deleted?: string[];
-	}>(dir, "classification.json");
-	return {
-		slug,
-		branch: state.branch || slug,
-		status: readRunStatus(dir),
-		manifest: readRunJson(dir, "manifest.json"),
-		summary: summarize(state),
-		watchdogs: Object.keys(classification?.watchdogs ?? {}),
-		unclassified: classification?.unclassified ?? [],
-		deleted: classification?.deleted ?? [],
-	};
-}
-
-function findingsFor(dir: string, slug: string, params: URLSearchParams): unknown {
-	const state = loadState(dir, slug);
-	const filter: FindingsFilter = {
-		decision: (params.get("decision") as FindingDecision) || undefined,
-		execState: (params.get("exec") as FindingExecState) || undefined,
-		severity: (params.get("severity") as Severity) || undefined,
-		watchdog: params.get("watchdog") || undefined,
-		file: params.get("file") || undefined,
-		includeAbsent: params.get("all") === "1",
-	};
-	return {
-		branch: state.branch,
-		findings: filterFindings(state, filter).map(toClientFinding),
-		summary: summarize(state),
-	};
-}
-
-async function updateFinding(
-	dir: string,
-	slug: string,
-	id: string,
-	request: Request,
-): Promise<Response> {
-	const body = (await request.json().catch(() => ({}))) as FindingUpdate;
-	const store = new FindingsStateStore(join(dir, STATE_FILE), slug);
-	const state = store.read() ?? buildForRun(dir, slug) ?? emptyState(slug);
-	const finding = state.findings[id];
-	if (!finding) return notFound(`finding '${id}' não encontrado`);
-	applyFindingUpdate(finding, body);
-	reorder(state);
-	store.write(state);
-	pingFindingsStatus(dir, state);
-	return json({ finding: toClientFinding(finding) });
-}
-
-function syncRun(dir: string, slug: string): Response {
-	const store = new FindingsStateStore(join(dir, STATE_FILE), slug);
-	const state = store.read() ?? buildForRun(dir, slug) ?? emptyState(slug);
-	const result: SyncResult = syncState(state, fileReader(process.cwd()));
-	store.write(state);
-	pingFindingsStatus(dir, state);
-	return json({ result, summary: summarize(state) });
-}
-
-/** Prévia do envio da revisão: candidatos + disponibilidade da PR (via gh). */
-function submitPreview(dir: string, slug: string, ghRunner: GhRunner): Response {
-	const state = loadState(dir, slug);
-	const target = resolvePrTarget(ghRunner, state.branch || slug);
-	return json(buildSubmitPreview(state, target));
-}
-
-/**
- * Envia os findings selecionados como comentários na PR. Fail-open: sem PR/gh
- * devolve `{ available:false, reason }` (a UI só informa). Persiste o vínculo
- * (`finding.github`) no `state.json` e atualiza o status da run.
- */
-async function submitRun(
-	dir: string,
-	slug: string,
-	ghRunner: GhRunner,
-	request: Request,
-): Promise<Response> {
-	const state = loadState(dir, slug);
-	const body = (await request.json().catch(() => ({}))) as SubmitSelection;
-	const selection: SubmitSelection = {
-		severities: body.severities,
-		execStates: body.execStates,
-		includeSent: body.includeSent,
-	};
-
-	const target = resolvePrTarget(ghRunner, state.branch || slug);
-	if (!target.ok) return json({ available: false, reason: target.reason });
-
-	const outcome = submitFindings({
-		state,
-		target: target.target,
-		runner: ghRunner,
-		selection,
-	});
-	new FindingsStateStore(join(dir, STATE_FILE), slug).write(state);
-	pingFindingsStatus(dir, state);
-	return json({ available: true, target: target.target, outcome });
-}
-
-function serveArtifact(dir: string, name: string): Response {
-	if (!/\.(json|md)$/i.test(name)) return notFound("tipo de artefato não servido");
-	const content = readRunFile(dir, name);
-	if (content === null) return notFound(`artefato '${name}' não encontrado`);
-	const type = name.toLowerCase().endsWith(".json")
-		? "application/json; charset=utf-8"
-		: "text/markdown; charset=utf-8";
-	return text(content, type);
-}
+/** Repositório das runs (dados) — ver `run-repository.ts`. */
+type ServerDeps = { ghRunner?: GhRunner };
 
 // ---------------------------------------------------------------------------
 // Rotas
@@ -270,7 +73,7 @@ async function serveLogo(): Promise<Response> {
 
 async function route(
 	request: Request,
-	artifactDir: string,
+	runs: RunRepository,
 	ghRunner: GhRunner,
 ): Promise<Response> {
 	const url = new URL(request.url);
@@ -286,65 +89,77 @@ async function route(
 	if (path === "/api/health") return json({ ok: true });
 
 	if (path === "/api/runs" && request.method === "GET") {
-		return json({ runs: listRuns(artifactDir) });
+		return json({ runs: runs.list() });
 	}
 
 	const match = path.match(API_RUN);
 	if (!match) return notFound();
 	const slug = decodeURIComponent(match[1]);
 	const rest = match[2] ?? "";
-	const dir = runDirForSlug(artifactDir, slug);
-	if (!dir) return notFound(`run '${slug}' não encontrada`);
+	if (!runs.exists(slug)) return notFound(`run '${slug}' não encontrada`);
 
-	if (rest === "" || rest === "/") return json(runDetail(dir, slug));
+	if (rest === "" || rest === "/") return json(runs.detail(slug));
 
 	if (rest === "/findings" && request.method === "GET") {
-		return json(findingsFor(dir, slug, url.searchParams));
+		return json(runs.findings(slug, url.searchParams));
 	}
-	if (rest === "/sync" && request.method === "POST") return syncRun(dir, slug);
+	if (rest === "/sync" && request.method === "POST") return json(runs.sync(slug));
 	if (rest === "/submit-preview" && request.method === "GET") {
-		return submitPreview(dir, slug, ghRunner);
+		return json(runs.submitPreview(slug, ghRunner));
 	}
 	if (rest === "/submit" && request.method === "POST") {
-		return submitRun(dir, slug, ghRunner, request);
+		const body = (await request.json().catch(() => ({}))) as SubmitSelection;
+		const selection: SubmitSelection = {
+			severities: body.severities,
+			execStates: body.execStates,
+			includeSent: body.includeSent,
+		};
+		return json(runs.submit(slug, selection, ghRunner));
 	}
 
 	const findingMatch = rest.match(/^\/findings\/([^/]+)$/);
 	if (findingMatch) {
 		const id = decodeURIComponent(findingMatch[1]);
 		if (request.method === "GET") {
-			const state = loadState(dir, slug);
-			const finding = state.findings[id];
+			const finding = runs.finding(slug, id);
 			return finding
-				? json({ finding: toClientFinding(finding) })
+				? json({ finding })
 				: notFound(`finding '${id}' não encontrado`);
 		}
 		if (request.method === "PATCH" || request.method === "POST") {
-			return updateFinding(dir, slug, id, request);
+			const body = (await request.json().catch(() => ({}))) as FindingUpdate;
+			const finding = runs.update(slug, id, body);
+			return finding
+				? json({ finding })
+				: notFound(`finding '${id}' não encontrado`);
 		}
 	}
 
 	const artifactMatch = rest.match(/^\/artifacts\/(.+)$/);
 	if (artifactMatch && request.method === "GET") {
-		return serveArtifact(dir, decodeURIComponent(artifactMatch[1]));
+		const name = decodeURIComponent(artifactMatch[1]);
+		const artifact = runs.artifact(slug, name);
+		if (!artifact) return notFound(`artefato '${name}' não encontrado`);
+		return text(artifact.content, artifact.type);
 	}
 
 	return notFound();
 }
 
-/** Dependências injetáveis do servidor (testes). */
-export type ServerDeps = { ghRunner?: GhRunner };
+/** Servidor local do houndsman (rotas + shell). */
+export class HoundsmanServer {
+	private readonly runs: RunRepository;
+	private readonly ghRunner: GhRunner;
 
-/** Cria o handler de requisições (testável sem abrir porta). */
-export function createRequestHandler(
-	config: HoundsmanConfig,
-	deps: ServerDeps = {},
-): (request: Request) => Promise<Response> {
-	const artifactDir = resolveArtifactDir(config);
-	const ghRunner = deps.ghRunner ?? defaultGhRunner;
-	return async (request) => {
+	constructor(config: HoundsmanConfig, deps: ServerDeps = {}) {
+		this.runs = RunRepository.fromConfig(config);
+		this.ghRunner = deps.ghRunner ?? defaultGhRunner;
+	}
+
+	/** Handler de requisições (testável sem abrir porta). */
+	readonly handler = async (request: Request): Promise<Response> => {
 		try {
-			return await route(request, artifactDir, ghRunner);
+			return await route(request, this.runs, this.ghRunner);
 		} catch (error) {
 			return json(
 				{ error: error instanceof Error ? error.message : String(error) },
@@ -352,6 +167,25 @@ export function createRequestHandler(
 			);
 		}
 	};
+
+	/** Sobe o servidor e devolve a instância + URL. */
+	start(options: { port?: number; host?: string } = {}): {
+		server: BunServer;
+		url: string;
+	} {
+		const host = options.host ?? "127.0.0.1";
+		const port = options.port ?? 7331;
+		const server = Bun.serve({ hostname: host, port, fetch: this.handler });
+		return { server, url: `http://${host}:${server.port}` };
+	}
+}
+
+/** Cria o handler de requisições (testável sem abrir porta). */
+export function createRequestHandler(
+	config: HoundsmanConfig,
+	deps: ServerDeps = {},
+): (request: Request) => Promise<Response> {
+	return new HoundsmanServer(config, deps).handler;
 }
 
 export type ServerOptions = {
@@ -364,14 +198,10 @@ export type ServerOptions = {
 
 /** Sobe o servidor e devolve a instância + URL. */
 export function startServer(options: ServerOptions): { server: BunServer; url: string } {
-	const host = options.host ?? "127.0.0.1";
-	const port = options.port ?? 7331;
-	const server = Bun.serve({
-		hostname: host,
-		port,
-		fetch: createRequestHandler(options.config, { ghRunner: options.ghRunner }),
+	return new HoundsmanServer(options.config, { ghRunner: options.ghRunner }).start({
+		port: options.port,
+		host: options.host,
 	});
-	return { server, url: `http://${host}:${server.port}` };
 }
 
 // ---------------------------------------------------------------------------

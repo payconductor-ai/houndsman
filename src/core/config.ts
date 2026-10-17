@@ -6,22 +6,14 @@
  * (camada `houndsman/`) — único ponto de troca ao portar para outro repositório.
  */
 
-import { ARTIFACT_DIR } from "./paths";
+import { ProjectConfig } from "./project-config";
 import type { WatchdogDefinition } from "./types";
 
-/** Documentos sempre incluídos nos briefs (default). */
-export const DEFAULT_ALWAYS_INCLUDE_DOCS: readonly string[] = ["AGENTS.md"];
-
-/**
- * Teto default de arquivos por brief. Um PR grande (milhares de linhas) pode
- * concentrar centenas de arquivos em um único domínio; o teto mantém o contexto
- * do subagente limitado — o excedente vira "fora do orçamento" (cobertura
- * honesta), nunca some silenciosamente.
- */
-export const DEFAULT_MAX_FILES_PER_BRIEF = 40;
-
-/** Concorrência default das chamadas simultâneas ao Jev. */
-export const DEFAULT_JEV_CONCURRENCY = 5;
+export {
+	DEFAULT_ALWAYS_INCLUDE_DOCS,
+	DEFAULT_JEV_CONCURRENCY,
+	DEFAULT_MAX_FILES_PER_BRIEF,
+} from "./defaults";
 
 /** Limites de triage para PRs grandes. */
 export type HoundsmanBudgets = {
@@ -82,7 +74,7 @@ export function defineHoundsmanConfig<TId extends string>(
 
 /** Diretório dos artefatos — o valor do projeto ou o default da camada. */
 export function resolveArtifactDir(config: HoundsmanConfig): string {
-	return config.artifactDir ?? ARTIFACT_DIR;
+	return new ProjectConfig(config).artifactDir;
 }
 
 /**
@@ -90,12 +82,10 @@ export function resolveArtifactDir(config: HoundsmanConfig): string {
  * mantém o contexto do subagente limitado em PRs grandes.
  */
 export function resolveMaxFilesPerBrief(config: HoundsmanConfig): number {
-	const value = config.budgets?.maxFilesPerBrief;
-	return value !== undefined && value > 0 ? value : DEFAULT_MAX_FILES_PER_BRIEF;
+	return new ProjectConfig(config).maxFilesPerBrief;
 }
 
 /** Concorrência das chamadas Jev (valor ausente/não-positivo cai no default). */
 export function resolveJevConcurrency(config: HoundsmanConfig): number {
-	const value = config.concurrency?.jev;
-	return value !== undefined && value > 0 ? value : DEFAULT_JEV_CONCURRENCY;
+	return new ProjectConfig(config).jevConcurrency;
 }

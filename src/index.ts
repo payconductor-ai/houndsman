@@ -5,10 +5,12 @@
  * (`houndsman.config.ts`): watchdogs, tipos e helpers de autoria.
  */
 
+export { ArgParser } from "./core/arg-parser";
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
 export type { FindingsCommandResult } from "./core/commands/findings";
 export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
+export { ProjectScaffolder } from "./core/commands/scaffold";
 export type {
 	HoundsmanBudgets,
 	HoundsmanConcurrency,
@@ -36,6 +38,14 @@ export {
 	parseDiffIndex,
 	parseNumstat,
 } from "./core/diff-source";
+export { DocDiscoverer } from "./core/doc-discoverer";
+export { Classification } from "./core/domain/classification";
+export { Diff } from "./core/domain/diff";
+export { Watchdog } from "./core/domain/watchdog";
+export { buildCarryover, mergeCarryover } from "./core/engine/carryover";
+export { HoundsmanEngine } from "./core/engine/houndsman-engine";
+export { ReviewScopeResolver } from "./core/engine/review-scope";
+export { ReviewSession } from "./core/engine/review-session";
 export {
 	churnOf,
 	classifyEntries,
@@ -81,6 +91,9 @@ export {
 	FINDING_DECISIONS,
 	FINDING_EXEC_STATES,
 	FINDINGS_STATE_VERSION,
+	Finding,
+	FindingsRepository,
+	FindingsState,
 	FindingsStateStore,
 	fileReader,
 	filterFindings,
@@ -91,6 +104,7 @@ export {
 	summarize,
 	syncState,
 } from "./core/findings-state";
+export type { GitResult, GitRunner } from "./core/git-runner";
 export {
 	ARTIFACT_DIR,
 	CORE_DIR,
@@ -100,9 +114,23 @@ export {
 	relFromRoot,
 	STATE_FILE,
 } from "./core/paths";
+export { ProjectConfig } from "./core/project-config";
 export { checkRegistry } from "./core/registry-check";
+export { BriefRenderer } from "./core/renderers/brief-renderer";
+export { ManifestWriter } from "./core/renderers/manifest-writer";
+export { ReportRenderer } from "./core/renderers/report-renderer";
 export type { DomainReport } from "./core/report-builder";
 export { renderDomainReport } from "./core/report-builder";
+export { RunLayout } from "./core/run-layout";
+export type { Clock } from "./core/services/clock";
+export { systemClock } from "./core/services/clock";
+export { FileClassifier } from "./core/services/file-classifier";
+export { FixBatchBuilder } from "./core/services/fix-batch-builder";
+export type { GhResult, GhRunner } from "./core/services/gh-client";
+export { GhClient } from "./core/services/gh-client";
+export { GitRepository } from "./core/services/git-repository";
+export { ProjectFiles } from "./core/services/project-files";
+export { Verifier } from "./core/services/verifier";
 export type {
 	ChurnMap,
 	ClassifyRule,
@@ -127,6 +155,8 @@ export {
 	findWatchdog,
 	getWatchdog,
 	getWatchdogContext,
+	WatchdogRegistry,
 } from "./core/watchdog-registry";
 export type { ServerOptions } from "./server";
-export { createRequestHandler, startServer } from "./server";
+export { createRequestHandler, HoundsmanServer, startServer } from "./server";
+export { RunRepository } from "./server/run-repository";

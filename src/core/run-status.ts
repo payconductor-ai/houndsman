@@ -9,11 +9,12 @@
  * não é um status persistido.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { FindingsStateFile } from "./findings-state";
 import { RUN_STATUS_FILE } from "./paths";
 import { sanitizeBranch } from "./report-builder";
+import { systemClock } from "./services/clock";
+import { ProjectFiles } from "./services/project-files";
 
 /** Estados de execução de uma run (persistidos). */
 export type RunStatus = "reviewing" | "review_done" | "fixing" | "fix_done";
@@ -47,13 +48,7 @@ export function runStatusPath(runDir: string): string {
 
 /** Lê o `run.json` da run (null se ausente/inválido). */
 export function readRunStatus(runDir: string): RunStatusFile | null {
-	const path = runStatusPath(runDir);
-	if (!existsSync(path)) return null;
-	try {
-		return JSON.parse(readFileSync(path, "utf8")) as RunStatusFile;
-	} catch {
-		return null;
-	}
+	return new ProjectFiles().readJson<RunStatusFile>(runStatusPath(runDir));
 }
 
 export type WriteRunStatusOptions = {
@@ -69,7 +64,8 @@ export function writeRunStatus(
 	runDir: string,
 	options: WriteRunStatusOptions,
 ): RunStatusFile {
-	const now = options.now ?? new Date().toISOString();
+	const files = new ProjectFiles();
+	const now = options.now ?? systemClock();
 	const previous = readRunStatus(runDir);
 	const file: RunStatusFile = {
 		version: RUN_STATUS_VERSION,
@@ -79,8 +75,7 @@ export function writeRunStatus(
 		startedAt: options.resetStartedAt ? now : (previous?.startedAt ?? now),
 		updatedAt: now,
 	};
-	mkdirSync(runDir, { recursive: true });
-	writeFileSync(runStatusPath(runDir), `${JSON.stringify(file, null, 2)}\n`);
+	files.write(runStatusPath(runDir), `${JSON.stringify(file, null, 2)}\n`);
 	return file;
 }
 

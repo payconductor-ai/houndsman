@@ -280,83 +280,193 @@ core/
 `;
 
 // ---------------------------------------------------------------------------
-// Escrita
+// Templates (arquivo → conteúdo)
 // ---------------------------------------------------------------------------
 
-/** Escreve um arquivo do usuário somente se ausente (ou se `force`). */
-function writeUserFile(
-	ctx: ScaffoldContext,
-	relativePath: string,
-	content: string,
-): void {
-	const full = join(ctx.cwd, relativePath);
-	if (existsSync(full) && !ctx.force) {
-		ctx.skipped.push(relativePath);
-		return;
+/** Contexto de render de um template. */
+type TemplateContext = { projectName: string };
+
+/** Um arquivo da camada (caminho relativo + conteúdo). */
+interface ScaffoldTemplate {
+	readonly path: string;
+	render(context: TemplateContext): string;
+}
+
+class ConfigTemplate implements ScaffoldTemplate {
+	readonly path = "houndsman.config.ts";
+
+	render(context: TemplateContext): string {
+		return CONFIG_TEMPLATE(context.projectName);
 	}
-	mkdirSync(join(full, ".."), { recursive: true });
-	writeFileSync(full, content);
-	ctx.created.push(relativePath);
 }
 
-/** Escreve/sobrescreve um arquivo auto-gerado. */
-function writeGeneratedFile(
-	ctx: ScaffoldContext,
-	relativePath: string,
-	content: string,
-): void {
-	const full = join(ctx.cwd, relativePath);
-	mkdirSync(join(full, ".."), { recursive: true });
-	writeFileSync(full, content);
-	ctx.generated.push(relativePath);
+class WatchdogExampleTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, "watchdogs", "example.ts");
+
+	render(): string {
+		return WATCHDOG_EXAMPLE;
+	}
 }
 
-// ---------------------------------------------------------------------------
-// Camadas
-// ---------------------------------------------------------------------------
+class WatchdogsIndexTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, "watchdogs", "index.ts");
 
-/** Arquivos do usuário: config, watchdogs, exclusões e mapeamentos. */
-export function writeUserLayer(ctx: ScaffoldContext): void {
-	writeUserFile(ctx, "houndsman.config.ts", CONFIG_TEMPLATE(ctx.projectName));
-	writeUserFile(ctx, join(PROJECT_DIR, "watchdogs", "example.ts"), WATCHDOG_EXAMPLE);
-	writeUserFile(ctx, join(PROJECT_DIR, "watchdogs", "index.ts"), WATCHDOGS_INDEX);
-	writeUserFile(ctx, join(PROJECT_DIR, "exclusions.ts"), EXCLUSIONS_TEMPLATE);
-	writeUserFile(ctx, join(PROJECT_DIR, "doc-mappings.ts"), DOC_MAPPINGS_TEMPLATE);
+	render(): string {
+		return WATCHDOGS_INDEX;
+	}
 }
 
-/**
- * Arquivos auto-gerados: tipos, docs do skill, `.gitignore` (ignora `core/` e
- * `.runs/`) e o `SKILL.md` de cada harness. Sempre sobrescritos (é o alvo do
- * `update`).
- */
-export function syncGeneratedFiles(ctx: ScaffoldContext): void {
-	writeGeneratedFile(ctx, join(CORE_DIR, "types.ts"), TYPES_TEMPLATE);
-	writeGeneratedFile(ctx, join(PROJECT_DIR, ".gitignore"), PROJECT_GITIGNORE);
+class ExclusionsTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, "exclusions.ts");
 
-	// Docs do skill vão para `.houndsman/core/skill/`. O `SKILL.md` é o entry point
-	// dos harnesses (escrito em `writeHarnessPointers`), não um doc da camada.
-	for (const name of readdirSync(SKILL_DIR)) {
-		if (!name.endsWith(".md") || name === SKILL_FILE) continue;
-		const raw = readFileSync(join(SKILL_DIR, name), "utf8");
-		writeGeneratedFile(
-			ctx,
-			join(CORE_SKILL_DIR, name),
-			raw.replaceAll("{{projectName}}", ctx.projectName),
+	render(): string {
+		return EXCLUSIONS_TEMPLATE;
+	}
+}
+
+class DocMappingsTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, "doc-mappings.ts");
+
+	render(): string {
+		return DOC_MAPPINGS_TEMPLATE;
+	}
+}
+
+class TypesTemplate implements ScaffoldTemplate {
+	readonly path = join(CORE_DIR, "types.ts");
+
+	render(): string {
+		return TYPES_TEMPLATE;
+	}
+}
+
+class GitignoreTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, ".gitignore");
+
+	render(): string {
+		return PROJECT_GITIGNORE;
+	}
+}
+
+class SkillDocTemplate implements ScaffoldTemplate {
+	private readonly fileName: string;
+
+	constructor(fileName: string) {
+		this.fileName = fileName;
+	}
+
+	get path(): string {
+		return join(CORE_SKILL_DIR, this.fileName);
+	}
+
+	render(context: TemplateContext): string {
+		return readFileSync(join(SKILL_DIR, this.fileName), "utf8").replaceAll(
+			"{{projectName}}",
+			context.projectName,
 		);
 	}
-
-	for (const harness of ctx.harnesses) writeHarnessPointers(ctx, harness);
 }
 
-/**
- * Escreve o `SKILL.md` do harness a partir do asset base (`src/skill/SKILL.md`),
- * resolvendo `{{projectName}}`. O texto do skill vive no asset — não aqui.
- */
-function writeHarnessPointers(ctx: ScaffoldContext, harness: Harness): void {
-	const raw = readFileSync(join(SKILL_DIR, SKILL_FILE), "utf8");
-	writeGeneratedFile(
-		ctx,
-		join(`.${harness}`, "skills", "houndsman", SKILL_FILE),
-		raw.replaceAll("{{projectName}}", ctx.projectName),
-	);
+class HarnessPointerTemplate implements ScaffoldTemplate {
+	private readonly harness: Harness;
+
+	constructor(harness: Harness) {
+		this.harness = harness;
+	}
+
+	get path(): string {
+		return join(`.${this.harness}`, "skills", "houndsman", SKILL_FILE);
+	}
+
+	render(context: TemplateContext): string {
+		return readFileSync(join(SKILL_DIR, SKILL_FILE), "utf8").replaceAll(
+			"{{projectName}}",
+			context.projectName,
+		);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Scaffolder
+// ---------------------------------------------------------------------------
+
+/** Escreve as camadas do projeto (`setup`) e sincroniza os auto-gerados (`update`). */
+export class ProjectScaffolder {
+	private readonly ctx: ScaffoldContext;
+
+	constructor(ctx: ScaffoldContext) {
+		this.ctx = ctx;
+	}
+
+	/** Arquivos do usuário: config, watchdogs, exclusões e mapeamentos. */
+	writeUserLayer(): void {
+		const context = this.context();
+		const templates: ScaffoldTemplate[] = [
+			new ConfigTemplate(),
+			new WatchdogExampleTemplate(),
+			new WatchdogsIndexTemplate(),
+			new ExclusionsTemplate(),
+			new DocMappingsTemplate(),
+		];
+		for (const template of templates) this.writeUserFile(template, context);
+	}
+
+	/** Arquivos auto-gerados (sempre sobrescritos). */
+	syncGenerated(): void {
+		const context = this.context();
+		this.writeGeneratedFile(new TypesTemplate(), context);
+		this.writeGeneratedFile(new GitignoreTemplate(), context);
+
+		// Docs do skill vão para `.houndsman/core/skill/`. O `SKILL.md` é o entry
+		// point dos harnesses, não um doc da camada.
+		for (const name of readdirSync(SKILL_DIR)) {
+			if (!name.endsWith(".md") || name === SKILL_FILE) continue;
+			this.writeGeneratedFile(new SkillDocTemplate(name), context);
+		}
+
+		for (const harness of this.ctx.harnesses) {
+			this.writeGeneratedFile(new HarnessPointerTemplate(harness), context);
+		}
+	}
+
+	private context(): TemplateContext {
+		return { projectName: this.ctx.projectName };
+	}
+
+	/** Usuário: só escreve se ausente (ou `force`). */
+	private writeUserFile(template: ScaffoldTemplate, context: TemplateContext): void {
+		const full = join(this.ctx.cwd, template.path);
+		if (existsSync(full) && !this.ctx.force) {
+			this.ctx.skipped.push(template.path);
+			return;
+		}
+		mkdirSync(join(full, ".."), { recursive: true });
+		writeFileSync(full, template.render(context));
+		this.ctx.created.push(template.path);
+	}
+
+	/** Auto-gerado: sempre sobrescreve. */
+	private writeGeneratedFile(
+		template: ScaffoldTemplate,
+		context: TemplateContext,
+	): void {
+		const full = join(this.ctx.cwd, template.path);
+		mkdirSync(join(full, ".."), { recursive: true });
+		writeFileSync(full, template.render(context));
+		this.ctx.generated.push(template.path);
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Fachada (compatibilidade)
+// ---------------------------------------------------------------------------
+
+/** Arquivos do usuário (setup). */
+export function writeUserLayer(ctx: ScaffoldContext): void {
+	new ProjectScaffolder(ctx).writeUserLayer();
+}
+
+/** Arquivos auto-gerados (setup/update). */
+export function syncGeneratedFiles(ctx: ScaffoldContext): void {
+	new ProjectScaffolder(ctx).syncGenerated();
 }

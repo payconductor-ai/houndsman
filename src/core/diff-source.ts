@@ -9,6 +9,7 @@
  * Jev) e por `classifyRange` (fallback standalone).
  */
 
+import { runGit } from "./git-runner";
 import type { ChurnMap, FileChurn } from "./types";
 
 export type DiffSource = {
@@ -25,19 +26,6 @@ export type CollectDiffOptions = {
 
 /** Teto default de caracteres por arquivo no patch (compartilhado com o git-revision). */
 export const DEFAULT_MAX_PER_FILE_CHARS = 8_000;
-
-/** Executa `git` com `core.quotepath=false` (paths literais) e devolve o stdout. */
-function runGit(args: string[]): string {
-	const result = Bun.spawnSync(["git", "-c", "core.quotepath=false", ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	if (result.exitCode !== 0) {
-		const stderr = new TextDecoder().decode(result.stderr).trim();
-		throw new Error(`git ${args.join(" ")} falhou: ${stderr}`);
-	}
-	return new TextDecoder().decode(result.stdout);
-}
 
 /** Novo caminho do arquivo a partir do cabeçalho de um segmento do patch. */
 function extractPath(segment: string): string | undefined {

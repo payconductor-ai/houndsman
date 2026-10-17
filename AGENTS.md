@@ -44,49 +44,71 @@ projeto **autocontida**), carregada em runtime.
 
 ```
 src/
-├── index.ts          # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
-├── cli/index.ts      # ÚNICO executável (bin `houndsman`)
+├── index.ts          # API pública (façade estável: tipos + classes + adaptadores)
+├── cli/              # ÚNICO executável (bin `houndsman`)
+│   ├── index.ts             # bootstrap fino (registry de comandos + engine lazy)
+│   ├── arg-parser.ts        # reexport de core/arg-parser
+│   ├── help.ts              # texto de ajuda
+│   └── commands/            # Command + CommandRegistry + 1 classe por comando
 ├── core/             # bibliotecas genéricas
+│   ├── engine/              # HoundsmanEngine (composition root), ReviewSession,
+│   │                        # ReviewScopeResolver, carry-over
+│   ├── domain/              # Watchdog, Classification, Diff, budget (regras puras)
+│   ├── services/            # GitRepository, GhClient, FileClassifier, Verifier,
+│   │                        # FixBatchBuilder, ProjectFiles, Clock
+│   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter, presenters
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
+│   ├── project-config.ts    # defaults resolvidos + WatchdogRegistry
+│   ├── defaults.ts          # constantes default do motor
 │   ├── assets.ts            # assets embarcados (src/skill/) — usados para gerar a camada
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
+│   ├── run-layout.ts        # caminhos de uma run (branch-slug)
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
-│   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
-│   ├── orchestrator.ts      # prepare (full/incremental) + finalize (+ state.json)
-│   ├── brief.ts             # defaultRenderBrief + PROCEDURE
-│   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
-│   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
-│   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff por intervalo
-│   ├── doc-discoverer.ts    # descoberta de docs
-│   ├── report-builder.ts    # dedupe/render do relatório
+│   ├── watchdog-registry.ts # WatchdogRegistry (classes) + adaptadores
+│   ├── orchestrator.ts      # prepare/finalize (delegam ao engine/renderers)
+│   ├── arg-parser.ts        # ArgParser compartilhado (core + cli)
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
-│   ├── findings-state.ts    # estado de triagem (state.json + reviewed.headSha)
+│   ├── findings-state.ts    # Finding/FindingsState + FindingsRepository (I/O)
+│   ├── report-builder.ts    # dedupe/render do relatório (funções puras)
+│   ├── brief.ts             # defaultRenderBrief + PROCEDURE (funções puras)
 │   ├── verify.ts            # verificação de findings (tier local + Jev)
-│   ├── run-status.ts        # run.json (reviewing/review_done/fixing/fix_done)
-│   ├── fix-batch.ts         # agrupamento/paginação do lote (findings batch)
+│   ├── fix-batch.ts         # agrupamento/paginação do lote (puro)
+│   ├── file-classifier.ts   # classificação via `classify` + churn (puro)
+│   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
+│   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff
+│   ├── git-runner.ts        # único wrapper de `Bun.spawnSync(["git", ...])`
+│   ├── doc-discoverer.ts    # descoberta de docs (DocDiscoverer)
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── commands/            # context · review · watchdog · findings · setup · test
+│   ├── commands/            # context · review · watchdog · findings · setup · update · test · scaffold
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── server/           # servidor local (Bun.serve) + UI Preact
-│   ├── index.ts             # rotas da API + shell HTML
+│   ├── index.ts             # HoundsmanServer (rotas + shell)
+│   ├── run-repository.ts    # leitura/escrita das runs + findings + submit
 │   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
 │   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
-│   └── client/              # app Preact — index.tsx (entry) + App/RunList/Filters/FindingCard/...
+│   └── client/              # app Preact — index.tsx (entry) + App/RunList/...
 ├── skill/*.md        # assets markdown (copiados pelo `setup` no consumidor)
 └── tests/            # suíte project-agnóstica
 ```
 
-**Camadas:** `cli/` = imperativo com efeitos colaterais (`process.argv`/`exit`);
-`core/` = funções/classes reutilizáveis (sem `process.argv`/`exit`, sem side-effect no import);
-`server/` = servidor local (rotas + UI; `Bun.serve`);
-`skill/` = markdown embarcado; `tests/` = suíte.
+**Camadas:** `cli/` = bootstrap + `Command` objects (log/exit); `core/` = engine/domínio/
+serviços/renderers (sem `process.argv`/`exit`, sem log; devolve dados); `server/` = servidor
+local; `skill/` = markdown embarcado; `tests/` = suíte.
+
+> **OO:** o motor tem um composition root (`HoundsmanEngine`) que injeta `ProjectConfig`,
+> `GitRepository`, `FileClassifier`, `Verifier`, `FixBatchBuilder`. Domínio (`Watchdog`,
+> `Classification`, `Diff`, `Finding`/`FindingsState`) expõe comportamento; algoritmos puros
+> (âncora, churn, dedupe, parsers) continuam funções reutilizadas pelas classes.
 
 ## Regras críticas
 
 - **`core/` é agnóstico ao projeto.** Nenhum id, path, nome de projeto ou regra de negócio de
   consumidor. Tudo chega por `HoundsmanConfig`.
+- **Composition root:** `HoundsmanEngine` injeta a config e os colaboradores (`GitRepository`,
+  `FileClassifier`, `Verifier`, `FixBatchBuilder`). Pipelines não instanciam dependências
+  diretamente; a CLI só conhece `Command`/`CommandRegistry`.
 - **Nunca** importe caminhos de projeto (`scripts/`, `docs/.ai`, `packages/...`) nem cite
   projetos consumidores. O pacote deve poder ser copiado para um repositório zerado.
 - **Assets** (`src/skill/*.md` e a mídia em `assets/`) são resolvidos por `core/assets.ts`

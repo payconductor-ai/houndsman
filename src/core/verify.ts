@@ -19,6 +19,7 @@ import {
 	type FindingsStateFile,
 	filterFindings,
 } from "./findings-state";
+import { systemClock } from "./services/clock";
 import type { Severity } from "./types";
 
 /** Resultado da verificação de um finding. */
@@ -160,7 +161,7 @@ export function summarizeVerify(entries: readonly VerifyEntry[]): VerifySummary 
 export function applyResolutions(
 	state: FindingsStateFile,
 	entries: readonly VerifyEntry[],
-	now: string = new Date().toISOString(),
+	now: string = systemClock(),
 ): string[] {
 	const changed: string[] = [];
 	for (const entry of entries) {

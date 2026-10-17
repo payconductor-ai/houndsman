@@ -37,3 +37,12 @@ export const RUN_STATUS_FILE = "run.json";
 
 /** Relatório da verificação de findings, dentro da pasta da run (`<slug>/verify.md`). */
 export const VERIFY_FILE = "verify.md";
+
+/** Contexto bruto da PR (`gh pr view`), dentro da pasta da run. */
+export const CONTEXT_FILE = "context.json";
+
+/** Resumo do contexto gravado pelo subagente, dentro da pasta da run. */
+export const CONTEXT_SUMMARY_FILE = "context-summary.json";
+
+/** Brief do subagente que resume o contexto da PR. */
+export const CONTEXT_BRIEF_FILE = "context-brief.md";

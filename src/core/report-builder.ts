@@ -8,6 +8,7 @@
  */
 
 import type { JevCandidate } from "./jev";
+import { systemClock } from "./services/clock";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity, severityRank } from "./types";
 
 /** Resolve o nome legível de um watchdog (default: identidade). */
@@ -106,24 +107,28 @@ function isFinding(value: unknown): value is Finding {
 }
 
 /** Valida e normaliza um relatório. Retorna null se inválido. */
-export function parseWatchdogReport(raw: unknown, source: string): WatchdogReport | null {
+export function parseWatchdogReport(
+	raw: unknown,
+	source: string,
+	onError: (message: string) => void = () => {},
+): WatchdogReport | null {
 	if (typeof raw !== "object" || raw === null) {
-		console.error(`[report-builder] ${source}: não é um objeto JSON`);
+		onError(`[report-builder] ${source}: não é um objeto JSON`);
 		return null;
 	}
 	const obj = raw as Record<string, unknown>;
 	if (typeof obj.watchdogId !== "string") {
-		console.error(`[report-builder] ${source}: campo 'watchdogId' ausente`);
+		onError(`[report-builder] ${source}: campo 'watchdogId' ausente`);
 		return null;
 	}
 	if (!Array.isArray(obj.findings)) {
-		console.error(`[report-builder] ${source}: campo 'findings' ausente`);
+		onError(`[report-builder] ${source}: campo 'findings' ausente`);
 		return null;
 	}
 
 	const findings = obj.findings.filter((f) => {
 		if (!isFinding(f)) {
-			console.error(`[report-builder] ${source}: finding inválido ignorado`);
+			onError(`[report-builder] ${source}: finding inválido ignorado`);
 			return false;
 		}
 		return true;
@@ -370,7 +375,7 @@ export function renderDomainReport(
 	context?: ContextSummary | null,
 	nameOf: WatchdogNameResolver = identityName,
 ): string {
-	const now = new Date().toISOString().slice(0, 10);
+	const now = systemClock().slice(0, 10);
 	const name = watchdogName(nameOf, report.watchdogId);
 	const lines: string[] = [
 		`# Review — ${name} (\`${report.watchdogId}\`) — ${branch}`,
@@ -429,7 +434,7 @@ export function renderReport(
 	nameOf: WatchdogNameResolver = identityName,
 	domains: readonly DomainReport[] = [],
 ): string {
-	const now = new Date().toISOString().slice(0, 10);
+	const now = systemClock().slice(0, 10);
 	const counts = {
 		blocking: merged.filter((f) => f.severity === "blocking").length,
 		attention: merged.filter((f) => f.severity === "attention").length,

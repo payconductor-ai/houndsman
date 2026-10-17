@@ -8,7 +8,9 @@
 import { readFileSync } from "node:fs";
 import type { HoundsmanConfig } from "./config";
 import { churnToRecord, collectChurn, type DiffSource } from "./diff-source";
-import type { ChurnMap, ClassifyRule, WatchdogDefinition } from "./types";
+import { matchesClassifyRule } from "./domain/watchdog";
+import { runGit } from "./git-runner";
+import type { ChurnMap, WatchdogDefinition } from "./types";
 
 type FileStatus = "added" | "modified" | "deleted" | "renamed" | "copied" | "unknown";
 
@@ -42,9 +44,6 @@ export type ClassificationResult = {
 // Matchers genéricos (reutilizados pelo projeto)
 // ---------------------------------------------------------------------------
 
-/** Tipo de classificação assumido quando `type` é omitido. */
-const DEFAULT_CLASSIFY_TYPE: NonNullable<ClassifyRule["type"]> = "filename";
-
 /** `true` se há entradas de conteúdo (as únicas que exigem ler o arquivo). */
 function hasContentRules<TId extends string>(
 	watchdogs: Record<TId, WatchdogDefinition>,
@@ -62,18 +61,6 @@ function readFileContent(filePath: string): string | undefined {
 	} catch {
 		return undefined;
 	}
-}
-
-/** `true` se o arquivo casa a entrada de classificação. */
-function matchesClassifyRule(
-	filePath: string,
-	rule: ClassifyRule,
-	content: string | undefined,
-): boolean {
-	if ((rule.type ?? DEFAULT_CLASSIFY_TYPE) === "content") {
-		return content !== undefined && new RegExp(rule.value).test(content);
-	}
-	return new RegExp(rule.value).test(filePath);
 }
 
 /** Watchdogs que declaram o arquivo (união dos `classify`). */
@@ -99,22 +86,6 @@ export function matchWatchdogs<TId extends string>(
 /** `true` se o arquivo casa algum padrão de exclusão. */
 export function isExcludedPath(filePath: string, patterns: readonly RegExp[]): boolean {
 	return patterns.some((pattern) => pattern.test(filePath));
-}
-
-// ---------------------------------------------------------------------------
-// Execução do git diff
-// ---------------------------------------------------------------------------
-
-function runGitDiff(base: string, head: string): string {
-	const result = Bun.spawnSync(["git", "diff", `${base}...${head}`, "--name-status"], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	if (result.exitCode !== 0) {
-		const stderr = new TextDecoder().decode(result.stderr).trim();
-		throw new Error(`git diff falhou (base='${base}', head='${head}'): ${stderr}`);
-	}
-	return new TextDecoder().decode(result.stdout);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +219,7 @@ export function classifyRange<TId extends string>(
 	config: HoundsmanConfig<TId>,
 	diff?: DiffSource,
 ): ClassificationResult {
-	const entries = parseEntries(runGitDiff(base, head));
+	const entries = parseEntries(runGit(["diff", `${base}...${head}`, "--name-status"]));
 	const churn = diff?.churn ?? collectChurn(base, head);
 	const result = classifyEntries(entries, config, churnToRecord(churn));
 	result.base = base;
@@ -257,39 +228,12 @@ export function classifyRange<TId extends string>(
 }
 
 // ---------------------------------------------------------------------------
-// Triage (PRs grandes)
+// Triage (PRs grandes) — reexportado do domínio
 // ---------------------------------------------------------------------------
 
-/** Churn total (adições + remoções) de um arquivo; 0 quando ausente. */
-export function churnOf(filePath: string, churn: ChurnMap | undefined): number {
-	const entry = churn?.[filePath];
-	return entry ? entry.additions + entry.deletions : 0;
-}
-
-/** Ordena os arquivos por risco (churn desc; empate pelo caminho). */
-export function sortByRisk(files: readonly string[], churn?: ChurnMap): string[] {
-	return [...files].sort((a, b) => {
-		const delta = churnOf(b, churn) - churnOf(a, churn);
-		return delta !== 0 ? delta : a.localeCompare(b);
-	});
-}
-
-/** Resultado da aplicação do orçamento: o que revisar e o que ficou de fora. */
-export type BudgetSelection = { selected: string[]; overflow: string[] };
-
-/**
- * Aplica o orçamento por brief: mantém os `maxFiles` de maior risco e devolve o
- * restante em `overflow` (nunca descarta silenciosamente). `maxFiles` não-positivo
- * ou não-finito desativa o orçamento.
- */
-export function selectByBudget(
-	files: readonly string[],
-	churn: ChurnMap | undefined,
-	maxFiles: number,
-): BudgetSelection {
-	const ordered = sortByRisk(files, churn);
-	if (!Number.isFinite(maxFiles) || maxFiles <= 0 || ordered.length <= maxFiles) {
-		return { selected: ordered, overflow: [] };
-	}
-	return { selected: ordered.slice(0, maxFiles), overflow: ordered.slice(maxFiles) };
-}
+export {
+	type BudgetSelection,
+	churnOf,
+	selectByBudget,
+	sortByRisk,
+} from "./domain/budget";

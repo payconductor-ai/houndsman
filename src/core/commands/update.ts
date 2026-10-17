@@ -13,18 +13,18 @@ export type UpdateOptions = {
 	args: string[];
 };
 
-/** Sincroniza os arquivos auto-gerados da camada de projeto. */
-export async function runUpdateCommand(options: UpdateOptions): Promise<void> {
+/** Sincroniza os arquivos auto-gerados da camada de projeto. Devolve mensagens. */
+export async function runUpdateCommand(options: UpdateOptions): Promise<string[]> {
 	const ctx = createScaffoldContext(options.cwd, options.args, false);
-
-	console.log(`→ Sincronizando arquivos auto-gerados em ${ctx.cwd}`);
+	const messages = [`→ Sincronizando arquivos auto-gerados em ${ctx.cwd}`];
 
 	syncGeneratedFiles(ctx);
 
-	for (const path of ctx.generated) console.log(`  ~ ${path} (auto)`);
+	for (const path of ctx.generated) messages.push(`  ~ ${path} (auto)`);
 
-	console.log("\nArquivos do usuário não foram tocados:");
-	console.log(
+	messages.push(
+		"\nArquivos do usuário não foram tocados:",
 		"  .houndsman/watchdogs/ · exclusions.ts · doc-mappings.ts · houndsman.config.ts",
 	);
+	return messages;
 }

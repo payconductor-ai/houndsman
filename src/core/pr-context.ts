@@ -14,16 +14,21 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
 import {
-	type ContextSummary,
-	parseContextSummary,
-	sanitizeBranch,
-} from "./report-builder";
+	CONTEXT_BRIEF_FILE,
+	CONTEXT_FILE,
+	CONTEXT_SUMMARY_FILE,
+	relFromRoot,
+} from "./paths";
+import type { ContextSummary } from "./report-builder";
+import { parseContextSummary } from "./report-builder";
+import { type ContextPaths, RunLayout } from "./run-layout";
+import { systemClock } from "./services/clock";
+import { defaultGhRunner, GhClient, type GhRunner } from "./services/gh-client";
+import { GitRepository } from "./services/git-repository";
 
-export const CONTEXT_FILE = "context.json";
-export const CONTEXT_SUMMARY_FILE = "context-summary.json";
-export const CONTEXT_BRIEF_FILE = "context-brief.md";
+export { CONTEXT_BRIEF_FILE, CONTEXT_FILE, CONTEXT_SUMMARY_FILE };
+export type { ContextPaths };
 
 const GH_JSON_FIELDS =
 	"number,title,body,url,baseRefName,headRefName,author,commits,files";
@@ -54,53 +59,18 @@ export type PrContextRaw = {
 	stats?: { files: number; additions: number; deletions: number };
 };
 
-export type ContextPaths = {
-	dir: string;
-	context: string;
-	summary: string;
-	brief: string;
-};
-
 /** Caminhos dos artefatos de contexto para uma branch. */
 export function contextPaths(dir: string, branch: string): ContextPaths {
-	const dirPath = join(dir, sanitizeBranch(branch));
-	return {
-		dir: dirPath,
-		context: join(dirPath, CONTEXT_FILE),
-		summary: join(dirPath, CONTEXT_SUMMARY_FILE),
-		brief: join(dirPath, CONTEXT_BRIEF_FILE),
-	};
+	return new RunLayout(dir, branch).contextPaths;
 }
 
-/** Caminho relativo à raiz, sempre com `/` (portável/legível). */
-function relFromRoot(absPath: string): string {
-	return relative(process.cwd(), absPath).replace(/\\/g, "/");
-}
-
-/** Detecta a branch atual; encerra com erro se não houver. */
+/** Detecta a branch atual; lança se não houver (o CLI decide o exit). */
 export function currentBranch(): string {
-	const result = Bun.spawnSync(["git", "branch", "--show-current"], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const branch = new TextDecoder().decode(result.stdout).trim();
+	const branch = new GitRepository().currentBranch();
 	if (!branch) {
-		console.error("Não foi possível detectar a branch. Use --branch <nome>.");
-		process.exit(1);
+		throw new Error("Não foi possível detectar a branch. Use --branch <nome>.");
 	}
 	return branch;
-}
-
-function runGh(args: string[]): { ok: boolean; stdout: string; stderr: string } {
-	const result = Bun.spawnSync(["gh", ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	return {
-		ok: result.exitCode === 0,
-		stdout: new TextDecoder().decode(result.stdout).trim(),
-		stderr: new TextDecoder().decode(result.stderr).trim(),
-	};
 }
 
 type GhPrView = {
@@ -120,19 +90,23 @@ function unavailable(reason: ContextUnavailableReason, detail: string): PrContex
 		available: false,
 		reason,
 		detail,
-		collectedAt: new Date().toISOString(),
+		collectedAt: systemClock(),
 	};
 }
 
 /** Lê a PR da branch via `gh` e devolve o payload bruto (nunca lança). */
-export function collectPrContext(branch: string): PrContextRaw {
-	const collectedAt = new Date().toISOString();
+export function collectPrContext(
+	branch: string,
+	runner: GhRunner = defaultGhRunner,
+): PrContextRaw {
+	const collectedAt = systemClock();
+	const gh = new GhClient(runner);
 
-	if (!Bun.which("gh")) {
+	if (!gh.isAvailable()) {
 		return unavailable("gh-missing", "GitHub CLI (gh) não encontrado no PATH.");
 	}
 
-	const auth = runGh(["auth", "status"]);
+	const auth = gh.run(["auth", "status"]);
 	if (!auth.ok) {
 		return unavailable(
 			"gh-unauthenticated",
@@ -140,7 +114,7 @@ export function collectPrContext(branch: string): PrContextRaw {
 		);
 	}
 
-	const view = runGh(["pr", "view", branch, "--json", GH_JSON_FIELDS]);
+	const view = gh.run(["pr", "view", branch, "--json", GH_JSON_FIELDS]);
 	if (!view.ok) {
 		const noPr = /no pull requests? found|not found|could not find/i.test(
 			view.stderr,

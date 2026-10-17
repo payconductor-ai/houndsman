@@ -1,0 +1,814 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`baseline — brief defaultRenderBrief (contexto, churn, overflow, candidatos e deletados) 1`] = `
+"# Brief — Alpha (\`alpha\`)
+
+**Branch:** feature/x
+**Output obrigatório:** \`.houndsman/.runs/feature-x/findings/alpha.json\`
+**Schema do output:** \`.houndsman/core/skill/OUTPUT-FORMAT.md\`
+
+## Objetivo
+
+Watchdog baseline.
+
+## Escopo
+
+src/alpha/**
+
+## Contexto da PR
+
+**Objetivo:** Entregar X
+**Motivação:** Reduzir Y
+
+**Resumo das alterações:**
+
+- Faz A
+- Remove B
+
+## Regras (por severidade)
+
+- ❌ **blocking** — Nunca usar \`any\`.
+- ⚠️ **attention** — Promover: validar a entrada.
+
+## Docs de contexto (carregar sob demanda)
+
+- \`AGENTS.md\`
+- \`README.md\`
+
+## Arquivos do seu domínio (2)
+
+- \`src/alpha/a.ts\` (modified, +3/−1)
+- \`src/alpha/b.ts\` (added, +2/−0)
+
+## Fora do orçamento (NÃO revisar)
+
+> 1 arquivo(s) do seu domínio ficaram fora do orçamento
+> (menor churn). Não os leia: registre-os em \`skipped\` com o motivo
+> "budget" para que a cobertura do relatório fique honesta.
+
+- \`src/alpha/c.ts\`
+
+## Candidatos pré-analisados (Jev) — confirme ou refute
+
+> Indícios automáticos com confiança calibrada. **NÃO** são achados:
+> confirme (virando finding, com a \`rule\` abaixo) ou ignore se for falso positivo.
+
+- [ ] \`src/alpha/a.ts\` · **blocking** · confiança 0.82
+  Regra: Nunca usar \`any\`.
+
+## Deletados — checar breaking change
+
+- \`src/alpha/old.ts\`
+
+## Procedimento
+
+1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
+2. **READ HEAD** — leia os arquivos seletivamente (primeiras ~30 linhas). NUNCA o diff completo.
+3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações.
+4. **DEEP-READ** — aprofunde apenas os arquivos com suspeita de violação.
+5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+`;
+
+exports[`baseline — relatório renderReport consolidado 1`] = `
+"# PR Review — feature/x
+
+**Data:** <date>
+**Watchdogs ativos:** alpha, beta
+**Achados:** 1 bloqueantes · 1 atenção · 0 sugestões · 0 nits
+
+## Contexto da PR
+
+**PR:** #42 Entrega X — https://example.test/pull/42
+**Branch:** \`feature/x\` → \`main\`
+**Objetivo:** Entregar X
+**Motivação:** Reduzir Y
+
+**Resumo das alterações:**
+
+- Faz A
+- Remove B
+
+## ❌ blocking
+
+### \`src/alpha/a.ts\`
+
+- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`id-alpha\`
+  any detectado
+  **Ação:** tipar
+  **Evidência:** \`export const a: any = 1;\`
+
+## ⚠️ attention
+
+### \`src/alpha/b.ts\`
+
+- **Promover: validar a entrada.** — \`src/alpha/b.ts:2\` · _Alpha, Beta_ · \`id-beta\`
+  sem validação
+  **Ação:** adicionar schema
+
+## Relatórios por domínio
+
+| Watchdog | Achados | Revisados | Relatório |
+|---|---|---|---|
+| Alpha | 2 | 2/2 | [\`review.alpha.md\`](review.alpha.md) |
+
+## Cobertura
+
+| Watchdog | Arquivos revisados | Findings |
+|---|---|---|
+| Alpha | 2 | 2 |
+| Beta | 1 | 0 |
+
+## Conclusão
+
+**Status:** ❌ Mudanças Necessárias
+**Resumo:** 1 violações bloqueantes, 1 pontos de atenção, 0 sugestões e 0 nits."
+`;
+
+exports[`baseline — relatório renderDomainReport isolado 1`] = `
+"# Review — Alpha (\`alpha\`) — feature/x
+
+**Data:** <date>
+**Arquivos revisados:** 2/2
+**Achados:** 2
+
+## Contexto da PR
+
+**PR:** #42 Entrega X — https://example.test/pull/42
+**Branch:** \`feature/x\` → \`main\`
+**Objetivo:** Entregar X
+**Motivação:** Reduzir Y
+
+**Resumo das alterações:**
+
+- Faz A
+- Remove B
+
+## ❌ blocking
+
+### \`src/alpha/a.ts\`
+
+- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`id-alpha\`
+  any detectado
+  **Ação:** tipar
+  **Evidência:** \`export const a: any = 1;\`
+
+## ⚠️ attention
+
+### \`src/alpha/b.ts\`
+
+- **Promover: validar a entrada.** — \`src/alpha/b.ts:2\` · _Alpha, Beta_ · \`id-beta\`
+  sem validação
+  **Ação:** adicionar schema
+
+## Não revisados
+
+- \`src/alpha/c.ts\`
+"
+`;
+
+exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1`] = `
+[
+  ".agents/skills/houndsman/SKILL.md",
+  ".claude/skills/houndsman/SKILL.md",
+  ".houndsman/.gitignore",
+  ".houndsman/core/skill/AUDIT-PROTOCOL.md",
+  ".houndsman/core/skill/OUTPUT-FORMAT.md",
+  ".houndsman/core/skill/README.md",
+  ".houndsman/core/skill/SETUP.md",
+  ".houndsman/core/skill/example-review.md",
+  ".houndsman/core/skill/fix.md",
+  ".houndsman/core/skill/hunt.md",
+  ".houndsman/core/skill/train.md",
+  ".houndsman/core/skill/verify.md",
+  ".houndsman/core/types.ts",
+  ".houndsman/doc-mappings.ts",
+  ".houndsman/exclusions.ts",
+  ".houndsman/watchdogs/example.ts",
+  ".houndsman/watchdogs/index.ts",
+  "houndsman.config.ts",
+]
+`;
+
+exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 2`] = `
+{
+  ".agents/skills/houndsman/SKILL.md": 
+"---
+name: houndsman
+description: 'Revisa Pull Requests com watchdogs especializados por domínio de negócio e mantém essas regras alinhadas ao projeto. Use para revisar/code review de PR, atualizar as regras de revisão dos watchdogs e corrigir/verificar os findings da revisão. Capabilities: \`hunt\` (revisar a PR), \`train\` (atualizar regras), \`fix\` (corrigir achados), \`verify\` (violações resolvidas?).'
+argument-hint: 'Capability: hunt | train | fix | verify (default: hunt)'
+---
+
+# houndsman — acme
+
+O **houndsman** revisa Pull Requests com **watchdogs** — agentes especialistas por domínio de
+negócio. Cada watchdog audita a parte do diff que é sua e grava **findings** (achados); o motor
+consolida tudo num relatório. O motor é o CLI **\`houndsman\`**; as regras do projeto vivem em
+\`houndsman.config.ts\` + \`.houndsman/\`.
+
+**Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor) · **watchdog** = agente
+especialista por domínio · **finding** = um achado da revisão · **Jev** = pré-análise opcional.
+
+## Capabilities
+
+| Capability | Objetivo | Documento |
+|---|---|---|
+| **\`hunt\`** | Revisar uma Pull Request e produzir o relatório de achados. | \`.houndsman/core/skill/hunt.md\` |
+| **\`train\`** | Manter as regras dos watchdogs alinhadas ao que o projeto aplica. | \`.houndsman/core/skill/train.md\` |
+| **\`fix\`** | Corrigir os achados de uma revisão já finalizada. | \`.houndsman/core/skill/fix.md\` |
+| **\`verify\`** | Conferir se as violações foram resolvidas, sem re-revisar a PR. | \`.houndsman/core/skill/verify.md\` |
+
+## Invocação
+
+\`\`\`
+/houndsman              → hunt (default)
+/houndsman hunt         → revisar a Pull Request
+/houndsman train        → atualizar as regras dos watchdogs
+/houndsman fix          → corrigir os findings
+/houndsman verify       → conferir se as violações foram resolvidas
+\`\`\`
+
+Um argumento extra é o alvo da capability (ex.: \`/houndsman hunt feature/minha-branch\`).
+Escolha a capability pelo que o usuário quer, leia o documento correspondente em
+\`.houndsman/core/skill/<capability>.md\` e siga-o.
+
+> **Depois de revisar (\`hunt\`), valide na UI:** \`bun run houndsman server --open\` — revise os
+> achados e marque os que devem ser executados (\`execute\`) antes de rodar \`fix\`.
+
+## Referências
+
+- \`.houndsman/core/skill/OUTPUT-FORMAT.md\` — schema do JSON de saída dos watchdogs.
+- \`.houndsman/core/skill/AUDIT-PROTOCOL.md\` — taxonomia da auditoria de regras (Modo B do \`train\`).
+- \`.houndsman/core/skill/SETUP.md\` · \`.houndsman/core/skill/README.md\` — configuração e visão geral.
+- \`.houndsman/core/skill/example-review.md\` — exemplo de relatório.
+"
+,
+  ".claude/skills/houndsman/SKILL.md": 
+"---
+name: houndsman
+description: 'Revisa Pull Requests com watchdogs especializados por domínio de negócio e mantém essas regras alinhadas ao projeto. Use para revisar/code review de PR, atualizar as regras de revisão dos watchdogs e corrigir/verificar os findings da revisão. Capabilities: \`hunt\` (revisar a PR), \`train\` (atualizar regras), \`fix\` (corrigir achados), \`verify\` (violações resolvidas?).'
+argument-hint: 'Capability: hunt | train | fix | verify (default: hunt)'
+---
+
+# houndsman — acme
+
+O **houndsman** revisa Pull Requests com **watchdogs** — agentes especialistas por domínio de
+negócio. Cada watchdog audita a parte do diff que é sua e grava **findings** (achados); o motor
+consolida tudo num relatório. O motor é o CLI **\`houndsman\`**; as regras do projeto vivem em
+\`houndsman.config.ts\` + \`.houndsman/\`.
+
+**Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor) · **watchdog** = agente
+especialista por domínio · **finding** = um achado da revisão · **Jev** = pré-análise opcional.
+
+## Capabilities
+
+| Capability | Objetivo | Documento |
+|---|---|---|
+| **\`hunt\`** | Revisar uma Pull Request e produzir o relatório de achados. | \`.houndsman/core/skill/hunt.md\` |
+| **\`train\`** | Manter as regras dos watchdogs alinhadas ao que o projeto aplica. | \`.houndsman/core/skill/train.md\` |
+| **\`fix\`** | Corrigir os achados de uma revisão já finalizada. | \`.houndsman/core/skill/fix.md\` |
+| **\`verify\`** | Conferir se as violações foram resolvidas, sem re-revisar a PR. | \`.houndsman/core/skill/verify.md\` |
+
+## Invocação
+
+\`\`\`
+/houndsman              → hunt (default)
+/houndsman hunt         → revisar a Pull Request
+/houndsman train        → atualizar as regras dos watchdogs
+/houndsman fix          → corrigir os findings
+/houndsman verify       → conferir se as violações foram resolvidas
+\`\`\`
+
+Um argumento extra é o alvo da capability (ex.: \`/houndsman hunt feature/minha-branch\`).
+Escolha a capability pelo que o usuário quer, leia o documento correspondente em
+\`.houndsman/core/skill/<capability>.md\` e siga-o.
+
+> **Depois de revisar (\`hunt\`), valide na UI:** \`bun run houndsman server --open\` — revise os
+> achados e marque os que devem ser executados (\`execute\`) antes de rodar \`fix\`.
+
+## Referências
+
+- \`.houndsman/core/skill/OUTPUT-FORMAT.md\` — schema do JSON de saída dos watchdogs.
+- \`.houndsman/core/skill/AUDIT-PROTOCOL.md\` — taxonomia da auditoria de regras (Modo B do \`train\`).
+- \`.houndsman/core/skill/SETUP.md\` · \`.houndsman/core/skill/README.md\` — configuração e visão geral.
+- \`.houndsman/core/skill/example-review.md\` — exemplo de relatório.
+"
+,
+  ".houndsman/.gitignore": 
+"# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`
+# e \`.runs/\` guarda os artefatos de revisão.
+core/
+.runs/
+"
+,
+  ".houndsman/core/types.ts": 
+"/**
+ * Tipos e helpers locais do houndsman (GERADO — não edite).
+ *
+ * Snapshot do contrato público, para tipar a camada de projeto sem depender de um
+ * install local do pacote. Sincronize com \`houndsman update\`.
+ */
+
+export type Severity = "blocking" | "attention" | "suggestion" | "nit";
+
+/** Tipo de pergunta aceito pela API Jev. */
+export type JevQuestionType = "noul" | "choice" | "score";
+
+/**
+ * Spec de pré-análise Jev (opcional) — sempre um objeto; \`kind\` é obrigatório.
+ * \`criteria\`: objeto para \`choice\`, lista para \`score\`.
+ */
+export type JevRuleSpec = {
+	kind: JevQuestionType;
+	instructions?: string;
+	criteria?: string[] | Record<string, string>;
+};
+
+/** Regra do watchdog: severidade + texto — o texto declara a polaridade
+ *  (\`Promover:\` = deve acontecer; \`Evitar:\`/\`Não\`/\`Nunca\` = não deve acontecer). */
+export type Rule = {
+	severity: Severity;
+	text: string;
+	jev?: JevRuleSpec;
+};
+
+/** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
+export type ClassifyRule = {
+	type?: "filename" | "content";
+	value: string;
+};
+
+export type WatchdogMeta = {
+	name: string;
+	scope: string;
+	classify?: readonly ClassifyRule[];
+	rules: readonly Rule[];
+	contextFiles: string[];
+};
+
+/** Definição completa de um watchdog — 1 por arquivo em \`.houndsman/watchdogs/\`. */
+export type WatchdogDefinition = WatchdogMeta & {
+	id: string;
+	description: string;
+	breakingChange?: boolean;
+	reviewFocus?: readonly string[];
+	exclude?: readonly string[];
+};
+
+export type FileStatus =
+	| "added"
+	| "modified"
+	| "deleted"
+	| "renamed"
+	| "copied"
+	| "unknown";
+
+export type FileStatusMap = Record<string, { status: FileStatus; oldPath?: string }>;
+
+/** Linhas adicionadas/removidas de um arquivo no diff (churn). */
+export type FileChurn = { additions: number; deletions: number };
+
+/** Churn por caminho de arquivo. */
+export type ChurnMap = Record<string, FileChurn>;
+
+/** Limites de triage para PRs grandes. */
+export type HoundsmanBudgets = {
+	/** Máx. de arquivos por brief (default: 40). Excedente vai para "fora do orçamento". */
+	maxFilesPerBrief?: number;
+};
+
+/** Concorrência das fases paralelas internas. */
+export type HoundsmanConcurrency = {
+	/** Chamadas Jev simultâneas (default: 5). */
+	jev?: number;
+};
+
+/** Contrato de configuração do motor. */
+export type HoundsmanConfig<TId extends string = string> = {
+	projectName: string;
+	artifactDir?: string;
+	watchdogIds?: readonly TId[];
+	watchdogs: Record<TId, WatchdogDefinition>;
+	exclusions: readonly RegExp[];
+	docMappings: readonly (readonly [RegExp, readonly string[]])[];
+	alwaysIncludeDocs?: readonly string[];
+	budgets?: HoundsmanBudgets;
+	concurrency?: HoundsmanConcurrency;
+};
+
+/** Helper de autoria (identidade) — apenas tipagem. */
+export function defineWatchdog(definition: WatchdogDefinition): WatchdogDefinition {
+	return definition;
+}
+
+/** Helper de autoria — deriva \`watchdogIds\` das chaves de \`watchdogs\`. */
+export function defineHoundsmanConfig<TId extends string>(
+	input: Omit<HoundsmanConfig<TId>, "watchdogIds">,
+): HoundsmanConfig<TId> {
+	return { ...input, watchdogIds: Object.keys(input.watchdogs) as TId[] };
+}
+"
+,
+  ".houndsman/doc-mappings.ts": 
+"/**
+ * Mapeamento de padrões nos paths → documentação relevante.
+ * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
+ */
+export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
+	[/^src\\//, ["AGENTS.md"]],
+];
+"
+,
+  ".houndsman/exclusions.ts": 
+"/** Arquivos que nunca entram na revisão — gerados, locks, builds. */
+export const EXCLUSION_PATTERNS: readonly RegExp[] = [
+	/bun\\.lockb?$/,
+	/^package-lock\\.json$/,
+	/^dist\\//,
+	/^build\\//,
+];
+
+/** \`true\` se o caminho é excluído da revisão. */
+export function isExcluded(filePath: string): boolean {
+	return EXCLUSION_PATTERNS.some((pattern) => pattern.test(filePath));
+}
+"
+,
+  ".houndsman/watchdogs/example.ts": 
+"import { defineWatchdog } from "../core/types";
+
+/**
+ * Watchdog de exemplo — substitua pelas regras reais do projeto.
+ * Um watchdog declara seus arquivos via \`classify\` (regex de path ou conteúdo).
+ * O texto de cada regra começa com a polaridade: \`Promover:\` (DEVE acontecer)
+ * ou \`Evitar:\`/\`Não\`/\`Nunca\` (NÃO DEVE acontecer).
+ */
+export const exampleWatchdog = defineWatchdog({
+	id: "example",
+	name: "Exemplo",
+	description: "Watchdog de exemplo — descreva o propósito em uma frase.",
+	scope: "Todo o repositório (ajuste o escopo)",
+	classify: [{ value: "^src/" }],
+	rules: [
+		{
+			severity: "attention",
+			text: "Promover: descreva aqui um padrão do projeto (algo que DEVE acontecer).",
+			jev: { kind: "noul" },
+		},
+		{
+			severity: "nit",
+			text: "Evitar: descreva aqui um anti-padrão (algo que NÃO DEVE acontecer).",
+		},
+	],
+	contextFiles: ["AGENTS.md"],
+});
+"
+,
+  ".houndsman/watchdogs/index.ts": 
+"import { exampleWatchdog } from "./example";
+
+/**
+ * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
+ * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
+ */
+export const WATCHDOG_DEFINITIONS = {
+	example: exampleWatchdog,
+};
+
+export type WatchdogId = keyof typeof WATCHDOG_DEFINITIONS;
+"
+,
+  "houndsman.config.ts": 
+"import { DOC_MAPPINGS } from "./.houndsman/doc-mappings";
+import { EXCLUSION_PATTERNS } from "./.houndsman/exclusions";
+import { WATCHDOG_DEFINITIONS } from "./.houndsman/watchdogs";
+import type { HoundsmanConfig } from "./.houndsman/core/types";
+
+/**
+ * Configuração do houndsman para acme.
+ *
+ * Caminhos são resolvidos pela camada: artefatos em .houndsman/.runs e schema de
+ * output em .houndsman/core/skill/OUTPUT-FORMAT.md. Ajuste watchdogs, exclusões e mapeamentos de
+ * docs conforme o projeto.
+ */
+export const houndsmanConfig = {
+	projectName: "acme",
+	watchdogs: WATCHDOG_DEFINITIONS,
+	exclusions: EXCLUSION_PATTERNS,
+	docMappings: DOC_MAPPINGS,
+} satisfies HoundsmanConfig;
+
+export default houndsmanConfig;
+"
+,
+}
+`;
+
+exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3`] = `
+[
+  {
+    "file": ".houndsman/core/skill/AUDIT-PROTOCOL.md",
+    "sha256": "190bc9f6417f54d0",
+  },
+  {
+    "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
+    "sha256": "3c6f261de0ca6d31",
+  },
+  {
+    "file": ".houndsman/core/skill/README.md",
+    "sha256": "7cc26ec5e1917a62",
+  },
+  {
+    "file": ".houndsman/core/skill/SETUP.md",
+    "sha256": "5d6a4b56b1033970",
+  },
+  {
+    "file": ".houndsman/core/skill/example-review.md",
+    "sha256": "a2627e99ac5caead",
+  },
+  {
+    "file": ".houndsman/core/skill/fix.md",
+    "sha256": "f16c0383ad1767fb",
+  },
+  {
+    "file": ".houndsman/core/skill/hunt.md",
+    "sha256": "7e7d7e5535381b9b",
+  },
+  {
+    "file": ".houndsman/core/skill/train.md",
+    "sha256": "564a1fd38d8e4836",
+  },
+  {
+    "file": ".houndsman/core/skill/verify.md",
+    "sha256": "f8fcf8e12b142482",
+  },
+]
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 1`] = `
+"Discovery: 1 watchdog(s) ativado(s), 3 arquivo(s), 1 deletado(s).
+Briefs: .houndsman/.runs/main/briefs/
+Deletado (breaking change): src/alpha/old.ts
+Jev: pulado (desativado (--no-jev)).
+Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
+
+Próximo passo: despachar os sub-agentes (um por brief em .houndsman/.runs/main/briefs/).
+Quando os findings estiverem gravados: bun run houndsman --finalize"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: classification.json 1`] = `
+"{
+  "watchdogs": {
+    "alpha": [
+      "src/alpha/a.ts",
+      "src/alpha/b.ts"
+    ]
+  },
+  "files": {
+    "src/alpha/a.ts": {
+      "status": "modified"
+    },
+    "src/alpha/b.ts": {
+      "status": "added"
+    },
+    "src/alpha/old.ts": {
+      "status": "deleted"
+    }
+  },
+  "churn": {
+    "src/alpha/a.ts": {
+      "additions": 2,
+      "deletions": 1
+    },
+    "src/alpha/b.ts": {
+      "additions": 1,
+      "deletions": 0
+    },
+    "src/alpha/old.ts": {
+      "additions": 0,
+      "deletions": 1
+    }
+  },
+  "unclassified": [],
+  "excluded": [],
+  "deleted": [
+    "src/alpha/old.ts"
+  ],
+  "stats": {
+    "alpha": 2
+  },
+  "excludedCount": 0,
+  "base": "<sha>",
+  "head": "HEAD",
+  "headSha": "<sha>",
+  "mode": "full"
+}
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: manifest.json 1`] = `
+"{
+  "branch": "main",
+  "slug": "main",
+  "base": "<sha>",
+  "head": "HEAD",
+  "headSha": "<sha>",
+  "generatedAt": "<timestamp>",
+  "outputFormat": ".houndsman/core/skill/OUTPUT-FORMAT.md",
+  "budget": {
+    "maxFilesPerBrief": 40,
+    "filesOverBudget": 0
+  },
+  "churn": {
+    "additions": 3,
+    "deletions": 2
+  },
+  "watchdogs": [
+    {
+      "id": "alpha",
+      "name": "Alpha",
+      "files": [
+        "src/alpha/a.ts",
+        "src/alpha/b.ts"
+      ],
+      "overflow": 0,
+      "brief": ".houndsman/.runs/main/briefs/alpha.md",
+      "findings": ".houndsman/.runs/main/findings/alpha.json",
+      "status": "pending"
+    }
+  ],
+  "context": {
+    "summarized": false,
+    "source": null
+  },
+  "jev": {
+    "available": false,
+    "reason": "desativado (--no-jev)"
+  },
+  "deleted": [
+    "src/alpha/old.ts"
+  ],
+  "unclassified": [],
+  "excludedCount": 0
+}
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: briefs/alpha.md 1`] = `
+"# Brief — Alpha (\`alpha\`)
+
+**Branch:** main
+**Output obrigatório:** \`.houndsman/.runs/main/findings/alpha.json\`
+**Schema do output:** \`.houndsman/core/skill/OUTPUT-FORMAT.md\`
+
+## Objetivo
+
+Watchdog baseline.
+
+## Escopo
+
+src/alpha/**
+
+## Regras (por severidade)
+
+- ❌ **blocking** — Nunca usar \`any\`.
+- ⚠️ **attention** — Promover: validar a entrada.
+
+## Docs de contexto (carregar sob demanda)
+
+- \`README.md\`
+
+## Arquivos do seu domínio (2)
+
+- \`src/alpha/a.ts\` (modified, +2/−1)
+- \`src/alpha/b.ts\` (added, +1/−0)
+
+## Deletados — checar breaking change
+
+- \`src/alpha/old.ts\`
+
+## Procedimento
+
+1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
+2. **READ HEAD** — leia os arquivos seletivamente (primeiras ~30 linhas). NUNCA o diff completo.
+3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações.
+4. **DEEP-READ** — aprofunde apenas os arquivos com suspeita de violação.
+5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 2`] = `
+"Triagem: .houndsman/.runs/main/state.json — 1 finding(s).
+Relatório: .houndsman/.runs/main/review.md — 1 bloqueante(s), 0 atenção."
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: review.md 1`] = `
+"# PR Review — main
+
+**Data:** <date>
+**Watchdogs ativos:** alpha
+**Achados:** 1 bloqueantes · 0 atenção · 0 sugestões · 0 nits
+
+## ❌ blocking
+
+### \`src/alpha/a.ts\`
+
+- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`<id>\`
+  any detectado
+  **Ação:** tipar
+  **Evidência:** \`export const a: any = 1;\`
+
+## Relatórios por domínio
+
+| Watchdog | Achados | Revisados | Relatório |
+|---|---|---|---|
+| Alpha | 1 | 2/2 | [\`review.alpha.md\`](review.alpha.md) |
+
+## Cobertura
+
+| Watchdog | Arquivos revisados | Findings |
+|---|---|---|
+| Alpha | 2 | 1 |
+
+## Conclusão
+
+**Status:** ❌ Mudanças Necessárias
+**Resumo:** 1 violações bloqueantes, 0 pontos de atenção, 0 sugestões e 0 nits.
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: review.alpha.md 1`] = `
+"# Review — Alpha (\`alpha\`) — main
+
+**Data:** <date>
+**Arquivos revisados:** 2/2
+**Achados:** 1
+
+## ❌ blocking
+
+### \`src/alpha/a.ts\`
+
+- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_
+  any detectado
+  **Ação:** tipar
+  **Evidência:** \`export const a: any = 1;\`
+
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: state.json 1`] = `
+"{
+  "version": 2,
+  "branch": "main",
+  "slug": "main",
+  "updatedAt": "<timestamp>",
+  "order": [
+    "<id>"
+  ],
+  "reviewed": {
+    "headSha": "<sha>",
+    "at": "<timestamp>"
+  },
+  "findings": {
+    "<id>": {
+      "id": "<id>",
+      "fingerprint": "<fingerprint>",
+      "watchdogIds": [
+        "alpha"
+      ],
+      "rule": "Nunca usar \`any\`.",
+      "severity": "blocking",
+      "file": "src/alpha/a.ts",
+      "line": 1,
+      "message": "any detectado",
+      "action": "tipar",
+      "evidence": "export const a: any = 1;",
+      "anchor": {
+        "snippet": "export const a: any = 1;",
+        "line": 1,
+        "contextAfter": "export const b = 2;"
+      },
+      "foundAtSha": "<sha>",
+      "count": 1,
+      "present": true,
+      "decision": "pending",
+      "execState": "pending",
+      "createdAt": "<timestamp>",
+      "updatedAt": "<timestamp>",
+      "history": []
+    }
+  }
+}
+"
+`;
+
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: run.json 1`] = `
+"{
+  "version": 1,
+  "slug": "main",
+  "branch": "main",
+  "status": "review_done",
+  "startedAt": "<timestamp>",
+  "updatedAt": "<timestamp>"
+}
+"
+`;

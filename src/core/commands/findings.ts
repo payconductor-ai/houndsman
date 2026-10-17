@@ -27,7 +27,6 @@ import {
 	type FindingsFilter,
 	type FindingsStateFile,
 	FindingsStateStore,
-	type FindingsSummary,
 	type FindingUpdate,
 	fileReader,
 	filterFindings,
@@ -35,7 +34,6 @@ import {
 	summarize,
 	syncState,
 } from "../findings-state";
-import { buildFixBatch, type FixBatchResult } from "../fix-batch";
 import {
 	buildSubmitPreview,
 	defaultGhRunner,
@@ -47,11 +45,13 @@ import {
 } from "../github-review";
 import { relFromRoot, VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
+import { BatchPresenter } from "../renderers/batch-presenter";
+import { FindingsPresenter } from "../renderers/findings-presenter";
+import { VerifyPresenter } from "../renderers/verify-presenter";
 import { pingFindingsStatus } from "../run-status";
-import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "../types";
-// Tipos são apagados no transpile (custo zero). Os **valores** de `../verify` e de
-// `../jev` (axios) entram por import dinâmico — só o subcomando `verify` os usa.
-import type { VerifyEntry, VerifyStatus, VerifySummary } from "../verify";
+import { FixBatchBuilder } from "../services/fix-batch-builder";
+import { Verifier } from "../services/verifier";
+import { SEVERITY_ORDER, type Severity } from "../types";
 
 export type FindingsCommandResult = {
 	output: string;
@@ -134,90 +134,16 @@ function loadState(config: HoundsmanConfig, parsed: ParsedArgs): FindingsStateFi
 }
 
 // ---------------------------------------------------------------------------
-// Render
+// Apresentação
 // ---------------------------------------------------------------------------
 
-function decisionLabel(decision: FindingDecision): string {
-	return decision;
-}
+const presenters = {
+	findings: new FindingsPresenter(),
+	batch: new BatchPresenter(),
+	verify: new VerifyPresenter(),
+};
 
-/** Uma linha compacta por finding (uso no agente). */
-function renderFindingLine(finding: FindingState): string[] {
-	const emoji = SEVERITY_EMOJI[finding.severity];
-	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-	const flags = `${decisionLabel(finding.decision)}/${finding.execState}`;
-	const count = finding.count > 1 ? ` ×${finding.count}` : "";
-	const lines = [
-		`- \`${finding.id}\` ${emoji} **${finding.severity}** \`${location}\` — ${finding.rule}${count}`,
-		`  ${finding.message}`,
-		`  _${flags}_ · watchdogs: ${finding.watchdogIds.join(", ") || "—"}`,
-	];
-	if (finding.comment) lines.push(`  **Comentário:** ${finding.comment}`);
-	return lines;
-}
-
-function renderList(state: FindingsStateFile, findings: FindingState[]): string {
-	if (findings.length === 0) return "Nenhum finding para o filtro informado.";
-	const lines = [`# Findings — ${state.branch} (${findings.length})`, ""];
-	for (const finding of findings) lines.push(...renderFindingLine(finding));
-	return lines.join("\n");
-}
-
-function renderSummary(state: FindingsStateFile, summary: FindingsSummary): string {
-	const decisions = FINDING_DECISIONS.map((d) => `${d} ${summary.byDecision[d]}`).join(
-		" · ",
-	);
-	const exec = FINDING_EXEC_STATES.map((e) => `${e} ${summary.byExecState[e]}`).join(
-		" · ",
-	);
-	const severities = SEVERITY_ORDER.map((s) => `${s} ${summary.bySeverity[s]}`).join(
-		" · ",
-	);
-	return [
-		`# Triagem — ${state.branch}`,
-		"",
-		`Total: ${summary.total} (presentes: ${summary.present})`,
-		`Decisões: ${decisions}`,
-		`Execução: ${exec}`,
-		`Severidade: ${severities}`,
-	].join("\n");
-}
-
-/** Mix de severidade compacto (ex.: `❌1 ⚠️2`). */
-function severityBreakdown(bySeverity: Record<Severity, number>): string {
-	return SEVERITY_ORDER.filter((severity) => bySeverity[severity] > 0)
-		.map((severity) => `${SEVERITY_EMOJI[severity]}${bySeverity[severity]}`)
-		.join(" ");
-}
-
-/** Render do lote de correção: grupo atual paginado + outros grupos. */
-function renderBatch(result: FixBatchResult): string {
-	const { dimension, current, others, totals } = result;
-	if (totals.queue === 0) return "Nenhum finding pendente de correção.";
-
-	const lines = [
-		`# Lote de correção — agrupado por ${dimension} (${totals.groups} grupo(s))`,
-		"",
-		`## Grupo atual — ${current.key} (${current.total} finding(s), mostrando ${current.returned})`,
-	];
-	for (const finding of current.findings) lines.push(...renderFindingLine(finding));
-	if (current.remaining > 0) {
-		lines.push("", `_… +${current.remaining} neste grupo (use \`--offset\`)._`);
-	}
-	if (others.length > 0) {
-		lines.push("", "## Outros grupos disponíveis");
-		for (const group of others) {
-			lines.push(
-				`- ${group.key} — ${group.count} (${severityBreakdown(group.bySeverity)})`,
-			);
-		}
-	}
-	lines.push(
-		"",
-		`fila: ${totals.queue} · retornados: ${totals.returned} · grupos: ${totals.groups}`,
-	);
-	return lines.join("\n");
-}
+const fixBatchBuilder = new FixBatchBuilder();
 
 // ---------------------------------------------------------------------------
 // Execução
@@ -332,7 +258,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(findings, null, 2)
-					: renderList(state, findings),
+					: presenters.findings.list(state, findings),
 				exitCode: 0,
 			};
 		}
@@ -345,7 +271,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(finding, null, 2)
-					: renderList(state, [finding]),
+					: presenters.findings.list(state, [finding]),
 				exitCode: 0,
 			};
 		}
@@ -417,7 +343,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(summary, null, 2)
-					: renderSummary(state, summary),
+					: presenters.findings.summary(state, summary),
 				exitCode: 0,
 			};
 		}
@@ -430,7 +356,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			const state = loadState(config, parsed);
 			const severity = parsed.values["--severity"];
 			const offset = Number(parsed.values["--offset"]);
-			const result = buildFixBatch(state, {
+			const result = fixBatchBuilder.build(state, {
 				severity: severity ? (severity as Severity) : undefined,
 				includeDone: parsed.bools.has("--include-done"),
 				offset: Number.isFinite(offset) ? offset : undefined,
@@ -439,7 +365,7 @@ function execute(config: HoundsmanConfig, parsed: ParsedArgs): FindingsCommandRe
 			return {
 				output: parsed.bools.has("--json")
 					? JSON.stringify(result, null, 2)
-					: renderBatch(result),
+					: presenters.batch.render(result),
 				exitCode: 0,
 			};
 		}
@@ -479,43 +405,6 @@ function requireIds(parsed: ParsedArgs, sub: string): string[] {
 // verify — as violações foram resolvidas? (sem re-revisar a PR)
 // ---------------------------------------------------------------------------
 
-/** Rótulo curto de cada status de verificação. */
-const VERIFY_LABEL: Record<VerifyStatus, string> = {
-	resolved: "✅ resolvido",
-	persisting: "❌ persiste",
-	uncertain: "⚠️ incerto",
-	"file-missing": "🗑️ arquivo ausente",
-};
-
-/** Render da verificação: contagem por status + uma linha por finding. */
-function renderVerify(
-	state: FindingsStateFile,
-	entries: VerifyEntry[],
-	summary: VerifySummary,
-	meta: { jevChecked: number; jevReason?: string },
-): string {
-	if (entries.length === 0) return "Nenhum finding para verificar.";
-	const lines = [
-		`# Verificação — ${state.branch} (${entries.length})`,
-		"",
-		`Resolvidos: ${summary.resolved} · Persistem: ${summary.persisting} · Incertos: ${summary.uncertain} · Arquivo ausente: ${summary["file-missing"]}`,
-	];
-	if (meta.jevChecked > 0) lines.push(`Confirmados por Jev: ${meta.jevChecked}.`);
-	else if (meta.jevReason) lines.push(`Jev: pulado (${meta.jevReason}).`);
-	lines.push("");
-	for (const entry of entries) {
-		const location = entry.line ? `${entry.file}:${entry.line}` : entry.file;
-		const via =
-			entry.basis === "jev" ? ` · Jev ${(entry.confidence ?? 0).toFixed(2)}` : "";
-		lines.push(
-			`- \`${entry.id}\` ${VERIFY_LABEL[entry.status]} — **${entry.severity}** \`${location}\` — ${entry.rule}${via}`,
-			`  ${entry.message}`,
-		);
-		if (entry.detail) lines.push(`  _${entry.detail}_`);
-	}
-	return lines.join("\n");
-}
-
 /**
  * Subcomando `findings verify` — checa se as violações foram resolvidas, sem
  * re-revisar a PR. Tier local (grátis) + confirmação Jev dos casos ambíguos
@@ -544,28 +433,26 @@ async function executeVerify(
 	const store = FindingsStateStore.at(dir, branch);
 	const state = loadState(config, parsed);
 
-	// Lazy: `../verify` (leve) e `../jev` (axios) só entram no caminho do verify.
-	const [
-		{ selectVerifiable, verifyLocal, summarizeVerify, applyJev, applyResolutions },
-		{ JevCandidatesStore, JevClient, JevVerifier },
-	] = await Promise.all([import("../verify"), import("../jev")]);
+	// Lazy: `../jev` (axios) só entra no caminho do verify.
+	const verifier = new Verifier();
+	const { JevCandidatesStore, JevClient, JevVerifier } = await import("../jev");
 
-	const findings = selectVerifiable(state, filterFrom(parsed));
-	const entries = verifyLocal(findings, fileReader(process.cwd()));
+	const findings = verifier.select(state, filterFrom(parsed));
+	const entries = verifier.verifyLocal(findings, fileReader(process.cwd()));
 
 	// Tier 1 — Jev só nos ambíguos (fail-open: sem chave/erro mantém o provisório).
 	let jevChecked = 0;
 	let jevReason: string | undefined;
 	const ambiguous = entries.filter((entry) => entry.ambiguous);
 	if (ambiguous.length > 0) {
-		const verifier = new JevVerifier(new JevClient());
+		const jevVerifier = new JevVerifier(new JevClient());
 		if (parsed.bools.has("--no-jev")) {
 			jevReason = "desativado (--no-jev)";
-		} else if (!verifier.isConfigured()) {
+		} else if (!jevVerifier.isConfigured()) {
 			jevReason = "TYPESAFE_API_KEY não configurada";
 		} else {
 			const byId = new Map(findings.map((finding) => [finding.id, finding]));
-			const outcome = await verifier.verify(
+			const outcome = await jevVerifier.verify(
 				ambiguous.map((entry) => ({
 					id: entry.id,
 					file: entry.file,
@@ -577,23 +464,23 @@ async function executeVerify(
 					concurrency: resolveJevConcurrency(config),
 				},
 			);
-			applyJev(entries, outcome.confidence, JevCandidatesStore.THRESHOLD);
+			verifier.applyJev(entries, outcome.confidence, JevCandidatesStore.THRESHOLD);
 			jevChecked = outcome.checked;
 			jevReason = outcome.reason;
 		}
 	}
 
-	const summary = summarizeVerify(entries);
+	const summary = verifier.summarize(entries);
 	const reportPath = join(runDir(dir, branch), VERIFY_FILE);
 	writeFileSync(
 		reportPath,
-		`${renderVerify(state, entries, summary, { jevChecked, jevReason })}\n`,
+		`${presenters.verify.render(state, entries, summary, { jevChecked, jevReason })}\n`,
 	);
 
 	let applied: string[] = [];
 	if (parsed.bools.has("--apply")) {
 		store.update((current) => {
-			applied = applyResolutions(current, entries);
+			applied = verifier.applyResolutions(current, entries);
 		});
 		pingStatus(config, parsed);
 	}
@@ -605,7 +492,10 @@ async function executeVerify(
 				2,
 			)
 		: [
-				renderVerify(state, entries, summary, { jevChecked, jevReason }),
+				presenters.verify.render(state, entries, summary, {
+					jevChecked,
+					jevReason,
+				}),
 				"",
 				`Relatório: ${relFromRoot(reportPath)}`,
 				parsed.bools.has("--apply")

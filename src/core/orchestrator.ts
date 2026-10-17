@@ -15,29 +15,21 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
-import { renderBrief } from "./brief";
+import { join } from "node:path";
 import {
 	type HoundsmanConfig,
 	resolveJevConcurrency,
 	resolveMaxFilesPerBrief,
 } from "./config";
-import { churnToRecord, collectDiff, type DiffSource } from "./diff-source";
+import type { DiffSource } from "./diff-source";
 import { discoverDocs } from "./doc-discoverer";
-import {
-	type BudgetSelection,
-	type ClassificationResult,
-	classifyEntries,
-	classifyRange,
-	selectByBudget,
-} from "./file-classifier";
-import {
-	buildStateFromFindings,
-	type FindingsStateFile,
-	FindingsStateStore,
-	fileReader,
-} from "./findings-state";
-import { collectDiffSince, diffEntries, isAncestor, resolveSha } from "./git-revision";
+import { Classification } from "./domain/classification";
+import { Watchdog } from "./domain/watchdog";
+import { mergeCarryover } from "./engine/carryover";
+import { ReviewScopeResolver, type RunClassification } from "./engine/review-scope";
+import type { BudgetSelection, ClassificationResult } from "./file-classifier";
+import { buildStateFromFindings, FindingsStateStore, fileReader } from "./findings-state";
+import { resolveSha } from "./git-revision";
 import {
 	type JevCandidate,
 	type JevCandidatesFile,
@@ -45,21 +37,24 @@ import {
 	JevClient,
 	JevDetector,
 } from "./jev";
-import { ARTIFACT_DIR, OUTPUT_FORMAT_PATH } from "./paths";
-import { contextPaths, currentBranch, readContextSummary } from "./pr-context";
+import { ARTIFACT_DIR, OUTPUT_FORMAT_PATH, relFromRoot } from "./paths";
+import { currentBranch, readContextSummary } from "./pr-context";
+import { ProjectConfig } from "./project-config";
+import { BriefRenderer } from "./renderers/brief-renderer";
+import { ManifestWriter } from "./renderers/manifest-writer";
+import { ReportRenderer } from "./renderers/report-renderer";
 import {
 	type ContextSummary,
 	type DomainReport,
 	dedupeFindings,
-	type MergedFinding,
 	parseWatchdogReport,
-	renderDomainReport,
-	renderReport,
 	sanitizeBranch,
 	type WatchdogReport,
 } from "./report-builder";
+import { RunLayout } from "./run-layout";
 import { writeRunStatus } from "./run-status";
-import { severityRank, type WatchdogMeta } from "./types";
+import { systemClock } from "./services/clock";
+import type { WatchdogMeta } from "./types";
 import { findWatchdog } from "./watchdog-registry";
 
 export type ReviewOptions = {
@@ -89,27 +84,11 @@ export function defaultOptions(artifactDir: string = ARTIFACT_DIR): ReviewOption
 	};
 }
 
-/** Caminho relativo à raiz, sempre com `/` (portável/legível). */
-function relFromRoot(absPath: string): string {
-	return relative(process.cwd(), absPath).replace(/\\/g, "/");
-}
-
-type Paths = {
-	slug: string;
-	outDir: string;
-	briefsDir: string;
-	findingsDir: string;
-};
+/** Layout de uma run (paths de briefs/findings/artefatos). */
+type Paths = RunLayout;
 
 function paths(opts: ReviewOptions, branch: string): Paths {
-	const slug = sanitizeBranch(branch);
-	const outDir = join(opts.dir, slug);
-	return {
-		slug,
-		outDir,
-		briefsDir: join(outDir, "briefs"),
-		findingsDir: join(outDir, "findings"),
-	};
+	return new RunLayout(opts.dir, branch);
 }
 
 function prepareDirs(dirs: Paths, clean: boolean): void {
@@ -125,26 +104,9 @@ function prepareDirs(dirs: Paths, clean: boolean): void {
 // Escopo da revisão (completo vs incremental)
 // ---------------------------------------------------------------------------
 
-/** Classificação enriquecida gravada no `classification.json` (modo + revisão + carry-over). */
-type RunClassification = ClassificationResult & {
-	/** Commit revisado (head do diff). */
-	headSha?: string;
-	/** Modo do prepare: completo ou incremental (delta desde a última revisão). */
-	mode: "full" | "incremental";
-	/** Commit da última revisão (só no incremental). */
-	reviewedFrom?: string;
-	/** Findings preservados do review anterior (arquivos inalterados). */
-	carryover?: MergedFinding[];
-};
-
 /** SHA curto para logs (7 chars, como o git). */
 function shortSha(sha: string): string {
 	return sha.slice(0, 7);
-}
-
-/** Chave de dedupe de finding: `(file, line, rule)` — igual ao `dedupeFindings`. */
-function findingKey(finding: Pick<MergedFinding, "file" | "line" | "rule">): string {
-	return `${finding.file}|${finding.line ?? ""}|${finding.rule}`;
 }
 
 /** Aviso no topo do `review.md` quando a revisão foi incremental (senão vazio). */
@@ -158,105 +120,6 @@ function incrementalNote(classification: RunClassification): string {
 	);
 }
 
-/**
- * Findings do review anterior em arquivos inalterados — carregados sem
- * re-revisão (carry-over). Preserva o `foundAtSha` para o diff focado do verify.
- */
-function buildCarryover(
-	previous: FindingsStateFile | null,
-	changedPaths: Set<string>,
-): MergedFinding[] {
-	if (!previous) return [];
-	return Object.values(previous.findings)
-		.filter((finding) => finding.present && !changedPaths.has(finding.file))
-		.map((finding) => ({
-			id: finding.id,
-			rule: finding.rule,
-			severity: finding.severity,
-			file: finding.file,
-			line: finding.line ?? undefined,
-			message: finding.message,
-			action: finding.action,
-			evidence: finding.evidence,
-			foundAtSha: finding.foundAtSha,
-			watchdogs: [...finding.watchdogIds],
-		}));
-}
-
-/** Une os findings re-reportados com os carry-over (preserva ids do estado anterior). */
-function mergeCarryover(
-	merged: MergedFinding[],
-	carryover: readonly MergedFinding[],
-): MergedFinding[] {
-	const byKey = new Map(merged.map((finding) => [findingKey(finding), finding]));
-	for (const carried of carryover) {
-		const existing = byKey.get(findingKey(carried));
-		if (existing) {
-			for (const watchdog of carried.watchdogs) {
-				if (!existing.watchdogs.includes(watchdog))
-					existing.watchdogs.push(watchdog);
-			}
-			continue;
-		}
-		byKey.set(findingKey(carried), carried);
-		merged.push(carried);
-	}
-	merged.sort((a, b) => {
-		const bySeverity = severityRank(a.severity) - severityRank(b.severity);
-		if (bySeverity !== 0) return bySeverity;
-		if (a.file !== b.file) return a.file.localeCompare(b.file);
-		return (a.line ?? 0) - (b.line ?? 0);
-	});
-	return merged;
-}
-
-/**
- * Decide entre review completo e incremental. Incremental só quando há um
- * `reviewed.headSha` anterior, o `HEAD` atual o sucede (sem rebase) e não veio
- * `--full`/`--clean`. Reconstrói só o delta `prevSha..headSha` e carrega os
- * findings de arquivos inalterados do estado anterior.
- */
-function resolveReviewScope(
-	opts: ReviewOptions,
-	previous: FindingsStateFile | null,
-	headSha: string,
-	config: HoundsmanConfig,
-): { classification: RunClassification; diff: DiffSource; reviewedFrom?: string } {
-	const prevSha = previous?.reviewed?.headSha;
-	if (
-		opts.full ||
-		opts.clean ||
-		!prevSha ||
-		prevSha === headSha ||
-		!isAncestor(prevSha, headSha)
-	) {
-		const diff = collectDiff(opts.base, opts.head);
-		return {
-			diff,
-			classification: {
-				...classifyRange(opts.base, opts.head, config, diff),
-				headSha,
-				mode: "full",
-			},
-		};
-	}
-
-	const range = `${prevSha}..${headSha}`;
-	const diff = collectDiffSince(prevSha, headSha);
-	const entries = diffEntries(range);
-	const changedPaths = new Set(entries.map((entry) => entry.path));
-	const classification: RunClassification = {
-		...classifyEntries(entries, config, churnToRecord(diff.churn)),
-		base: prevSha,
-		head: opts.head,
-		headSha,
-		mode: "incremental",
-		reviewedFrom: prevSha,
-		carryover: buildCarryover(previous, changedPaths),
-	};
-	return { classification, diff, reviewedFrom: prevSha };
-}
-
 // ---------------------------------------------------------------------------
 // Findings
 // ---------------------------------------------------------------------------
@@ -264,9 +127,10 @@ function resolveReviewScope(
 function readFindings(
 	findingsDir: string,
 	activeIds: string[],
-): { reports: WatchdogReport[]; pending: string[] } {
+): { reports: WatchdogReport[]; pending: string[]; warnings: string[] } {
 	const reports: WatchdogReport[] = [];
 	const pending: string[] = [];
+	const warnings: string[] = [];
 	for (const id of activeIds) {
 		const path = join(findingsDir, `${id}.json`);
 		if (!existsSync(path)) {
@@ -275,96 +139,19 @@ function readFindings(
 		}
 		try {
 			const raw = JSON.parse(readFileSync(path, "utf8"));
-			const report = parseWatchdogReport(raw, path);
+			const report = parseWatchdogReport(raw, path, (message) =>
+				warnings.push(message),
+			);
 			if (report) reports.push(report);
 			else pending.push(id);
 		} catch (err) {
-			console.error(
+			warnings.push(
 				`[houndsman] ${relFromRoot(path)} inválido: ${err instanceof Error ? err.message : err}`,
 			);
 			pending.push(id);
 		}
 	}
-	return { reports, pending };
-}
-
-// ---------------------------------------------------------------------------
-// Manifesto
-// ---------------------------------------------------------------------------
-
-function contextManifest(
-	opts: ReviewOptions,
-	branch: string,
-): { summarized: boolean; source: ContextSummary["source"] | null } {
-	const summary = readContextSummary(contextPaths(opts.dir, branch).summary);
-	if (!summary) return { summarized: false, source: null };
-	return { summarized: true, source: summary.source ?? null };
-}
-
-function writeManifest(
-	outDir: string,
-	opts: ReviewOptions,
-	branch: string,
-	classification: RunClassification,
-	activeIds: string[],
-	pending: string[],
-	jev: JevCandidatesFile,
-	config: HoundsmanConfig,
-): void {
-	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
-	let filesOverBudget = 0;
-	const watchdogs = activeIds.map((id) => {
-		const selection = budgetFor(classification, id, maxFilesPerBrief);
-		filesOverBudget += selection.overflow.length;
-		return {
-			id,
-			name: findWatchdog(config, id)?.name ?? id,
-			files: selection.selected,
-			overflow: selection.overflow.length,
-			brief: relFromRoot(join(outDir, "briefs", `${id}.md`)),
-			findings: relFromRoot(join(outDir, "findings", `${id}.json`)),
-			status: pending.includes(id) ? "pending" : "done",
-		};
-	});
-
-	const manifest = {
-		branch,
-		slug: sanitizeBranch(branch),
-		base: opts.base,
-		head: opts.head,
-		headSha: classification.headSha,
-		generatedAt: new Date().toISOString(),
-		outputFormat: OUTPUT_FORMAT_PATH,
-		budget: { maxFilesPerBrief, filesOverBudget },
-		churn: churnTotals(classification),
-		incremental:
-			classification.mode === "incremental"
-				? {
-						from: classification.reviewedFrom,
-						changedFiles: Object.keys(classification.files).length,
-						carried: classification.carryover?.length ?? 0,
-					}
-				: undefined,
-		watchdogs,
-		context: contextManifest(opts, branch),
-		jev: jev.available
-			? {
-					available: true,
-					model: jev.model,
-					threshold: jev.threshold,
-					analyzedFiles: jev.analyzedFiles,
-					candidates: jev.candidates.length,
-					skipped: jev.skipped?.length ?? 0,
-				}
-			: { available: false, reason: jev.reason },
-		deleted: classification.deleted,
-		unclassified: classification.unclassified,
-		excludedCount: classification.excludedCount,
-	};
-	writeFileSync(
-		join(outDir, "manifest.json"),
-		`${JSON.stringify(manifest, null, 2)}\n`,
-	);
+	return { reports, pending, warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -377,25 +164,25 @@ function budgetFor(
 	id: string,
 	maxFiles: number,
 ): BudgetSelection {
-	return selectByBudget(
-		classification.watchdogs[id] ?? [],
-		classification.churn,
-		maxFiles,
-	);
+	return Classification.from(classification).budgetFor(id, maxFiles);
 }
 
-/** Totais de churn do diff (métricas do manifesto). */
-function churnTotals(classification: ClassificationResult): {
-	additions: number;
-	deletions: number;
-} {
-	let additions = 0;
-	let deletions = 0;
-	for (const entry of Object.values(classification.churn ?? {})) {
-		additions += entry.additions;
-		deletions += entry.deletions;
-	}
-	return { additions, deletions };
+/** Grava o manifesto da run (delegado ao `ManifestWriter`). */
+function writeManifest(
+	layout: RunLayout,
+	config: HoundsmanConfig,
+	opts: ReviewOptions,
+	classification: RunClassification,
+	activeIds: string[],
+	pending: string[],
+	jev: JevCandidatesFile,
+): void {
+	new ManifestWriter(layout, new ProjectConfig(config), opts).write(
+		classification,
+		activeIds,
+		pending,
+		jev,
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -413,11 +200,12 @@ function writeBriefs(
 ): void {
 	const docs = discoverDocs(Object.keys(classification.files), config);
 	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
+	const renderer = new BriefRenderer();
 	for (const id of activeIds) {
 		const def = findWatchdog(config, id);
 		if (!def) continue;
 		const { selected, overflow } = budgetFor(classification, id, maxFilesPerBrief);
-		const brief = renderBrief(def, {
+		const brief = renderer.render(new Watchdog(def), {
 			watchdogId: id,
 			files: selected,
 			statuses: classification.files,
@@ -425,13 +213,13 @@ function writeBriefs(
 			overflow,
 			deleted: classification.deleted,
 			branch,
-			outputPath: relFromRoot(join(dirs.findingsDir, `${id}.json`)),
+			outputPath: relFromRoot(dirs.findingFile(id)),
 			outputFormatPath: OUTPUT_FORMAT_PATH,
 			docs,
 			context,
 			candidates: candidates.filter((c) => c.watchdogId === id),
 		});
-		writeFileSync(join(dirs.briefsDir, `${id}.md`), `${brief}\n`);
+		writeFileSync(dirs.briefFile(id), `${brief}\n`);
 	}
 }
 
@@ -450,10 +238,7 @@ async function resolveCandidates(
 	config: HoundsmanConfig,
 	diff: DiffSource,
 ): Promise<JevCandidatesFile> {
-	const store = new JevCandidatesStore(
-		join(dirs.outDir, "candidates.json"),
-		config.watchdogIds,
-	);
+	const store = new JevCandidatesStore(dirs.candidatesFile, config.watchdogIds);
 	const save = (data: JevCandidatesFile): JevCandidatesFile => {
 		store.write(data);
 		return data;
@@ -494,47 +279,48 @@ async function resolveCandidates(
 	}
 }
 
-function printJevSummary(jev: JevCandidatesFile): void {
-	if (!jev.available) {
-		console.log(`Jev: pulado (${jev.reason}).`);
-		return;
-	}
+function jevSummary(jev: JevCandidatesFile): string[] {
+	if (!jev.available) return [`Jev: pulado (${jev.reason}).`];
 	const skipped = jev.skipped?.length ?? 0;
-	console.log(
+	return [
 		`Jev: ${jev.candidates.length} candidato(s) em ${jev.analyzedFiles ?? 0} arquivo(s)` +
 			(skipped > 0 ? `, ${skipped} com falha.` : "."),
-	);
+	];
 }
 
-function printDiscovery(
+function discoveryMessages(
 	activeIds: string[],
 	classification: ClassificationResult,
 	briefsDir: string,
-): void {
-	console.log(
+): string[] {
+	const messages = [
 		`Discovery: ${activeIds.length} watchdog(s) ativado(s), ${Object.keys(classification.files).length} arquivo(s), ${classification.deleted.length} deletado(s).`,
-	);
-	console.log(`Briefs: ${relFromRoot(briefsDir)}/`);
+		`Briefs: ${relFromRoot(briefsDir)}/`,
+	];
 	for (const file of classification.deleted) {
-		console.log(`Deletado (breaking change): ${file}`);
+		messages.push(`Deletado (breaking change): ${file}`);
 	}
+	return messages;
 }
 
 /** Resumo do orçamento — só quando algum arquivo ficou de fora (PR grande). */
-function printBudget(
+function budgetMessage(
 	classification: ClassificationResult,
 	config: HoundsmanConfig,
-): void {
+): string[] {
 	const maxFiles = resolveMaxFilesPerBrief(config);
 	let overflow = 0;
 	for (const id of Object.keys(classification.watchdogs)) {
 		overflow += budgetFor(classification, id, maxFiles).overflow.length;
 	}
-	if (overflow === 0) return;
-	console.log(
+	if (overflow === 0) return [];
+	return [
 		`Orçamento: ${maxFiles} arquivo(s)/brief — ${overflow} fora do orçamento (menor churn; registrar em skipped).`,
-	);
+	];
 }
+
+/** Resultado do prepare — mensagens para o CLI imprimir. */
+export type PrepareResult = { messages: string[] };
 
 /** Passo 1 — descobre os arquivos e grava briefs + manifesto. */
 export async function prepare(
@@ -542,7 +328,8 @@ export async function prepare(
 	branch: string,
 	config: HoundsmanConfig,
 	dirs: Paths = paths(opts, branch),
-): Promise<void> {
+): Promise<PrepareResult> {
+	const messages: string[] = [];
 	prepareDirs(dirs, opts.clean);
 
 	// Marca o run como "revisando" (reinicia o ciclo) — a UI mostra o status.
@@ -551,9 +338,12 @@ export async function prepare(
 	// Marca o commit revisado e decide entre review completo e incremental.
 	const headSha = resolveSha(opts.head);
 	const previous = FindingsStateStore.at(opts.dir, branch).read();
-	const { classification, diff } = resolveReviewScope(opts, previous, headSha, config);
+	const { classification, diff } = new ReviewScopeResolver(opts, config).resolve(
+		previous,
+		headSha,
+	);
 	writeFileSync(
-		join(dirs.outDir, "classification.json"),
+		dirs.classificationFile,
 		`${JSON.stringify(classification, null, 2)}\n`,
 	);
 
@@ -562,53 +352,51 @@ export async function prepare(
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
 		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
-		console.log(
+		messages.push(
 			classification.mode === "incremental"
 				? `Nenhuma alteração desde a última revisão (${shortSha(classification.reviewedFrom ?? "")}).`
 				: `Nenhuma alteração entre ${opts.base}...${opts.head}.`,
 		);
-		return;
+		return { messages };
 	}
 	if (activeIds.length === 0) {
 		writeRunStatus(dirs.outDir, { branch, status: "review_done" });
-		console.log("Nenhum arquivo revisável (tudo excluído, deletado ou irrelevante).");
-		return;
+		messages.push(
+			"Nenhum arquivo revisável (tudo excluído, deletado ou irrelevante).",
+		);
+		return { messages };
 	}
 	if (classification.mode === "incremental") {
-		console.log(
+		messages.push(
 			`Modo incremental: ${Object.keys(classification.files).length} arquivo(s) alterado(s) desde ${shortSha(classification.reviewedFrom ?? "")}; ${classification.carryover?.length ?? 0} finding(s) carregado(s) do review anterior.`,
 		);
 	}
 
-	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
+	const context = readContextSummary(dirs.contextPaths.summary);
 
 	writeBriefs(activeIds, classification, dirs, branch, context, jev.candidates, config);
-	writeManifest(
-		dirs.outDir,
-		opts,
-		branch,
-		classification,
-		activeIds,
-		activeIds,
-		jev,
-		config,
+	writeManifest(dirs, config, opts, classification, activeIds, activeIds, jev);
+
+	messages.push(
+		...discoveryMessages(activeIds, classification, dirs.briefsDir),
+		...budgetMessage(classification, config),
+		...jevSummary(jev),
 	);
-	printDiscovery(activeIds, classification, dirs.briefsDir);
-	printBudget(classification, config);
-	printJevSummary(jev);
 
 	if (context) {
-		console.log("Contexto da PR resumido e injetado nos briefs.");
+		messages.push("Contexto da PR resumido e injetado nos briefs.");
 	} else {
-		console.log(
+		messages.push(
 			"Sem contexto da PR (rode `bun run houndsman context` antes, se houver PR).",
 		);
 	}
 
-	console.log(
+	messages.push(
 		`\nPróximo passo: despachar os sub-agentes (um por brief em ${relFromRoot(dirs.briefsDir)}/).`,
+		"Quando os findings estiverem gravados: bun run houndsman --finalize",
 	);
-	console.log("Quando os findings estiverem gravados: bun run houndsman --finalize");
+
+	return { messages };
 }
 
 // ---------------------------------------------------------------------------
@@ -633,7 +421,7 @@ function readClassification(classificationPath: string): RunClassification {
  * Mantém o `review.md` consolidado navegável em PRs grandes (centenas de achados).
  */
 function writeDomainReports(
-	outDir: string,
+	layout: RunLayout,
 	branch: string,
 	reports: WatchdogReport[],
 	classification: ClassificationResult,
@@ -641,20 +429,20 @@ function writeDomainReports(
 	nameOf: (id: string) => string,
 ): DomainReport[] {
 	const domains: DomainReport[] = [];
+	const renderer = new ReportRenderer(nameOf);
 	for (const report of reports) {
 		const findings = dedupeFindings([report]);
 		if (findings.length === 0) continue;
 		const file = `review.${sanitizeBranch(report.watchdogId)}.md`;
 		const expected = classification.watchdogs[report.watchdogId] ?? [];
 		writeFileSync(
-			join(outDir, file),
-			`${renderDomainReport(
+			layout.file(file),
+			`${renderer.renderDomain(
 				branch,
 				report,
 				findings,
 				expected.length,
 				context,
-				nameOf,
 			)}\n`,
 		);
 		domains.push({
@@ -673,6 +461,7 @@ export type FinalizeResult = {
 	reportPath: string;
 	blockers: number;
 	attention: number;
+	messages: string[];
 };
 
 /**
@@ -685,25 +474,16 @@ export function finalize(
 	config: HoundsmanConfig,
 	dirs: Paths = paths(opts, branch),
 ): FinalizeResult {
-	const classification = readClassification(join(dirs.outDir, "classification.json"));
+	const classification = readClassification(dirs.classificationFile);
 	const activeIds = Object.keys(classification.watchdogs);
 
-	const { reports, pending } = readFindings(dirs.findingsDir, activeIds);
+	const messages: string[] = [];
+	const { reports, pending, warnings } = readFindings(dirs.findingsDir, activeIds);
+	messages.push(...warnings);
 	const jev =
-		new JevCandidatesStore(
-			join(dirs.outDir, "candidates.json"),
-			config.watchdogIds,
-		).read() ?? JevCandidatesStore.unavailable("candidates.json ausente");
-	writeManifest(
-		dirs.outDir,
-		opts,
-		branch,
-		classification,
-		activeIds,
-		pending,
-		jev,
-		config,
-	);
+		new JevCandidatesStore(dirs.candidatesFile, config.watchdogIds).read() ??
+		JevCandidatesStore.unavailable("candidates.json ausente");
+	writeManifest(dirs, config, opts, classification, activeIds, pending, jev);
 
 	if (pending.length > 0) {
 		throw new Error(
@@ -712,14 +492,14 @@ export function finalize(
 		);
 	}
 
-	const now = new Date().toISOString();
+	const now = systemClock();
 	// Findings re-reportados neste ciclo + carry-over (arquivos inalterados).
 	const merged = mergeCarryover(
 		dedupeFindings(reports),
 		classification.carryover ?? [],
 	);
 	if (classification.mode === "incremental") {
-		console.log(
+		messages.push(
 			`Carry-over: ${classification.carryover?.length ?? 0} finding(s) preservado(s) de ${shortSha(classification.reviewedFrom ?? "")}.`,
 		);
 	}
@@ -740,41 +520,40 @@ export function finalize(
 			: undefined,
 	});
 	store.write(state);
-	console.log(
+	messages.push(
 		`Triagem: ${relFromRoot(store.filePath)} — ${Object.keys(state.findings).length} finding(s).`,
 	);
 	writeRunStatus(dirs.outDir, { branch, status: "review_done" });
 
-	const context = readContextSummary(contextPaths(opts.dir, branch).summary);
+	const context = readContextSummary(dirs.contextPaths.summary);
 	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;
 	const domains = writeDomainReports(
-		dirs.outDir,
+		dirs,
 		branch,
 		reports,
 		classification,
 		context,
 		nameOf,
 	);
-	const markdown = renderReport(
+	const markdown = new ReportRenderer(nameOf).render(
 		branch,
 		reports,
 		merged,
 		{ classified: classification.watchdogs },
 		context,
 		jev.available ? jev.candidates : undefined,
-		nameOf,
 		domains,
 	);
-	const reportPath = join(dirs.outDir, "review.md");
+	const reportPath = dirs.reviewFile;
 	writeFileSync(reportPath, `${incrementalNote(classification)}${markdown}\n`);
 
 	const blockers = merged.filter((f) => f.severity === "blocking").length;
 	const attention = merged.filter((f) => f.severity === "attention").length;
-	console.log(
+	messages.push(
 		`Relatório: ${relFromRoot(reportPath)} — ${blockers} bloqueante(s), ${attention} atenção.`,
 	);
 
-	return { reportPath, blockers, attention };
+	return { reportPath, blockers, attention, messages };
 }
 
 /** Resolve a branch (opção explícita ou a atual do git). */
