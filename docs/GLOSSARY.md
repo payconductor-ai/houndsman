@@ -47,7 +47,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **branch-slug** | Branch com `/` → `-` e minúscula; identifica a run na URL da UI (`feature/x` → `feature-x`). |
 | **`classification.json`** | Classificação: watchdogs ativados por arquivo, status (A/M/D/R) e churn. |
 | **`brief`** | O documento de instruções do watchdog (escopo, regras, docs, arquivos, candidatos). Renderizado por `renderBrief`. |
-| **`briefs/<id>.md`** | O brief no staging global — o prompt do subagente. |
+| **`briefs/<id>.md`** | O brief no staging global — o prompt do subagente; também persistido como artefato para auditoria. |
 | **`findings/<id>.json`** | Achados **daquele** watchdog no staging (schema em `OUTPUT-FORMAT.md`). |
 | **finding / achado** | Uma violação: `rule`, `severity`, `file`, `line?`, `message`, `action`, `evidence?`. |
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
@@ -58,7 +58,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 11. |
 | **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 11. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
-| **`context-brief.md`** | Instruções para o subagente que resume o contexto. |
+| **`context-brief.md`** | Instruções para o subagente que resume o contexto (staging + artefato de auditoria). |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
 | **`OUTPUT-FORMAT.md`** | Contrato do JSON de saída do watchdog — o **único** output consumido pelo pipeline. |
 | **`storage`** | `{ provider: "sqlite" \| "file", path? }` — default SQLite global. |

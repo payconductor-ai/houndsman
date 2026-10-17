@@ -77,11 +77,12 @@ staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 |---|---|
 | `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) + churn (storage) |
 | `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) (storage) |
-| `briefs/<watchdog>.md` | Instruções prontas para cada subagente (staging) |
+| `briefs/<watchdog>.md` | Instruções prontas para cada subagente (staging + storage, para auditoria) |
 | `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento (storage) |
 
 > O prepare imprime o caminho absoluto do diretório de briefs e cada brief traz o
-> `outputPath` do JSON que o subagente deve gravar. Nada é gravado em `.houndsman/.runs`.
+> `outputPath` do JSON que o subagente deve gravar. Briefs e contexto também ficam
+> persistidos no storage para auditoria; o staging é limpo após o `--finalize`.
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).

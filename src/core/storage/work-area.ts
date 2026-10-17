@@ -173,6 +173,17 @@ export class ReviewWorkArea {
 		}
 	}
 
+	/** Brief do subagente de contexto (para persistir como artefato). */
+	readContextBriefRaw(): string | null {
+		const path = this.contextPaths.brief;
+		if (!existsSync(path)) return null;
+		try {
+			return readFileSync(path, "utf8");
+		} catch {
+			return null;
+		}
+	}
+
 	/** Toque de `updatedAt` (diagnóstico). */
 	touch(): string {
 		return systemClock();

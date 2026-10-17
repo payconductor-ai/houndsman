@@ -394,9 +394,12 @@ describe("baseline — artefatos de prepare/finalize", () => {
 				const artifact = storage.readArtifact(review.id, name);
 				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);
 			}
-			expect(
-				normalize(readFileSync(ctx.work.briefFile("alpha"), "utf8")),
-			).toMatchSnapshot("briefs/alpha.md");
+			const workBrief = readFileSync(ctx.work.briefFile("alpha"), "utf8");
+			const briefArtifact = storage.readArtifact(review.id, "briefs/alpha.md");
+			expect(briefArtifact?.content).toBe(workBrief);
+			expect(normalize(briefArtifact?.content ?? "")).toMatchSnapshot(
+				"briefs/alpha.md",
+			);
 
 			writeFileSync(
 				ctx.work.findingFile("alpha"),

@@ -70,12 +70,14 @@ Runs, findings e artefatos vivem no **storage global** (SQLite em `<HOUNDSMAN_HO
 | `classification.json` | Watchdogs ativados + status (A/M/D/R) + churn |
 | `candidates.json` | Candidatos da pré-análise Jev |
 | `manifest.json` | Resumo (watchdogs, arquivos, deletados, contexto, orçamento, churn) |
+| `briefs/<watchdog>.md` | Brief enviado a cada sub-agente (auditoria) |
 | `review.md` / `review.<watchdog>.md` | Relatório consolidado e por domínio |
 | `verify.md` | Relatório do `findings verify` |
-| `context.json` / `context-summary.json` | Contexto da PR |
+| `context.json` / `context-brief.md` / `context-summary.json` | Contexto da PR |
 
 O **staging dos subagentes** fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo após o
-`--finalize`:
+`--finalize`. Briefs e contexto também são persistidos como artefatos (acima); apenas os
+findings brutos existem só no staging:
 
 | Arquivo | Conteúdo |
 |---|---|

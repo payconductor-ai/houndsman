@@ -168,6 +168,19 @@ describe("cli smoke — imports dinâmicos", () => {
 		try {
 			const result = runCli(project.cwd, ["context", "--branch", "main"]);
 			expect(result.code).toBe(0);
+
+			// Auditoria: o brief do contexto fica persistido mesmo sem PR.
+			const storage = new SQLiteStorageProvider(join(project.cwd, "houndsman.db"));
+			try {
+				const repo = buildRepoIdentity(null, project.cwd);
+				const review = storage.findReview(repo.key, "main");
+				expect(review).not.toBeNull();
+				expect(
+					storage.readArtifact(review?.id ?? "", "context-brief.md")?.kind,
+				).toBe("context-brief");
+			} finally {
+				storage.close();
+			}
 		} finally {
 			project.cleanup();
 		}

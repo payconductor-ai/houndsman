@@ -63,6 +63,14 @@ export type SubmitResult =
 	| { available: false; reason: string }
 	| { available: true; target: unknown; outcome: unknown };
 
+/** Metadados de um artefato (sem conteúdo) para a lista da UI. */
+export type ArtifactListItem = {
+	name: string;
+	kind: string;
+	contentType: string;
+	updatedAt: string;
+};
+
 /** Acesso às runs de um repositório. */
 export class RunRepository {
 	private readonly storage: StorageProvider;
@@ -254,6 +262,18 @@ export class RunRepository {
 		this.storage.writeFindings(review.id, state);
 		pingFindingsStatus(this.storage, review.id, state);
 		return { available: true, target: target.target, outcome };
+	}
+
+	/** Lista os artefatos da run (sem conteúdo). */
+	artifacts(slug: string): ArtifactListItem[] | null {
+		const review = this.findBySlug(slug);
+		if (!review) return null;
+		return this.storage.listArtifacts(review.id).map((artifact) => ({
+			name: artifact.name,
+			kind: artifact.kind,
+			contentType: artifact.contentType,
+			updatedAt: artifact.updatedAt,
+		}));
 	}
 
 	/** Conteúdo de um artefato (`json`/`md`) da run (null se não servível). */

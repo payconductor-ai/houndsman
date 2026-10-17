@@ -77,6 +77,7 @@ export type ArtifactKind =
 	| "manifest"
 	| "candidates"
 	| "context"
+	| "context-brief"
 	| "context-summary"
 	| "finding-report"
 	| "review"

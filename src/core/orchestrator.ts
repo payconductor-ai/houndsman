@@ -159,12 +159,13 @@ function writeManifest(
 function writeBriefs(
 	activeIds: string[],
 	classification: ClassificationResult,
-	work: ReviewWorkArea,
+	ctx: ReviewContext,
 	branch: string,
 	context: ContextSummary | null,
 	candidates: JevCandidate[],
 	config: HoundsmanConfig,
 ): void {
+	const work = ctx.work;
 	const docs = discoverDocs(Object.keys(classification.files), config);
 	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
 	const renderer = new BriefRenderer();
@@ -186,7 +187,14 @@ function writeBriefs(
 			context,
 			candidates: candidates.filter((c) => c.watchdogId === id),
 		});
-		work.writeBrief(id, `${brief}\n`);
+		const content = `${brief}\n`;
+		work.writeBrief(id, content);
+		// Auditoria: o brief também fica no storage (o staging é limpo no finalize).
+		ctx.storage.writeArtifact(ctx.review.id, {
+			name: `briefs/${id}.md`,
+			kind: "brief",
+			content,
+		});
 	}
 }
 
@@ -351,15 +359,7 @@ export async function prepare(
 	const context = ctx.work.readContextSummary() ?? readPersistedContextSummary(ctx);
 	persistContext(ctx);
 
-	writeBriefs(
-		activeIds,
-		classification,
-		ctx.work,
-		branch,
-		context,
-		jev.candidates,
-		config,
-	);
+	writeBriefs(activeIds, classification, ctx, branch, context, jev.candidates, config);
 	writeManifest(ctx, config, opts, classification, activeIds, activeIds, jev);
 
 	messages.push(
@@ -399,6 +399,14 @@ function persistContext(ctx: ReviewContext): void {
 			name: "context-summary.json",
 			kind: "context-summary",
 			content: summary,
+		});
+	}
+	const brief = ctx.work.readContextBriefRaw();
+	if (brief !== null) {
+		ctx.storage.writeArtifact(ctx.review.id, {
+			name: "context-brief.md",
+			kind: "context-brief",
+			content: brief,
 		});
 	}
 }

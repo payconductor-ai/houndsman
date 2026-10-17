@@ -38,11 +38,17 @@ export function runContextCommand(
 	const paths = work.contextPaths;
 
 	const context = collectPrContext(branch);
-	work.writeContext(context, renderContextBrief(context, branch, paths));
+	const brief = renderContextBrief(context, branch, paths);
+	work.writeContext(context, brief);
 	storage.writeArtifact(review.id, {
 		name: "context.json",
 		kind: "context",
 		content: `${JSON.stringify(context, null, 2)}\n`,
+	});
+	storage.writeArtifact(review.id, {
+		name: "context-brief.md",
+		kind: "context-brief",
+		content: `${brief}\n`,
 	});
 
 	return { paths, context };

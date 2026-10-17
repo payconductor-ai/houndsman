@@ -149,6 +149,9 @@ async function route(
 		if (!artifact) return notFound(`artefato '${name}' não encontrado`);
 		return text(artifact.content, artifact.type);
 	}
+	if (rest === "/artifacts" && request.method === "GET") {
+		return json({ artifacts: runs.artifacts(slug) ?? [] });
+	}
 
 	return notFound();
 }
