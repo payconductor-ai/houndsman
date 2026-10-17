@@ -161,59 +161,59 @@ export function FindingCard({
 				</button>
 			</div>
 
-			<h3 class="card-title">{finding.message}</h3>
+			<h3 class="card-title">
+				{open ? finding.message : truncateText(finding.message, 225)}
+			</h3>
 
 			{open && (
 				<div class="card-body">
-					<div class="meta-row">
-						<span class="meta">
-							<span class="meta-k">regra</span>
-							<code>{finding.rule}</code>
-						</span>
-						<span class="meta">
-							<span class="meta-k">exec</span>
-							<code>{finding.execState}</code>
-						</span>
-					</div>
+					<div class="meta-row">{finding.rule}</div>
 
 					<div class="action-block">
-						<Sparkles size={16} class="action-icon" />
-						<div>
-							<span class="action-label">Ação recomendada</span>
-							<p>{finding.action}</p>
-						</div>
+						<p>
+							<Sparkles size={16} class="action-icon" />
+							<span class="action-label">Ação:</span>
+							{finding.action}
+						</p>
 					</div>
 
 					{finding.evidence && <pre class="evidence">{finding.evidence}</pre>}
 
-					<div class="tags">
-						<span class="tags-label">
-							<Watch size={13} /> Watchdogs
-						</span>
-						{(finding.watchdogIds.length > 0
-							? finding.watchdogIds
-							: ["—"]
-						).map((id) => (
-							<span class="tag" key={id}>
-								{id}
-							</span>
-						))}
-					</div>
+					<div class="decision-tags-block">
+						<div class="decisions">
+							{DECISIONS.map((decision) => (
+								<button
+									type="button"
+									title={`Marcar como ${DECISION_LABELS[decision]}`}
+									class={`dec-btn dec-${decision}${
+										finding.decision === decision ? " active" : ""
+									}`}
+									disabled={busy}
+									onClick={() => void patch({ decision })}
+								>
+									{DECISION_LABELS[decision]}
+								</button>
+							))}
+						</div>
 
-					<div class="decisions">
-						{DECISIONS.map((decision) => (
-							<button
-								type="button"
-								title={`Marcar como ${DECISION_LABELS[decision]}`}
-								class={`dec-btn dec-${decision}${
-									finding.decision === decision ? " active" : ""
-								}`}
-								disabled={busy}
-								onClick={() => void patch({ decision })}
-							>
-								{DECISION_LABELS[decision]}
-							</button>
-						))}
+						<span class="meta">
+							<span class="meta-k">exec</span>
+							<code>{finding.execState}</code>
+						</span>
+
+						<div class="tags">
+							<span class="tags-label">
+								<Watch size={13} /> Watchdogs
+							</span>
+							{(finding.watchdogIds.length > 0
+								? finding.watchdogIds
+								: ["—"]
+							).map((id) => (
+								<span class="tag" key={id}>
+									{id}
+								</span>
+							))}
+						</div>
 					</div>
 
 					<div class="comment">
@@ -240,4 +240,8 @@ export function FindingCard({
 			)}
 		</article>
 	);
+}
+
+function truncateText(text: string, maxLength: number): string {
+	return text.length > maxLength ? `${text.slice(0, maxLength)}…` : text;
 }
