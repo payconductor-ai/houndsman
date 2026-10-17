@@ -75,8 +75,8 @@ export type GitHubLink = {
 	/** Id do comentário (review comment inline ou issue comment geral). */
 	commentId: number;
 	url?: string;
-	/** Origem do comentário remoto. */
-	kind: "inline" | "comment";
+	/** Origem do comentário remoto: linha, arquivo ou comentário geral. */
+	kind: "line" | "file" | "comment";
 	/** Número da PR de destino. */
 	pr: number;
 	/** Quando foi enviado (ISO). */

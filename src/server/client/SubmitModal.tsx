@@ -81,6 +81,19 @@ export function SubmitModal({
 		return () => document.removeEventListener("keydown", onKey);
 	}, [open, onClose]);
 
+	// Limpa o estado ao fechar: reabrir começa do zero (sem prévia/resultado antigos).
+	useEffect(() => {
+		if (open) return;
+		setPreview(null);
+		setSeverities([]);
+		setExecStates([]);
+		setIncludeSent(false);
+		setLoading(false);
+		setPosting(false);
+		setError("");
+		setResult(null);
+	}, [open]);
+
 	const toggleSeverity = (value: Severity) =>
 		setSeverities((current) =>
 			current.includes(value)
@@ -109,8 +122,8 @@ export function SubmitModal({
 		() => selected.filter((candidate) => includeSent || !candidate.sent),
 		[selected, includeSent],
 	);
-	const inline = toSend.filter((candidate) => candidate.inline).length;
-	const body = toSend.length - inline;
+	const onLine = toSend.filter((candidate) => candidate.kind === "line").length;
+	const onFile = toSend.filter((candidate) => candidate.kind === "file").length;
 	const skipped = selected.length - toSend.length;
 
 	const submit = useCallback(async () => {
@@ -264,7 +277,8 @@ export function SubmitModal({
 
 								<div class="submit-summary">
 									Serão disparados <b>{toSend.length}</b> comentário(s)
-									— <b>{inline}</b> inline · <b>{body}</b> no corpo
+									— <b>{onLine}</b> na linha · <b>{onFile}</b> no
+									arquivo
 									{skipped > 0 ? (
 										<>
 											{" "}
@@ -306,12 +320,12 @@ export function SubmitModal({
 													<span class="rule">
 														{candidate.rule}
 													</span>
-													{!candidate.inline && (
+													{candidate.kind === "file" && (
 														<span
 															class="tag"
-															title="Sem linha no diff — vai no comentário geral"
+															title="Ancorado no arquivo (sem linha específica)"
 														>
-															corpo
+															arquivo
 														</span>
 													)}
 												</div>

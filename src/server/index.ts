@@ -448,7 +448,7 @@ code, pre, .mono { font-family:var(--font-mono); }
   transition:background .15s ease, border-color .15s ease, color .15s ease; }
 .btn:hover { background:#202027; border-color:var(--accent-line); }
 .btn:disabled { opacity:.55; cursor:not-allowed; }
-.btn .icon.spin { animation:spin .8s linear infinite; }
+.icon.spin { animation:spin .8s linear infinite; }
 .content { width:100%; max-width:1180px; margin:0 auto; padding:22px 24px 64px; }
 .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
 .page-header-text { min-width:0; }

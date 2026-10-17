@@ -262,7 +262,7 @@ describe("server API", () => {
 			};
 			expect(body.available).toBe(true);
 			expect(body.outcome.posted).toHaveLength(1);
-			expect(body.outcome.posted[0].kind).toBe("inline");
+			expect(body.outcome.posted[0].kind).toBe("line");
 
 			const after = (await (
 				await get(handler, "/api/runs/main/findings?all=1")

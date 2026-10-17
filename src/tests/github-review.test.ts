@@ -60,7 +60,7 @@ function finding(spec: FindingSpec): FindingState {
 		github: spec.commentId
 			? {
 					commentId: spec.commentId,
-					kind: "inline",
+					kind: "line",
 					pr: 1,
 					at: "2026-01-01T00:00:00.000Z",
 				}
@@ -86,17 +86,29 @@ function okComment(id: number): GhResult {
 	};
 }
 
-/** Runner fake: dispatch por endpoint (pulls/comments vs issues/comments). */
-function fakeRunner(
-	inline: GhResult,
-	general: GhResult,
-): { runner: GhRunner; calls: string[][] } {
+/** Runner fake: o handler decide a resposta a partir dos args (os chamados ficam registrados). */
+function fakeRunner(handler: (args: string[]) => GhResult): {
+	runner: GhRunner;
+	calls: string[][];
+} {
 	const calls: string[][] = [];
 	const runner: GhRunner = (args) => {
 		calls.push(args);
-		return args[1].includes("/pulls/") ? inline : general;
+		return handler(args);
 	};
 	return { runner, calls };
+}
+
+/** Respostas por tipo de destino: geral (issues), arquivo (subject_type=file) e linha. */
+function endpointRunner(ids: { line?: number; file?: number; general?: number } = {}): {
+	runner: GhRunner;
+	calls: string[][];
+} {
+	return fakeRunner((args) => {
+		if (args[1].includes("/issues/")) return okComment(ids.general ?? 900);
+		if (args.includes("subject_type=file")) return okComment(ids.file ?? 800);
+		return okComment(ids.line ?? 700);
+	});
 }
 
 describe("selectSubmitCandidates", () => {
@@ -111,12 +123,12 @@ describe("selectSubmitCandidates", () => {
 		expect(selectSubmitCandidates(state).map((c) => c.id)).toEqual(["a", "c"]);
 	});
 
-	test("filtra por severidade e marca inline", () => {
+	test("filtra por severidade e define a âncora", () => {
 		const blocking = selectSubmitCandidates(state, { severities: ["blocking"] });
 		expect(blocking.map((c) => c.id)).toEqual(["a"]);
-		expect(blocking[0].inline).toBe(true);
-		expect(selectSubmitCandidates(state, { severities: ["nit"] })[0].inline).toBe(
-			false,
+		expect(blocking[0].kind).toBe("line");
+		expect(selectSubmitCandidates(state, { severities: ["nit"] })[0].kind).toBe(
+			"file",
 		);
 	});
 
@@ -137,7 +149,7 @@ describe("selectSubmitCandidates", () => {
 });
 
 describe("buildSubmitPreview", () => {
-	test("disponível: conta inline/corpo", () => {
+	test("disponível: conta linha/arquivo", () => {
 		const state = stateWith([finding({ id: "a" }), finding({ id: "c", line: null })]);
 		const preview = buildSubmitPreview(state, { ok: true, target: TARGET });
 		expect(preview.available).toBe(true);
@@ -145,8 +157,8 @@ describe("buildSubmitPreview", () => {
 		expect(preview.totals).toMatchObject({
 			candidates: 2,
 			toSend: 2,
-			inline: 1,
-			body: 1,
+			line: 1,
+			file: 1,
 			sent: 0,
 		});
 	});
@@ -217,31 +229,54 @@ describe("resolvePrTarget", () => {
 });
 
 describe("submitFindings", () => {
-	test("posta inline e o geral; grava o vínculo", () => {
+	test("posta na linha e no arquivo; grava o vínculo", () => {
 		const state = stateWith([finding({ id: "a" }), finding({ id: "c", line: null })]);
-		const { runner } = fakeRunner(okComment(100), okComment(200));
+		const { runner } = endpointRunner({ line: 100, file: 150, general: 200 });
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
 		expect(outcome.posted).toHaveLength(2);
 		expect(outcome.failed).toEqual([]);
+		expect(outcome.general).toBeUndefined();
 		expect(state.findings.a.github).toMatchObject({
 			commentId: 100,
-			kind: "inline",
+			kind: "line",
 			pr: 7,
 		});
 		expect(state.findings.c.github).toMatchObject({
-			commentId: 200,
-			kind: "comment",
+			commentId: 150,
+			kind: "file",
 			pr: 7,
 		});
-		expect(outcome.general?.ids).toEqual(["c"]);
 	});
 
-	test("falha do inline cai no comentário geral", () => {
+	test("linha fora do diff cai no comentário de arquivo", () => {
 		const state = stateWith([finding({ id: "a" })]);
-		const { runner } = fakeRunner(
-			{ ok: false, code: 422, stderr: "line must be part of the diff", stdout: "" },
-			okComment(200),
+		const { runner } = fakeRunner((args) =>
+			args.includes("subject_type=file")
+				? okComment(150)
+				: {
+						ok: false,
+						code: 422,
+						stderr: "line must be part of the diff",
+						stdout: "",
+					},
+		);
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.failed).toEqual([]);
+		expect(outcome.general).toBeUndefined();
+		expect(state.findings.a.github).toMatchObject({
+			kind: "file",
+			commentId: 150,
+		});
+	});
+
+	test("o que não cola em linha nem arquivo vai para o comentário geral", () => {
+		const state = stateWith([finding({ id: "a" })]);
+		const { runner } = fakeRunner((args) =>
+			args[1].includes("/issues/")
+				? okComment(200)
+				: { ok: false, code: 422, stderr: "fora do diff", stdout: "" },
 		);
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
@@ -253,7 +288,7 @@ describe("submitFindings", () => {
 
 	test("pula já enviados (sem chamar o gh)", () => {
 		const state = stateWith([finding({ id: "a", commentId: 55 })]);
-		const { runner, calls } = fakeRunner(okComment(100), okComment(200));
+		const { runner, calls } = endpointRunner();
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
 		expect(calls).toHaveLength(0);
@@ -261,15 +296,25 @@ describe("submitFindings", () => {
 		expect(state.findings.a.github?.commentId).toBe(55);
 	});
 
-	test("manda commit_id e side=RIGHT no inline", () => {
+	test("manda commit_id e side=RIGHT na linha", () => {
 		const state = stateWith([finding({ id: "a", line: 9 })]);
-		const { runner, calls } = fakeRunner(okComment(100), okComment(200));
+		const { runner, calls } = endpointRunner({ line: 100 });
 		submitFindings({ state, target: TARGET, runner });
 
-		const inline = calls[0];
-		expect(inline).toContain("line=9");
-		expect(inline).toContain("side=RIGHT");
-		expect(inline).toContain("commit_id=abc");
-		expect(inline).toContain("path=src/a.ts");
+		const line = calls[0];
+		expect(line).toContain("line=9");
+		expect(line).toContain("side=RIGHT");
+		expect(line).toContain("commit_id=abc");
+		expect(line).toContain("path=src/a.ts");
+	});
+
+	test("finding sem linha usa subject_type=file", () => {
+		const state = stateWith([finding({ id: "a", line: null })]);
+		const { runner, calls } = endpointRunner({ file: 150 });
+		submitFindings({ state, target: TARGET, runner });
+
+		expect(calls[0]).toContain("subject_type=file");
+		expect(calls[0]).not.toContain("side=RIGHT");
+		expect(state.findings.a.github?.kind).toBe("file");
 	});
 });

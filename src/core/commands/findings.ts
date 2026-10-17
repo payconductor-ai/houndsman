@@ -660,13 +660,13 @@ function renderSubmitPreview(preview: SubmitPreview, json: boolean): string {
 	if (!preview.available) {
 		return [
 			`PR indisponível para envio: ${preview.reason}`,
-			`Prévia local: ${totals.candidates} candidato(s) — ${totals.inline} inline · ${totals.body} no corpo · ${totals.sent} já enviado(s).`,
+			`Prévia local: ${totals.candidates} candidato(s) — ${totals.line} na linha · ${totals.file} no arquivo · ${totals.sent} já enviado(s).`,
 		].join("\n");
 	}
 	const lines = [
 		`# Envio da revisão — PR #${preview.target?.number} (${preview.target?.repo})`,
 		"",
-		`A enviar: ${totals.toSend} (${totals.inline} inline · ${totals.body} no corpo) · já enviados: ${totals.sent}`,
+		`A enviar: ${totals.toSend} (${totals.line} na linha · ${totals.file} no arquivo) · já enviados: ${totals.sent}`,
 	];
 	if (totals.toSend === 0) lines.push("", "Nada a enviar.");
 	return lines.join("\n");

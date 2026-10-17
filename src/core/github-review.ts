@@ -2,9 +2,10 @@
  * Envio dos findings como comentários na Pull Request (biblioteca), via GitHub
  * CLI (`gh`) — a capability de **"enviar revisão"**.
  *
- * Um comentário **inline** por finding (na linha do diff) via
- * `POST repos/{repo}/pulls/{n}/comments`; findings sem linha — ou cuja linha o
- * GitHub rejeita — vão para **um** comentário geral da PR. O `id`/URL de cada
+ * Um comentário por finding via `POST repos/{repo}/pulls/{n}/comments`:
+ * **na linha** do diff quando o finding tem linha; **no arquivo**
+ * (`subject_type: file`) quando não tem. Se nenhum dos dois colar (ex.: arquivo
+ * fora do diff), cai em **um** comentário geral da PR. O `id`/URL de cada
  * comentário é gravado no finding (`FindingState.github`): evita reenvio e
  * mantém o vínculo local↔remoto.
  *
@@ -146,8 +147,8 @@ export type SubmitCandidate = {
 	execState: FindingExecState;
 	rule: string;
 	message: string;
-	/** Comentário inline possível (tem linha). */
-	inline: boolean;
+	/** Onde o comentário será ancorado: na linha do diff ou no arquivo. */
+	kind: "line" | "file";
 	/** Já vinculado a um comentário remoto. */
 	sent: boolean;
 	/** URL do comentário já enviado (quando houver). */
@@ -187,7 +188,7 @@ export function selectSubmitCandidates(
 				execState: finding.execState,
 				rule: finding.rule,
 				message: finding.message,
-				inline: finding.line !== null,
+				kind: finding.line !== null ? "line" : "file",
 				sent,
 				sentUrl: finding.github?.url,
 				skip: sent && !includeSent,
@@ -205,10 +206,10 @@ export type SubmitPreview = {
 		candidates: number;
 		/** Quantos serão efetivamente enviados. */
 		toSend: number;
-		/** Serão comentários inline. */
-		inline: number;
-		/** Vão para o comentário geral. */
-		body: number;
+		/** Comentários ancorados na linha do diff. */
+		line: number;
+		/** Comentários ancorados no arquivo (sem linha específica). */
+		file: number;
 		/** Já enviados (no total de candidatos). */
 		sent: number;
 	};
@@ -230,8 +231,8 @@ export function buildSubmitPreview(
 		totals: {
 			candidates: candidates.length,
 			toSend: toSend.length,
-			inline: toSend.filter((candidate) => candidate.inline).length,
-			body: toSend.filter((candidate) => !candidate.inline).length,
+			line: toSend.filter((candidate) => candidate.kind === "line").length,
+			file: toSend.filter((candidate) => candidate.kind === "file").length,
 			sent: candidates.filter((candidate) => candidate.sent).length,
 		},
 	};
@@ -279,7 +280,7 @@ export function renderGeneralBody(findings: readonly FindingState[]): string {
 
 export type PostedComment = {
 	id: string;
-	kind: "inline" | "comment";
+	kind: "line" | "file" | "comment";
 	commentId: number;
 	url?: string;
 };
@@ -307,7 +308,11 @@ function parseComment(result: GhResult): PostResult {
 	}
 }
 
-function commentArgs(target: PrTarget, finding: FindingState): string[] {
+function commentArgs(
+	target: PrTarget,
+	finding: FindingState,
+	mode: "line" | "file",
+): string[] {
 	const args = [
 		"api",
 		`repos/${target.repo}/pulls/${target.number}/comments`,
@@ -315,22 +320,25 @@ function commentArgs(target: PrTarget, finding: FindingState): string[] {
 		`body=${buildCommentBody(finding)}`,
 		"-f",
 		`path=${finding.file}`,
-		"-F",
-		`line=${finding.line}`,
-		"-f",
-		"side=RIGHT",
 	];
+	if (mode === "line") {
+		args.push("-F", `line=${finding.line}`, "-f", "side=RIGHT");
+	} else {
+		// Sem linha específica: ancora no arquivo (comentário de nível de arquivo).
+		args.push("-f", "subject_type=file");
+	}
 	if (target.headSha) args.push("-f", `commit_id=${target.headSha}`);
 	return args;
 }
 
-/** Posta o comentário inline de um finding. */
-export function postInline(
+/** Posta o comentário de review de um finding (na linha ou no arquivo). */
+export function postComment(
 	runner: GhRunner,
 	target: PrTarget,
 	finding: FindingState,
+	mode: "line" | "file",
 ): PostResult {
-	return parseComment(runner(commentArgs(target, finding)));
+	return parseComment(runner(commentArgs(target, finding, mode)));
 }
 
 /** Posta o comentário geral (fallback) com os findings sem posição no diff. */
@@ -350,9 +358,10 @@ export function postGeneral(
 }
 
 /**
- * Envia os findings selecionados: inline por finding; os sem linha — ou cuja
- * linha o GitHub rejeitar — vão para um único comentário geral. Muta o `state`
- * com o vínculo (`finding.github`); o caller persiste.
+ * Envia os findings selecionados: um comentário por finding — na linha do diff
+ * ou no arquivo (`subject_type=file`). O que não colar em nenhum dos dois vai
+ * para um único comentário geral. Muta o `state` com o vínculo
+ * (`finding.github`); o caller persiste.
  */
 export function submitFindings(options: {
 	state: FindingsStateFile;
@@ -372,7 +381,7 @@ export function submitFindings(options: {
 		finding: FindingState,
 		commentId: number,
 		url: string | undefined,
-		kind: "inline" | "comment",
+		kind: "line" | "file" | "comment",
 	): void => {
 		finding.github = { commentId, url, kind, pr: target.number, at: now };
 		finding.updatedAt = now;
@@ -386,22 +395,29 @@ export function submitFindings(options: {
 			outcome.skipped.push({ id: candidate.id, reason: "já enviado." });
 			continue;
 		}
-		if (!candidate.inline) {
-			deferred.push(finding);
-			continue;
-		}
 
-		const posted = postInline(runner, target, finding);
-		if (posted.ok) {
-			link(finding, posted.commentId, posted.url, "inline");
-			outcome.posted.push({
-				id: candidate.id,
-				kind: "inline",
-				commentId: posted.commentId,
-				url: posted.url,
-			});
-		} else {
-			outcome.failed.push({ id: candidate.id, reason: posted.reason });
+		// Tenta a linha (quando há) e depois o arquivo — o primeiro que colar vence.
+		const modes: ("line" | "file")[] =
+			candidate.kind === "line" ? ["line", "file"] : ["file"];
+		let posted: PostResult | null = null;
+		let reason = "";
+		for (const mode of modes) {
+			const attempt = postComment(runner, target, finding, mode);
+			if (attempt.ok) {
+				posted = attempt;
+				link(finding, attempt.commentId, attempt.url, mode);
+				outcome.posted.push({
+					id: candidate.id,
+					kind: mode,
+					commentId: attempt.commentId,
+					url: attempt.url,
+				});
+				break;
+			}
+			reason = attempt.reason;
+		}
+		if (!posted) {
+			outcome.failed.push({ id: candidate.id, reason });
 			deferred.push(finding);
 		}
 	}

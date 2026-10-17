@@ -16,7 +16,7 @@ export type RunStatus = "reviewing" | "review_done" | "fixing" | "fix_done";
 export type GitHubLink = {
 	commentId: number;
 	url?: string;
-	kind: "inline" | "comment";
+	kind: "line" | "file" | "comment";
 	pr: number;
 	at: string;
 };
@@ -73,7 +73,8 @@ export type SubmitCandidate = {
 	execState: ExecState;
 	rule: string;
 	message: string;
-	inline: boolean;
+	/** Onde o comentário será ancorado: na linha do diff ou no arquivo. */
+	kind: "line" | "file";
 	sent: boolean;
 	sentUrl?: string;
 	skip: boolean;
@@ -94,14 +95,19 @@ export type SubmitPreview = {
 	totals: {
 		candidates: number;
 		toSend: number;
-		inline: number;
-		body: number;
+		line: number;
+		file: number;
 		sent: number;
 	};
 };
 
 export type SubmitOutcome = {
-	posted: { id: string; kind: "inline" | "comment"; commentId: number; url?: string }[];
+	posted: {
+		id: string;
+		kind: "line" | "file" | "comment";
+		commentId: number;
+		url?: string;
+	}[];
 	failed: { id: string; reason: string }[];
 	skipped: { id: string; reason: string }[];
 	general?: { commentId: number; url?: string; ids: string[] };
