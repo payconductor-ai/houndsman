@@ -50,6 +50,29 @@ export type Summary = {
 	bySeverity: Record<Severity, number>;
 };
 
+/** Espécie de artefato persistido (espelha `core/storage/types.ts`). */
+export type ArtifactKind =
+	| "brief"
+	| "classification"
+	| "manifest"
+	| "candidates"
+	| "context"
+	| "context-brief"
+	| "context-summary"
+	| "finding-report"
+	| "review"
+	| "domain-review"
+	| "verify"
+	| "other";
+
+/** Metadados de artefato retornados pela API (sem conteúdo). */
+export type ArtifactMeta = {
+	name: string;
+	kind: ArtifactKind;
+	contentType: string;
+	updatedAt: string;
+};
+
 export type RunSummary = {
 	slug: string;
 	branch: string;

@@ -67,6 +67,11 @@ function makeEnv(): {
 		kind: "review",
 		content: "# Review\n",
 	});
+	storage.writeArtifact(review.id, {
+		name: "briefs/alpha.md",
+		kind: "brief",
+		content: "# Brief alpha\n",
+	});
 	return {
 		storage,
 		repo,
@@ -273,6 +278,31 @@ describe("server API", () => {
 		}
 	});
 
+	test("artifacts lista todos os artefatos da run (inclui briefs)", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config, env);
+			const res = await get(handler, "/api/runs/main/artifacts");
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				artifacts: { name: string; kind: string }[];
+			};
+			expect(body.artifacts.map((item) => item.name)).toEqual(
+				expect.arrayContaining([
+					"manifest.json",
+					"classification.json",
+					"review.md",
+					"briefs/alpha.md",
+				]),
+			);
+			expect(
+				body.artifacts.find((item) => item.name === "briefs/alpha.md")?.kind,
+			).toBe("brief");
+		} finally {
+			env.cleanup();
+		}
+	});
+
 	test("artifacts serve arquivos da run e barra o resto", async () => {
 		const env = makeEnv();
 		try {
@@ -284,6 +314,10 @@ describe("server API", () => {
 			const review = await get(handler, "/api/runs/main/artifacts/review.md");
 			expect(review.status).toBe(200);
 			expect(await review.text()).toContain("# Review");
+
+			const brief = await get(handler, "/api/runs/main/artifacts/briefs/alpha.md");
+			expect(brief.status).toBe(200);
+			expect(await brief.text()).toContain("# Brief alpha");
 
 			const denied = await get(handler, "/api/runs/main/artifacts/evil.txt");
 			expect(denied.status).toBe(404);
