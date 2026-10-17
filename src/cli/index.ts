@@ -15,6 +15,7 @@
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
  *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/submit/...)
+ *   status [ping]        Mostra o status da run; `ping` renova o heartbeat da execução
  *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -38,6 +39,7 @@ import { CommandRegistry } from "./commands/registry";
 import { ReviewCommand } from "./commands/review-command";
 import { ServerCommand } from "./commands/server-command";
 import { SetupCommand, TestCommand, UpdateCommand } from "./commands/setup-command";
+import { StatusCommand } from "./commands/status-command";
 import { WatchdogCommand } from "./commands/watchdog-command";
 import { HELP } from "./help";
 
@@ -53,6 +55,7 @@ function buildRegistry(): CommandRegistry {
 		.register(new HelpCommand())
 		.register(new ContextCommand())
 		.register(new FindingsCommand())
+		.register(new StatusCommand())
 		.register(new WatchdogCommand())
 		.register(new ServerCommand())
 		.register(new SetupCommand())

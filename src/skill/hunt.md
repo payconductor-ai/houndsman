@@ -122,11 +122,14 @@ arquivos alterados desde a última revisão — e **carrega** os findings dos ar
 (carry-over), sem re-revisá-los. O `manifest.json` traz o bloco `incremental` (`from`,
 `changedFiles`, `carried`) e o `review.md` abre com um aviso.
 
-- Sem mudanças desde a última revisão → **no-op** (nada a revisar; o estado é preservado).
+- Sem mudanças desde a última revisão → **no-op**: o prepare não gera briefs nem reescreve
+  artefatos (classification, manifest, review.md), e o `--finalize` também vira no-op — pare o
+  fluxo aí (nenhum subagente é despachado).
 - Rebase/force-push (histórico reescrito) → cai automaticamente no **review completo**.
 - Forçar completo: `houndsman --full` (ou `--clean`, que também descarta a triagem anterior).
 
 > Custo: o LLM só é gasto nos arquivos que mudaram desde a última revisão — não na PR inteira.
+> Re-rodar `/houndsman` no mesmo commit **não** re-revisa a PR; use `--full` para isso.
 
 ---
 
@@ -134,6 +137,10 @@ arquivos alterados desde a última revisão — e **carrega** os findings dos ar
 
 Um subagente por brief. Despache em **ondas** (ex.: até 8 subagentes por bloco de tool
 calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief:
+
+> **Heartbeat:** antes de despachar cada onda, rode `houndsman status ping`. A UI usa esse
+> sinal (e não `updatedAt`) para saber que a execução está viva; sem ping por 10 min ela
+> mostra "Timeout na revisão".
 
 ```
 Leia e execute o brief: <caminho absoluto impresso pelo prepare>/briefs/<watchdog-id>.md
@@ -246,6 +253,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 |---|---|
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman` | Passo 1 — preparar (briefs + manifesto; incremental quando possível) |
+| `houndsman status ping` | Passo 2 — heartbeat da execução (antes de cada onda) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 

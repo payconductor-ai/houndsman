@@ -78,6 +78,9 @@ export type RunSummary = {
 	slug: string;
 	branch: string;
 	updatedAt?: string;
+	startedAt?: string;
+	/** Último sinal de vida de uma execução ativa (revisão/correção). */
+	heartbeatAt?: string;
 	status?: RunStatus | null;
 	summary: Summary;
 };
@@ -86,6 +89,52 @@ export type FindingsResponse = {
 	branch: string;
 	findings: Finding[];
 	summary: Summary;
+};
+
+/** Manifesto da run (subset consumido pela aba de resumo). */
+export type RunManifest = {
+	branch?: string;
+	base?: string;
+	head?: string;
+	generatedAt?: string;
+	churn?: { additions: number; deletions: number };
+	watchdogs?: {
+		id: string;
+		name: string;
+		files: string[];
+		overflow: number;
+		status: "pending" | "done";
+	}[];
+	context?: {
+		summarized: boolean;
+		source?: {
+			number?: number;
+			title?: string;
+			url?: string;
+			base?: string;
+			head?: string;
+		} | null;
+	};
+	excludedCount?: number;
+	deleted?: string[];
+	unclassified?: string[];
+};
+
+/** Detalhe da run (`GET /api/runs/:slug`). */
+export type RunDetail = {
+	slug: string;
+	branch: string;
+	manifest: RunManifest | null;
+	watchdogs: string[];
+	unclassified: string[];
+	deleted: string[];
+};
+
+/** `classification.json` — só o necessário para os cards do resumo. */
+export type ClassificationArtifact = {
+	files?: Record<string, { status: string; oldPath?: string }>;
+	churn?: Record<string, { additions: number; deletions: number }>;
+	watchdogs?: Record<string, string[]>;
 };
 
 /** Candidato ao envio da revisão (espelha `core/github-review.ts`). */

@@ -30,6 +30,7 @@ export type ReviewRow = {
 	reviewed_at: string | null;
 	status: string | null;
 	started_at: string | null;
+	heartbeat_at: string | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -96,6 +97,7 @@ export function reviewFromRow(row: ReviewRow): ReviewRecord {
 		reviewedAt: row.reviewed_at ?? undefined,
 		status: (row.status as ReviewRecord["status"]) ?? null,
 		startedAt: row.started_at ?? undefined,
+		heartbeatAt: row.heartbeat_at ?? undefined,
 		createdAt: row.created_at,
 		updatedAt: row.updated_at,
 	};

@@ -42,6 +42,8 @@ export type RunListItem = {
 	slug: string;
 	branch: string;
 	updatedAt?: string;
+	startedAt?: string;
+	heartbeatAt?: string;
 	status: ReviewRecord["status"];
 	summary: FindingsSummary;
 };
@@ -94,6 +96,8 @@ export class RunRepository {
 				slug: review.slug,
 				branch: review.branch,
 				updatedAt: review.updatedAt,
+				startedAt: review.startedAt,
+				heartbeatAt: review.heartbeatAt,
 				status: review.status,
 				summary: summarize(state ?? emptyState(review.branch)),
 			};

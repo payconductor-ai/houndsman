@@ -8,6 +8,7 @@ import {
 	parseInline,
 	parseMarkdown,
 	safeUrl,
+	sectionBlocks,
 } from "../server/client/utils/markdown";
 
 describe("parseMarkdown", () => {
@@ -72,6 +73,14 @@ describe("parseMarkdown", () => {
 			type: "table",
 			align: [undefined, "right", "right"],
 		});
+	});
+
+	test("extrai os blocos de uma seção específica", () => {
+		const blocks = sectionBlocks(
+			"# Título\n\n## Resumo de negócio\n\nTexto A.\n\n## Pontos técnicos\n\nTexto B.",
+			"resumo de negócio",
+		);
+		expect(blocks).toEqual([{ type: "paragraph", text: "Texto A." }]);
 	});
 });
 

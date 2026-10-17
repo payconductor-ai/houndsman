@@ -6,6 +6,7 @@ Comandos:
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
+  status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
   server              Sobe a UI local de triagem (--port, --host, --open)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)

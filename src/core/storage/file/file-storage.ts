@@ -102,6 +102,8 @@ export class FileStorageProvider implements StorageProvider {
 		if (patch.status !== undefined) updated.status = patch.status;
 		if (patch.resetStartedAt) updated.startedAt = now;
 		else if (patch.startedAt !== undefined) updated.startedAt = patch.startedAt;
+		if (patch.resetHeartbeat) updated.heartbeatAt = undefined;
+		else if (patch.heartbeatAt !== undefined) updated.heartbeatAt = patch.heartbeatAt;
 		updated.updatedAt = patch.updatedAt ?? now;
 		return this.writeReview(updated);
 	}

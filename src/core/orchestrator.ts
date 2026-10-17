@@ -318,19 +318,36 @@ export async function prepare(
 	if (opts.clean) ctx.work.cleanFindings();
 	ctx.storage.updateReview(ctx.review.id, { base: opts.base, head: opts.head });
 
+	// Marca o commit revisado e decide entre completo, incremental ou no-op.
+	const headSha = resolveSha(opts.head);
+	const previous = ctx.storage.readFindings(ctx.review.id);
+	const scope = new ReviewScopeResolver(opts, config).resolve(previous, headSha);
+
+	// Mesmo commit já revisado: preserva artefatos e triagem, sem re-revisar.
+	if (scope.kind === "noop") {
+		const status = ctx.storage.getReview(ctx.review.id)?.status ?? null;
+		// Ciclo em andamento continua válido (os findings já despachados devem
+		// ser finalizados); fora isso, o relatório anterior é a resposta final.
+		const pendingCycle = status === "reviewing";
+		if (!pendingCycle) {
+			writeRunStatus(ctx.storage, ctx.review.id, { status: "review_done" });
+		}
+		messages.push(
+			`Nenhuma alteração desde a última revisão (${shortSha(scope.reviewedFrom)}).`,
+			pendingCycle
+				? "Nada novo a preparar — o ciclo em andamento continua; rode `--finalize` quando os findings estiverem gravados."
+				: "Nada a revisar — o relatório anterior foi mantido. Use `--full` para re-revisar.",
+		);
+		return { messages };
+	}
+
 	// Marca o run como "revisando" (reinicia o ciclo) — a UI mostra o status.
 	writeRunStatus(ctx.storage, ctx.review.id, {
 		status: "reviewing",
 		resetStartedAt: true,
 	});
 
-	// Marca o commit revisado e decide entre review completo e incremental.
-	const headSha = resolveSha(opts.head);
-	const previous = ctx.storage.readFindings(ctx.review.id);
-	const { classification, diff } = new ReviewScopeResolver(opts, config).resolve(
-		previous,
-		headSha,
-	);
+	const { classification, diff } = scope;
 	ctx.storage.writeArtifact(ctx.review.id, {
 		name: "classification.json",
 		kind: "classification",
@@ -516,6 +533,27 @@ export function finalize(
 	config: HoundsmanConfig,
 	ctx: ReviewContext,
 ): FinalizeResult {
+	// `--finalize` só consolida um ciclo preparado (status `reviewing`). Sem esta
+	// guarda, um prepare no-op seguido de `--finalize` reescreveria o relatório
+	// anterior com a classificação antiga (perdendo os relatórios por domínio).
+	// O `ctx.review` é um snapshot: relê o status atual do storage.
+	const status = ctx.storage.getReview(ctx.review.id)?.status ?? null;
+	if (status !== "reviewing") {
+		const state = ctx.storage.readFindings(ctx.review.id);
+		const present = Object.values(state?.findings ?? {}).filter(
+			(finding) => finding.present,
+		);
+		return {
+			reportPath: ctx.storage.location(ctx.review.id),
+			blockers: present.filter((f) => f.severity === "blocking").length,
+			attention: present.filter((f) => f.severity === "attention").length,
+			messages: [
+				`Nada a finalizar: nenhum ciclo de revisão pendente (status: ${status ?? "sem status"}).`,
+				"Se nada mudou desde a última revisão, o relatório anterior foi mantido; use `--full` para re-revisar.",
+			],
+		};
+	}
+
 	const classification = readClassification(ctx);
 	const activeIds = Object.keys(classification.watchdogs);
 

@@ -1,7 +1,7 @@
 /**
  * App: layout do servidor — sidebar de execuções, header fixo (abas segmentadas,
- * auto-refresh e reancoragem), KPIs, filtros e os painéis de findings/artefatos.
- * Concentra o estado e as chamadas à API.
+ * auto-refresh e reancoragem), KPIs, filtros e os painéis de resumo/findings/
+ * artefatos. Concentra o estado e as chamadas à API.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -9,7 +9,8 @@ import { ArtifactsPanel } from "./ArtifactsPanel";
 import { AutoRefresh } from "./AutoRefresh";
 import { Filters, type FiltersState } from "./Filters";
 import { FindingsList } from "./FindingsList";
-import { Layers, ListIcon, Refresh, Send } from "./icons";
+import { FileText, Layers, ListIcon, Refresh, Send } from "./icons";
+import { ResumePanel } from "./ResumePanel";
 import { RunList } from "./RunList";
 import { SubmitModal } from "./SubmitModal";
 import { SummaryBar } from "./SummaryBar";
@@ -17,9 +18,14 @@ import { api, computeSummary } from "./utils/api";
 import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./utils/constants";
 import type { Finding, FindingsResponse, RunSummary } from "./utils/types";
 
-type Tab = "findings" | "artifacts";
+type Tab = "resume" | "findings" | "artifacts";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
+	{
+		id: "resume",
+		label: "Resumo",
+		hint: "Visão principal da revisão: negócio, números e pontos técnicos",
+	},
 	{
 		id: "findings",
 		label: "Findings",
@@ -36,7 +42,7 @@ export function App() {
 	const [runs, setRuns] = useState<RunSummary[]>([]);
 	const [slug, setSlug] = useState<string | null>(null);
 	const [data, setData] = useState<FindingsResponse | null>(null);
-	const [tab, setTab] = useState<Tab>("findings");
+	const [tab, setTab] = useState<Tab>("resume");
 	const [filters, setFilters] = useState<FiltersState>({
 		query: "",
 		decision: "all",
@@ -200,7 +206,9 @@ export function App() {
 								class={`seg-btn${tab === item.id ? " active" : ""}`}
 								onClick={() => setTab(item.id)}
 							>
-								{item.id === "findings" ? (
+								{item.id === "resume" ? (
+									<FileText size={15} />
+								) : item.id === "findings" ? (
 									<ListIcon size={15} />
 								) : (
 									<Layers size={15} />
@@ -254,6 +262,15 @@ export function App() {
 					</div>
 					{error && <p class="error">{error}</p>}
 
+					{slug && tab === "resume" && data && (
+						<ResumePanel
+							slug={slug}
+							branch={branch}
+							findings={data.findings}
+							summary={summary}
+							onOpenArtifacts={() => setTab("artifacts")}
+						/>
+					)}
 					{slug && tab === "findings" && data && (
 						<>
 							<SummaryBar summary={summary} />

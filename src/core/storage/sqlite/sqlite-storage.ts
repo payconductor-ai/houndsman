@@ -33,7 +33,7 @@ import { migrate } from "./schema";
 
 /** Colunas mutáveis de review (camel → snake). */
 const REVIEW_PATCH_COLUMNS: Record<
-	Exclude<keyof ReviewPatch, "resetStartedAt">,
+	Exclude<keyof ReviewPatch, "resetStartedAt" | "resetHeartbeat">,
 	string
 > = {
 	branch: "branch",
@@ -45,6 +45,7 @@ const REVIEW_PATCH_COLUMNS: Record<
 	reviewedAt: "reviewed_at",
 	status: "status",
 	startedAt: "started_at",
+	heartbeatAt: "heartbeat_at",
 	updatedAt: "updated_at",
 };
 
@@ -158,6 +159,9 @@ export class SQLiteStorageProvider implements StorageProvider {
 		if (patch.resetStartedAt) {
 			sets.push("started_at = ?");
 			params.push(now);
+		}
+		if (patch.resetHeartbeat) {
+			sets.push("heartbeat_at = NULL");
 		}
 		if (patch.updatedAt === undefined) {
 			sets.push("updated_at = ?");

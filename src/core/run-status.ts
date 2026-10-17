@@ -4,9 +4,9 @@
  * Diz à UI em que pé está uma run: `reviewing` (revisando) → `review_done`
  * (revisão finalizada) → `fixing` (corrigindo) → `fix_done` (correção finalizada).
  *
- * Toda ação que muda o estado faz um **ping** no `updatedAt`. Timeout é
- * **display-only** (a UI compara `updatedAt` com o agora) — não é um status
- * persistido.
+ * Toda ação que muda o estado pinga o `updatedAt`. Execuções ativas têm um
+ * `heartbeatAt` próprio (renovado por `status ping` ou pela correção); a UI usa
+ * esse campo — não o `updatedAt` — para detectar timeout (display-only).
  */
 
 import type { FindingsStateFile } from "./findings-state";
@@ -24,6 +24,11 @@ export const RUN_STATUSES: readonly RunStatus[] = [
 	"fix_done",
 ];
 
+/** `true` para status de execução (recebem heartbeat e podem dar timeout). */
+export function isActiveRunStatus(status: RunStatus | null): boolean {
+	return status === "reviewing" || status === "fixing";
+}
+
 /** Lê o status atual (null se a review não existir). */
 export function readRunStatus(
 	storage: StorageProvider,
@@ -36,6 +41,11 @@ export type WriteRunStatusOptions = {
 	status: RunStatus;
 	/** Reinicia o `startedAt` — usado no início de uma nova revisão. */
 	resetStartedAt?: boolean;
+	/**
+	 * Marca a execução como viva agora. Implícito no início de um ciclo
+	 * (`resetStartedAt`); pings explícitos usam `touchRunStatus`.
+	 */
+	touch?: boolean;
 	now?: string;
 };
 
@@ -45,13 +55,33 @@ export function writeRunStatus(
 	reviewId: string,
 	options: WriteRunStatusOptions,
 ): ReviewRecord {
+	const now = options.now ?? systemClock();
+	const active = isActiveRunStatus(options.status);
+	const touch = options.touch ?? options.resetStartedAt ?? false;
 	const updated = storage.updateReview(reviewId, {
 		status: options.status,
 		resetStartedAt: options.resetStartedAt,
-		updatedAt: options.now ?? systemClock(),
+		heartbeatAt: active && touch ? now : undefined,
+		resetHeartbeat: !active,
+		updatedAt: now,
 	});
 	if (!updated) throw new Error(`Review '${reviewId}' não encontrada.`);
 	return updated;
+}
+
+/**
+ * Heartbeat explícito de uma execução em andamento (skill viva).
+ * Só age em `reviewing`/`fixing`; status terminal é devolvido sem alteração.
+ */
+export function touchRunStatus(
+	storage: StorageProvider,
+	reviewId: string,
+	now: string = systemClock(),
+): ReviewRecord {
+	const review = storage.getReview(reviewId);
+	if (!review) throw new Error(`Review '${reviewId}' não encontrada.`);
+	if (!isActiveRunStatus(review.status)) return review;
+	return storage.updateReview(reviewId, { heartbeatAt: now, updatedAt: now }) ?? review;
 }
 
 /**
@@ -87,7 +117,11 @@ export function pingFindingsStatus(
 	state: FindingsStateFile,
 ): ReviewRecord {
 	const previous = storage.getReview(reviewId)?.status ?? null;
+	const status = statusAfterFindingsChange(previous, state);
 	return writeRunStatus(storage, reviewId, {
-		status: statusAfterFindingsChange(previous, state),
+		status,
+		// Só a correção em andamento é uma execução: triagem/reviewing não
+		// devem renovar o heartbeat (era a origem do "timeout falso").
+		touch: status === "fixing",
 	});
 }

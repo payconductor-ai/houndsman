@@ -39,15 +39,22 @@ export const RUN_STATUS_LABELS: Record<RunStatus, string> = {
 	fix_done: "Correção pronta",
 };
 
-/** Limiar de inatividade para exibir timeout (display-only; não é status). */
+/** Limiar de inatividade da correção para exibir timeout (display-only). */
 export const STATUS_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Revisão despacha subagentes em ondas longas — janela maior que a correção. */
+export const REVIEW_TIMEOUT_MS = 30 * 60 * 1000;
 
 /** Intervalo do polling da UI (o badge conta o tempo desde a última sync). */
 export const AUTO_REFRESH_MS = 10_000;
 
 export type RunStatusView = { kind: string; label: string; timeout: boolean };
 
-/** View do status de uma run — label; vira timeout quando ativo e sem ping recente. */
+/**
+ * View do status de uma run — timeout só existe quando há um heartbeat de
+ * execução (`reviewing`/`fixing`). `updatedAt` muda com triagem/sync e não
+ * serve para provar que a skill está rodando.
+ */
 export function describeRunStatus(
 	run: RunSummary,
 	now: number = Date.now(),
@@ -55,8 +62,16 @@ export function describeRunStatus(
 	const status = run.status;
 	if (!status) return null;
 	const active = status === "reviewing" || status === "fixing";
-	const updated = run.updatedAt ? Date.parse(run.updatedAt) : Number.NaN;
-	if (active && Number.isFinite(updated) && now - updated > STATUS_TIMEOUT_MS) {
+	if (!active) {
+		return { kind: status, label: RUN_STATUS_LABELS[status], timeout: false };
+	}
+
+	// Sem heartbeat não há execução conhecida: evita o falso "timeout".
+	const heartbeat = run.heartbeatAt ? Date.parse(run.heartbeatAt) : Number.NaN;
+	if (!Number.isFinite(heartbeat)) return null;
+
+	const timeoutMs = status === "reviewing" ? REVIEW_TIMEOUT_MS : STATUS_TIMEOUT_MS;
+	if (now - heartbeat > timeoutMs) {
 		return {
 			kind: "timeout",
 			label: status === "reviewing" ? "Timeout na revisão" : "Timeout na correção",
@@ -131,7 +146,7 @@ export function describeArtifact(meta: ArtifactMeta): string {
 		case "review":
 			return "Relatório consolidado da revisão — o entregável.";
 		case "resume":
-			return "Resumo final da revisão: visão de negócio + números técnicos diretos (leitura humana).";
+			return "Resumo final da revisão: visão de negócio e pontos técnicos diretos (leitura humana).";
 		case "domain-review":
 			return "Relatório isolado do domínio: achados daquele watchdog.";
 		case "verify":
@@ -203,6 +218,7 @@ export function groupArtifacts(
 
 /** Legenda única de cada aba (explica o que a aba é; mostrada quando selecionada). */
 export const TAB_CAPTIONS = {
+	resume: "Resumo principal da revisão: o que muda em termos de negócio, números diretos (arquivos, churn, domínios) e os pontos técnicos que exigem ação.",
 	findings:
 		"Triagem dos achados da revisão: decida Executar, Ignorar ou deixe Pendente — o comentário orienta o auto-fix. Agente: houndsman findings list --decision pending --json · findings done <id>.",
 	artifacts:

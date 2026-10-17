@@ -1,5 +1,5 @@
 /**
- * Resumo final (`review-resume.md`) — conteúdo de negócio + números técnicos,
+ * Resumo final (`review-resume.md`) — conteúdo de negócio + pontos técnicos,
  * determinístico e limitado a `RESUME_MAX_CHARS`.
  */
 
@@ -30,15 +30,10 @@ const classification: ResumeClassification = {
 		"src/b.ts": { status: "added" },
 	},
 	watchdogs: { alpha: ["src/a.ts"], beta: ["src/b.ts"] },
-	churn: {
-		"src/a.ts": { additions: 3, deletions: 1 },
-		"src/b.ts": { additions: 5, deletions: 0 },
-	},
-	excludedCount: 2,
 };
 
 describe("renderReviewResume", () => {
-	test("une contexto de negócio e números técnicos", () => {
+	test("une contexto de negócio e pontos técnicos", () => {
 		const md = renderReviewResume({
 			branch: "feat/x",
 			date: "2026-10-17",
@@ -62,10 +57,7 @@ describe("renderReviewResume", () => {
 		expect(md).toContain("Entregar a feature X.");
 		expect(md).toContain("**Por quê:** Reduzir o esforço manual.");
 		expect(md).toContain("- Novo fluxo de cadastro.");
-		expect(md).toContain("**Arquivos:** 2");
-		expect(md).toContain("**Churn:** +8 / -1");
-		expect(md).toContain("**Domínios:** ALPHA, BETA");
-		expect(md).toContain("1 bloqueante(s) · 1 atenção");
+		expect(md).not.toContain("## Números");
 		expect(md).toContain("`src/a.ts:1` — quebra o cadastro _(ALPHA)_");
 		expect(md).toContain("`src/b.ts` — mensagem _(ALPHA)_");
 		expect(md.length).toBeLessThanOrEqual(RESUME_MAX_CHARS);

@@ -7,6 +7,7 @@ import {
 	pingFindingsStatus,
 	readRunStatus,
 	statusAfterFindingsChange,
+	touchRunStatus,
 	writeRunStatus,
 } from "../core/run-status";
 import { buildRepoIdentity } from "../core/storage/repo-identity";
@@ -78,6 +79,7 @@ describe("run-status — storage", () => {
 			expect(first?.status).toBe("reviewing");
 			expect(first?.slug).toBe("feature-x");
 			expect(first?.startedAt).toBe("2026-01-01T00:00:00.000Z");
+			expect(first?.heartbeatAt).toBe("2026-01-01T00:00:00.000Z");
 
 			writeRunStatus(storage, reviewId, {
 				status: "review_done",
@@ -86,6 +88,7 @@ describe("run-status — storage", () => {
 			const second = readRunStatus(storage, reviewId);
 			expect(second?.status).toBe("review_done");
 			expect(second?.startedAt).toBe("2026-01-01T00:00:00.000Z");
+			expect(second?.heartbeatAt).toBeUndefined();
 			expect(second?.updatedAt).toBe("2026-01-01T00:10:00.000Z");
 
 			writeRunStatus(storage, reviewId, {
@@ -96,6 +99,56 @@ describe("run-status — storage", () => {
 			expect(readRunStatus(storage, reviewId)?.startedAt).toBe(
 				"2026-01-01T00:20:00.000Z",
 			);
+			expect(readRunStatus(storage, reviewId)?.heartbeatAt).toBe(
+				"2026-01-01T00:20:00.000Z",
+			);
+		});
+	});
+
+	test("touch renova o heartbeat apenas em execução ativa", () => {
+		withStorage((storage, reviewId) => {
+			writeRunStatus(storage, reviewId, {
+				status: "reviewing",
+				resetStartedAt: true,
+				now: "2026-01-01T00:00:00.000Z",
+			});
+			touchRunStatus(storage, reviewId, "2026-01-01T00:05:00.000Z");
+			expect(readRunStatus(storage, reviewId)?.heartbeatAt).toBe(
+				"2026-01-01T00:05:00.000Z",
+			);
+
+			writeRunStatus(storage, reviewId, {
+				status: "review_done",
+				now: "2026-01-01T00:10:00.000Z",
+			});
+			touchRunStatus(storage, reviewId, "2026-01-01T00:15:00.000Z");
+			expect(readRunStatus(storage, reviewId)?.heartbeatAt).toBeUndefined();
+		});
+	});
+
+	test("triagem em reviewing não renova o heartbeat; fix em andamento sim", () => {
+		withStorage((storage, reviewId) => {
+			writeRunStatus(storage, reviewId, {
+				status: "reviewing",
+				resetStartedAt: true,
+				now: "2026-01-01T00:00:00.000Z",
+			});
+
+			// Triagem (decision/comment) mantém reviewing — não é execução.
+			pingFindingsStatus(storage, reviewId, stateOf([]));
+			expect(readRunStatus(storage, reviewId)?.heartbeatAt).toBe(
+				"2026-01-01T00:00:00.000Z",
+			);
+
+			// Correção em andamento renova o heartbeat.
+			pingFindingsStatus(
+				storage,
+				reviewId,
+				stateOf([findingState({ execState: "in_progress" })]),
+			);
+			const fixed = readRunStatus(storage, reviewId);
+			expect(fixed?.status).toBe("fixing");
+			expect(fixed?.heartbeatAt).not.toBe("2026-01-01T00:00:00.000Z");
 		});
 	});
 

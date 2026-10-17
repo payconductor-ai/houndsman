@@ -34,12 +34,21 @@ export type RunClassification = ClassificationResult & {
 	carryover?: MergedFinding[];
 };
 
-/** Resultado da resolução de escopo. */
-export type ReviewScope = {
-	classification: RunClassification;
-	diff: DiffSource;
-	reviewedFrom?: string;
-};
+/** Resultado da resolução de escopo: revisar ou nada a fazer. */
+export type ReviewScope =
+	| {
+			/** O `HEAD` é o mesmo commit já revisado — não há o que re-revisar. */
+			kind: "noop";
+			headSha: string;
+			/** Commit já coberto pelo review anterior. */
+			reviewedFrom: string;
+	  }
+	| {
+			kind: "review";
+			classification: RunClassification;
+			diff: DiffSource;
+			reviewedFrom?: string;
+	  };
 
 /** Decide entre review completo e incremental. */
 export class ReviewScopeResolver {
@@ -52,20 +61,29 @@ export class ReviewScopeResolver {
 	}
 
 	/**
+	 * No-op quando o `HEAD` é exatamente o commit já revisado (sem
+	 * `--full`/`--clean`): re-revisar a PR inteira seria desperdício, e o
+	 * relatório anterior continua válido.
+	 *
 	 * Incremental só quando há um `reviewed.headSha` anterior, o `HEAD` atual o
 	 * sucede (sem rebase) e não veio `--full`/`--clean`.
 	 */
 	resolve(previous: FindingsStateFile | null, headSha: string): ReviewScope {
 		const prevSha = previous?.reviewed?.headSha;
+
+		if (!this.options.full && !this.options.clean && prevSha === headSha) {
+			return { kind: "noop", headSha, reviewedFrom: headSha };
+		}
+
 		if (
 			this.options.full ||
 			this.options.clean ||
 			!prevSha ||
-			prevSha === headSha ||
 			!isAncestor(prevSha, headSha)
 		) {
 			const diff = collectDiff(this.options.base, this.options.head);
 			return {
+				kind: "review",
 				diff,
 				classification: {
 					...this.classifier
@@ -90,6 +108,6 @@ export class ReviewScopeResolver {
 			reviewedFrom: prevSha,
 			carryover: buildCarryover(previous, changedPaths),
 		};
-		return { classification, diff, reviewedFrom: prevSha };
+		return { kind: "review", classification, diff, reviewedFrom: prevSha };
 	}
 }

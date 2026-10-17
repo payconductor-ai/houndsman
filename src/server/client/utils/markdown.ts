@@ -220,6 +220,22 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 	return blocks;
 }
 
+/** Blocos de uma seção `## <título>` (sem o heading); vazio se ausente. */
+export function sectionBlocks(text: string, title: string): MarkdownBlock[] {
+	const wanted = title.trim().toLowerCase();
+	const blocks: MarkdownBlock[] = [];
+	let inside = false;
+	for (const block of parseMarkdown(text)) {
+		if (block.type === "heading") {
+			if (inside) break;
+			inside = block.level >= 2 && block.text.trim().toLowerCase() === wanted;
+			continue;
+		}
+		if (inside) blocks.push(block);
+	}
+	return blocks;
+}
+
 /** Extensão reconhecida como arquivo (evita destacar texto comum). */
 const FILE_EXTENSION =
 	/\.(?:[cm]?[jt]sx?|json|md|ya?ml|toml|css|scss|html?|py|go|rs|java|kt|cs|php|rb|sh|sql|txt|lock)$/i;

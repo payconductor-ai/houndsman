@@ -384,3 +384,66 @@ describe("resolveFindingId", () => {
 		});
 	});
 });
+
+describe("migração do schema SQLite", () => {
+	test("banco v1 ganha a coluna heartbeat_at sem perder reviews", () => {
+		const dir = mkdtempSync(join(tmpdir(), "houndsman-migrate-"));
+		const path = join(dir, "houndsman.db");
+		const legacy = new Database(path);
+		try {
+			legacy.exec(`
+				CREATE TABLE reviews (
+					id TEXT PRIMARY KEY,
+					repo_key TEXT NOT NULL,
+					repo_root TEXT NOT NULL,
+					repo_remote TEXT,
+					branch TEXT NOT NULL,
+					slug TEXT NOT NULL,
+					base TEXT,
+					head TEXT,
+					head_sha TEXT,
+					reviewed_sha TEXT,
+					reviewed_at TEXT,
+					status TEXT,
+					started_at TEXT,
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL,
+					UNIQUE(repo_key, branch)
+				);
+				PRAGMA user_version = 1;
+			`);
+			legacy.run(
+				`INSERT INTO reviews
+					(id, repo_key, repo_root, branch, slug, status, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+				[
+					"11111111-1111-4111-8111-111111111111",
+					"path:/repo",
+					dir,
+					"feature/x",
+					"feature-x",
+					"reviewing",
+					"2026-01-01T00:00:00.000Z",
+					"2026-01-01T00:00:00.000Z",
+				],
+			);
+		} finally {
+			legacy.close();
+		}
+
+		const storage = new SQLiteStorageProvider(path);
+		try {
+			const review = storage.listReviews()[0];
+			expect(review?.heartbeatAt).toBeUndefined();
+			storage.updateReview(review.id, {
+				heartbeatAt: "2026-01-01T00:05:00.000Z",
+			});
+			expect(storage.getReview(review.id)?.heartbeatAt).toBe(
+				"2026-01-01T00:05:00.000Z",
+			);
+		} finally {
+			storage.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+});

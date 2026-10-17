@@ -505,6 +505,45 @@ code.md-path { color:#8fc7ff; background:rgba(90,164,240,.1); border-color:rgba(
 .sent-tag:hover { color:#fff; }
 .sent-tag.gh { color:#b9c7d6; background:rgba(139,164,191,.12); border-color:rgba(139,164,191,.35); }
 .sent-tag.gh:hover { color:#fff; background:rgba(139,164,191,.2); }
+.resume { display:flex; flex-direction:column; }
+.resume-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px;
+  background:linear-gradient(135deg, rgba(240,165,44,.08), rgba(255,255,255,.015) 55%);
+  border:1px solid var(--border); border-radius:var(--radius-lg); }
+.resume-kicker { display:block; font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
+.resume-title { margin:5px 0 7px; font-size:22px; font-weight:700; letter-spacing:-.02em; word-break:break-word; }
+.resume-meta { display:flex; flex-wrap:wrap; align-items:center; gap:12px; margin:0; font-size:12px; color:var(--muted); }
+.resume-pr { display:inline-flex; align-items:center; gap:5px; color:var(--accent-strong); text-decoration:none; }
+.resume-pr:hover { text-decoration:underline; }
+.resume-hero-side { display:flex; flex:none; flex-direction:column; align-items:flex-end; gap:10px; }
+.resume-status { display:inline-flex; align-items:center; padding:5px 12px; font-size:11px; font-weight:700; letter-spacing:.04em; border-radius:999px; }
+.resume-status.blocking { color:var(--blocking); background:rgba(242,89,94,.12); border:1px solid rgba(242,89,94,.35); }
+.resume-status.attention { color:var(--attention); background:rgba(237,161,58,.12); border:1px solid rgba(237,161,58,.35); }
+.resume-status.clean { color:var(--success); background:rgba(69,192,122,.12); border:1px solid rgba(69,192,122,.35); }
+.resume-kpis { margin:14px 0 18px; }
+.resume-kpis .kpi-value { font-size:24px; }
+.churn-add { color:var(--success); }
+.churn-del { color:var(--blocking); }
+.churn-sep { margin:0 3px; color:var(--muted-2); font-weight:400; }
+.kpi-blocking .kpi-value { color:var(--blocking); }
+.kpi-attention .kpi-value { color:var(--attention); }
+.kpi-total .kpi-value { color:var(--fg); }
+.resume-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:16px; align-items:start; }
+.resume-card { min-width:0; padding:16px 18px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); }
+.resume-card-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.resume-card-title { margin:0 0 10px; font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+.resume-card-count { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:22px; margin-bottom:10px; padding:0 7px;
+  font-family:var(--font-mono); font-size:11px; color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:999px; }
+.resume-narrative .md-p:last-child { margin-bottom:0; }
+.resume-domains { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
+.resume-domain { display:flex; flex-direction:column; gap:7px; padding:10px 12px; background:var(--surface-2);
+  border:1px solid var(--border); border-radius:10px; }
+.resume-domain-head { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.resume-domain-name { font-size:12.5px; font-weight:600; color:var(--fg); }
+.resume-domain-files { flex:none; font-family:var(--font-mono); font-size:10.5px; color:var(--muted-2); }
+.resume-domain-sev { display:flex; flex-wrap:wrap; gap:6px; }
+.resume-domain-sev .sev-badge { padding:2px 7px; font-size:9.5px; }
+.resume-domain-ok { font-size:11.5px; color:var(--success); }
+@media (max-width:900px) { .resume-grid { grid-template-columns:1fr; } .resume-hero { flex-direction:column; } .resume-hero-side { flex-direction:row; align-items:flex-start; } }
 .modal-layer { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:24px; }
 .modal-backdrop { position:absolute; inset:0; width:100%; padding:0; background:rgba(5,5,7,.66); border:0; cursor:default; backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
 .modal { position:relative; width:min(640px, 100%); max-height:min(78vh, 780px); display:flex; flex-direction:column; overflow:hidden;

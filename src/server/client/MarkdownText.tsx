@@ -11,6 +11,7 @@ import { highlightCode, languageFromName } from "./utils/code-highlight";
 import {
 	type InlineToken,
 	isFilePath,
+	type MarkdownBlock,
 	parseInline,
 	parseMarkdown,
 	safeUrl,
@@ -78,9 +79,8 @@ function CodeBlock({ code, language }: { code: string; language: string | null }
 	);
 }
 
-/** Renderiza o markdown do action/artefato preservando blocos e listas. */
-export function MarkdownText({ text }: { text: string }) {
-	const blocks = useMemo(() => parseMarkdown(text), [text]);
+/** Renderiza blocos markdown já parseados (seções de artefato, ação etc.). */
+export function MarkdownBlocks({ blocks }: { blocks: MarkdownBlock[] }) {
 	return (
 		<>
 			{blocks.map((block) => {
@@ -172,4 +172,10 @@ export function MarkdownText({ text }: { text: string }) {
 			})}
 		</>
 	);
+}
+
+/** Renderiza o markdown do action/artefato preservando blocos e listas. */
+export function MarkdownText({ text }: { text: string }) {
+	const blocks = useMemo(() => parseMarkdown(text), [text]);
+	return <MarkdownBlocks blocks={blocks} />;
 }

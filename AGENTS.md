@@ -36,6 +36,7 @@ projeto **autocontida**), carregada em runtime.
 | `bun run build` | `bun build` → `dist/` (bundle único) |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
+| `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
 | `bun run houndsman -- server` | Sobe a UI local de triagem (Bun.serve + Preact) |
 | `bun publish --dry-run` | Confere o que vai no tarball |
 

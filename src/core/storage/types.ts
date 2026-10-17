@@ -36,6 +36,11 @@ export type ReviewRecord = {
 	reviewedAt?: string;
 	status: ReviewStatus | null;
 	startedAt?: string;
+	/**
+	 * Último sinal de vida de uma execução ativa (`reviewing`/`fixing`).
+	 * Diferente de `updatedAt`: não muda com triagem/sync — só com a execução.
+	 */
+	heartbeatAt?: string;
 	createdAt: string;
 	updatedAt: string;
 };
@@ -53,11 +58,14 @@ export type ReviewPatch = Partial<
 		| "reviewedAt"
 		| "status"
 		| "startedAt"
+		| "heartbeatAt"
 		| "updatedAt"
 	>
 > & {
 	/** Reinicia o `startedAt` no início de um novo ciclo de revisão. */
 	resetStartedAt?: boolean;
+	/** Limpa o heartbeat (execução terminou). */
+	resetHeartbeat?: boolean;
 };
 
 /** Entrada de `getOrCreateReview`. */

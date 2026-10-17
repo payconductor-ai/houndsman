@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	reviewed_at TEXT,
 	status TEXT,
 	started_at TEXT,
+	heartbeat_at TEXT,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
 	UNIQUE(repo_key, branch)
@@ -103,6 +104,13 @@ export function migrate(db: Database, path: string): void {
 
 	db.transaction(() => {
 		db.exec(DDL);
+		// v2: heartbeat explícito da execução (bancos v1 não tinham a coluna).
+		const columns = db.query("PRAGMA table_info(reviews)").all() as {
+			name: string;
+		}[];
+		if (!columns.some((column) => column.name === "heartbeat_at")) {
+			db.exec("ALTER TABLE reviews ADD COLUMN heartbeat_at TEXT");
+		}
 		db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 	})();
 }
