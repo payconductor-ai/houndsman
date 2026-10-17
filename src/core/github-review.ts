@@ -2,12 +2,15 @@
  * Envio dos findings como comentários na Pull Request (biblioteca), via GitHub
  * CLI (`gh`) — a capability de **"enviar revisão"**.
  *
- * Um comentário por finding via `POST repos/{repo}/pulls/{n}/comments`:
- * **na linha** do diff quando o finding tem linha; **no arquivo**
- * (`subject_type: file`) quando não tem. Se nenhum dos dois colar (ex.: arquivo
- * fora do diff), cai em **um** comentário geral da PR. O `id`/URL de cada
- * comentário é gravado no finding (`FindingState.github`): evita reenvio e
- * mantém o vínculo local↔remoto.
+ * O envio é **agrupado numa revisão**: se já existe uma revisão PENDING do
+ * usuário logado, as threads são adicionadas a ela (sem finalizar); caso
+ * contrário o houndsman cria a revisão pendente, adiciona as threads e a
+ * finaliza (`REQUEST_CHANGES` quando há blocking; senão `COMMENT`).
+ *
+ * Findings **sem linha** (ou cuja linha não cola no diff) continuam como
+ * comentário de arquivo (`subject_type: file`) e, no limite, num único issue
+ * comment. O `id`/URL de cada comentário é gravado no finding
+ * (`FindingState.github`): evita reenvio e mantém o vínculo local↔remoto.
  *
  * O `gh` é OPCIONAL e falha-aberto: sem binário/login/PR a prévia volta
  * `available:false` e o envio é no-op (como o resto do houndsman).
@@ -22,7 +25,7 @@ import {
 } from "./findings-state";
 import { systemClock } from "./services/clock";
 import { defaultGhRunner, type GhResult, type GhRunner } from "./services/gh-client";
-import { SEVERITY_EMOJI, type Severity } from "./types";
+import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "./types";
 
 export { type GhResult, type GhRunner, defaultGhRunner };
 
@@ -256,17 +259,274 @@ export type PostedComment = {
 	url?: string;
 };
 
+/** Evento de finalização da revisão criada pelo houndsman. */
+export type ReviewEvent = "COMMENT" | "REQUEST_CHANGES";
+
+/** Revisão remota (criada ou reaproveitada) do envio. */
+export type ReviewOutcome = {
+	/** Id numérico (databaseId) da revisão, quando conhecido. */
+	id?: number;
+	url?: string;
+	/** O houndsman criou a revisão nesta execução. */
+	created: boolean;
+	/** A revisão criada foi submetida ao fim do envio. */
+	finalized: boolean;
+	event?: ReviewEvent;
+	/** Falha ao localizar/criar/finalizar a revisão. */
+	error?: string;
+};
+
 export type SubmitOutcome = {
 	posted: PostedComment[];
 	failed: { id: string; reason: string }[];
 	skipped: { id: string; reason: string }[];
 	/** Comentário geral (quando houve findings sem posição/falha de inline). */
 	general?: { commentId: number; url?: string; ids: string[] };
+	/** Revisão remota em que as threads foram postadas. */
+	review?: ReviewOutcome;
 };
 
 type PostResult =
 	| { ok: true; commentId: number; url?: string }
 	| { ok: false; reason: string };
+
+type ReviewHandle = {
+	/** Node ID (GraphQL) da revisão. */
+	nodeId: string;
+	/** Id numérico (databaseId) da revisão. */
+	databaseId: number;
+	url?: string;
+};
+
+type ReviewLookup =
+	| { ok: true; prNodeId: string; pending?: ReviewHandle }
+	| { ok: false; reason: string };
+
+type ReviewHandleResult =
+	| { ok: true; review: ReviewHandle }
+	| { ok: false; reason: string };
+
+type GraphqlVar = string | number | undefined;
+
+type GraphqlResult =
+	| { ok: true; data: Record<string, unknown> }
+	| { ok: false; reason: string };
+
+/** Objeto JSON como record (evita `any` ao navegar nas respostas do GraphQL). */
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	if (typeof value !== "object" || value === null) return undefined;
+	return value as Record<string, unknown>;
+}
+
+/** Converte `resourcePath` do GraphQL na URL web do GitHub. */
+function githubUrl(resourcePath: unknown): string | undefined {
+	return typeof resourcePath === "string"
+		? `https://github.com${resourcePath}`
+		: undefined;
+}
+
+/** Executa uma operação GraphQL via `gh api graphql`. Falha-aberto. */
+function runGraphql(
+	runner: GhRunner,
+	query: string,
+	vars: Record<string, GraphqlVar> = {},
+): GraphqlResult {
+	const args = ["api", "graphql", "-f", `query=${query}`];
+	for (const [key, value] of Object.entries(vars)) {
+		if (value === undefined) continue;
+		args.push(typeof value === "number" ? "-F" : "-f", `${key}=${value}`);
+	}
+	const result = runner(args);
+	if (!result.ok) return { ok: false, reason: shortError(result) };
+
+	let payload: { data?: Record<string, unknown>; errors?: { message?: string }[] };
+	try {
+		payload = JSON.parse(result.stdout) as typeof payload;
+	} catch {
+		return { ok: false, reason: "resposta inválida do gh." };
+	}
+	if (payload.errors?.length) {
+		const message = payload.errors
+			.map((error) => error.message)
+			.filter(Boolean)
+			.join("; ");
+		return { ok: false, reason: message || "erro do GraphQL." };
+	}
+	if (!payload.data) return { ok: false, reason: "resposta sem dados do GraphQL." };
+	return { ok: true, data: payload.data };
+}
+
+const LOOKUP_QUERY = `query($owner: String!, $name: String!, $number: Int!) {
+	viewer { login }
+	repository(owner: $owner, name: $name) {
+		pullRequest(number: $number) {
+			id
+			reviews(last: 50, states: [PENDING]) {
+				nodes { id databaseId resourcePath author { login } }
+			}
+		}
+	}
+}`;
+
+const CREATE_REVIEW_MUTATION = `mutation($pr: ID!, $sha: GitObjectID) {
+	addPullRequestReview(input: { pullRequestId: $pr, commitOID: $sha }) {
+		pullRequestReview { id databaseId resourcePath }
+	}
+}`;
+
+const ADD_THREAD_MUTATION = `mutation($review: ID!, $path: String!, $line: Int!, $body: String!) {
+	addPullRequestReviewThread(input: {
+		pullRequestReviewId: $review,
+		path: $path,
+		line: $line,
+		side: RIGHT,
+		body: $body
+	}) {
+		thread { comments(first: 1) { nodes { databaseId resourcePath } } }
+	}
+}`;
+
+const SUBMIT_REVIEW_MUTATION = `mutation($review: ID!, $event: PullRequestReviewEvent!, $body: String!) {
+	submitPullRequestReview(input: {
+		pullRequestReviewId: $review,
+		event: $event,
+		body: $body
+	}) {
+		pullRequestReview { id databaseId state }
+	}
+}`;
+
+/**
+ * Localiza a PR (node id) e a revisão PENDING do usuário logado, se houver.
+ * Revisões pendentes só são visíveis para o próprio autor.
+ */
+export function lookupPendingReview(runner: GhRunner, target: PrTarget): ReviewLookup {
+	const [owner, name] = target.repo.split("/");
+	if (!owner || !name) return { ok: false, reason: "repositório inválido." };
+
+	const result = runGraphql(runner, LOOKUP_QUERY, {
+		owner,
+		name,
+		number: target.number,
+	});
+	if (!result.ok) return result;
+
+	const repository = asRecord(result.data.repository);
+	const pullRequest = asRecord(repository?.pullRequest);
+	const prNodeId = typeof pullRequest?.id === "string" ? pullRequest.id : undefined;
+	if (!prNodeId) return { ok: false, reason: "PR não encontrada no GraphQL." };
+
+	const reviews = asRecord(pullRequest?.reviews);
+	const viewer = asRecord(result.data.viewer);
+	const viewerLogin =
+		typeof viewer?.login === "string" ? viewer.login.toLowerCase() : undefined;
+	const nodes = (Array.isArray(reviews?.nodes) ? reviews.nodes : [])
+		.map((value) => asRecord(value))
+		.filter((node) => {
+			if (!viewerLogin) return true;
+			const author = asRecord(node?.author);
+			return (
+				typeof author?.login === "string" &&
+				author.login.toLowerCase() === viewerLogin
+			);
+		});
+	const node = nodes.at(-1);
+	const databaseId = typeof node?.databaseId === "number" ? node.databaseId : undefined;
+	const nodeId = typeof node?.id === "string" ? node.id : undefined;
+	const pending =
+		nodeId && databaseId !== undefined
+			? { nodeId, databaseId, url: githubUrl(node?.resourcePath) }
+			: undefined;
+	return { ok: true, prNodeId, pending };
+}
+
+/** Cria uma revisão PENDING (sem `event`) apontando para o head revisado. */
+export function createPendingReview(
+	runner: GhRunner,
+	target: PrTarget,
+	prNodeId: string,
+): ReviewHandleResult {
+	const result = runGraphql(runner, CREATE_REVIEW_MUTATION, {
+		pr: prNodeId,
+		sha: target.headSha,
+	});
+	if (!result.ok) return result;
+
+	const mutation = asRecord(result.data.addPullRequestReview);
+	const review = asRecord(mutation?.pullRequestReview);
+	const nodeId = typeof review?.id === "string" ? review.id : undefined;
+	const databaseId =
+		typeof review?.databaseId === "number" ? review.databaseId : undefined;
+	if (!nodeId || databaseId === undefined) {
+		return { ok: false, reason: "resposta sem revisão." };
+	}
+	return {
+		ok: true,
+		review: { nodeId, databaseId, url: githubUrl(review?.resourcePath) },
+	};
+}
+
+/** Adiciona uma thread de linha à revisão pendente. */
+function addReviewThread(
+	runner: GhRunner,
+	reviewNodeId: string,
+	finding: FindingState,
+	line: number,
+): PostResult {
+	const result = runGraphql(runner, ADD_THREAD_MUTATION, {
+		review: reviewNodeId,
+		path: finding.file,
+		line,
+		body: buildCommentBody(finding),
+	});
+	if (!result.ok) return result;
+
+	const mutation = asRecord(result.data.addPullRequestReviewThread);
+	const thread = asRecord(mutation?.thread);
+	const comments = asRecord(thread?.comments);
+	const nodes = Array.isArray(comments?.nodes) ? comments.nodes : [];
+	const comment = asRecord(nodes[0]);
+	const commentId =
+		typeof comment?.databaseId === "number" ? comment.databaseId : undefined;
+	if (commentId === undefined) {
+		return { ok: false, reason: "resposta sem comentário." };
+	}
+	return { ok: true, commentId, url: githubUrl(comment?.resourcePath) };
+}
+
+/** Finaliza a revisão pendente com o evento indicado e um corpo resumo. */
+function submitReview(
+	runner: GhRunner,
+	reviewNodeId: string,
+	event: ReviewEvent,
+	body: string,
+): { ok: true } | { ok: false; reason: string } {
+	const result = runGraphql(runner, SUBMIT_REVIEW_MUTATION, {
+		review: reviewNodeId,
+		event,
+		body,
+	});
+	return result.ok ? { ok: true } : result;
+}
+
+/** Corpo (markdown) da revisão criada: resumo por severidade. */
+export function renderReviewBody(candidates: readonly SubmitCandidate[]): string {
+	const counts = SEVERITY_ORDER.map((severity) => {
+		const total = candidates.filter(
+			(candidate) => candidate.severity === severity,
+		).length;
+		return total > 0 ? `${SEVERITY_EMOJI[severity]} ${total} ${severity}` : null;
+	}).filter((part): part is string => part !== null);
+
+	const lines = [
+		"## Revisão do houndsman",
+		"",
+		`${candidates.length} achado(s) revisado(s).`,
+	];
+	if (counts.length > 0) lines.push("", counts.join(" · "));
+	lines.push("", "_— houndsman_");
+	return lines.join("\n");
+}
 
 function parseComment(result: GhResult): PostResult {
 	if (!result.ok) return { ok: false, reason: shortError(result) };
@@ -279,11 +539,12 @@ function parseComment(result: GhResult): PostResult {
 	}
 }
 
-function commentArgs(
+/** Posta o finding como comentário de arquivo (`subject_type=file`). */
+export function postFileComment(
+	runner: GhRunner,
 	target: PrTarget,
 	finding: FindingState,
-	mode: "line" | "file",
-): string[] {
+): PostResult {
 	const args = [
 		"api",
 		`repos/${target.repo}/pulls/${target.number}/comments`,
@@ -291,25 +552,11 @@ function commentArgs(
 		`body=${buildCommentBody(finding)}`,
 		"-f",
 		`path=${finding.file}`,
+		"-f",
+		"subject_type=file",
 	];
-	if (mode === "line") {
-		args.push("-F", `line=${finding.line}`, "-f", "side=RIGHT");
-	} else {
-		// Sem linha específica: ancora no arquivo (comentário de nível de arquivo).
-		args.push("-f", "subject_type=file");
-	}
 	if (target.headSha) args.push("-f", `commit_id=${target.headSha}`);
-	return args;
-}
-
-/** Posta o comentário de review de um finding (na linha ou no arquivo). */
-export function postComment(
-	runner: GhRunner,
-	target: PrTarget,
-	finding: FindingState,
-	mode: "line" | "file",
-): PostResult {
-	return parseComment(runner(commentArgs(target, finding, mode)));
+	return parseComment(runner(args));
 }
 
 /** Posta o comentário geral (fallback) com os findings sem posição no diff. */
@@ -329,10 +576,12 @@ export function postGeneral(
 }
 
 /**
- * Envia os findings selecionados: um comentário por finding — na linha do diff
- * ou no arquivo (`subject_type=file`). O que não colar em nenhum dos dois vai
- * para um único comentário geral. Muta o `state` com o vínculo
- * (`finding.github`); o caller persiste.
+ * Envia os findings selecionados agrupando as threads numa revisão do GitHub:
+ * adiciona à revisão PENDING existente (sem finalizar) ou cria uma nova e a
+ * finaliza ao fim do disparo. Findings sem linha e falhas de thread caem no
+ * comentário de arquivo (`subject_type=file`) e, no limite, num único
+ * comentário geral. Muta o `state` com o vínculo (`finding.github`); o caller
+ * persiste.
  */
 export function submitFindings(options: {
 	state: FindingsStateFile;
@@ -358,39 +607,88 @@ export function submitFindings(options: {
 		finding.updatedAt = now;
 	};
 
+	const toSend: SubmitCandidate[] = [];
 	for (const candidate of candidates) {
-		const finding = state.findings[candidate.id];
-		if (!finding) continue;
-
 		if (candidate.skip) {
 			outcome.skipped.push({ id: candidate.id, reason: "já enviado." });
 			continue;
 		}
+		toSend.push(candidate);
+	}
 
-		// Tenta a linha (quando há) e depois o arquivo — o primeiro que colar vence.
-		const modes: ("line" | "file")[] =
-			candidate.kind === "line" ? ["line", "file"] : ["file"];
-		let posted: PostResult | null = null;
-		let reason = "";
-		for (const mode of modes) {
-			const attempt = postComment(runner, target, finding, mode);
-			if (attempt.ok) {
-				posted = attempt;
-				link(finding, attempt.commentId, attempt.url, mode);
-				outcome.posted.push({
-					id: candidate.id,
-					kind: mode,
-					commentId: attempt.commentId,
-					url: attempt.url,
-				});
-				break;
+	const lineCandidates = toSend.filter((candidate) => candidate.kind === "line");
+	const fileCandidates = toSend.filter((candidate) => candidate.kind === "file");
+
+	// Revisão: reaproveita a pendente ou cria uma nova (só quando há linha).
+	let review: ReviewHandle | undefined;
+	let reviewCreated = false;
+	let reviewError: string | undefined;
+	if (lineCandidates.length > 0) {
+		const lookup = lookupPendingReview(runner, target);
+		if (!lookup.ok) {
+			reviewError = lookup.reason;
+		} else if (lookup.pending) {
+			review = lookup.pending;
+		} else {
+			const created = createPendingReview(runner, target, lookup.prNodeId);
+			if (created.ok) {
+				review = created.review;
+				reviewCreated = true;
+			} else {
+				reviewError = created.reason;
 			}
-			reason = attempt.reason;
 		}
-		if (!posted) {
-			outcome.failed.push({ id: candidate.id, reason });
-			deferred.push(finding);
+	}
+
+	/** Fallback: comentário de arquivo e depois comentário geral. */
+	const postFallback = (candidate: SubmitCandidate, finding: FindingState): void => {
+		const attempt = postFileComment(runner, target, finding);
+		if (attempt.ok) {
+			link(finding, attempt.commentId, attempt.url, "file");
+			outcome.posted.push({
+				id: candidate.id,
+				kind: "file",
+				commentId: attempt.commentId,
+				url: attempt.url,
+			});
+			return;
 		}
+		outcome.failed.push({ id: candidate.id, reason: attempt.reason });
+		deferred.push(finding);
+	};
+
+	// Threads na revisão; falha na linha cai para arquivo/geral.
+	for (const candidate of lineCandidates) {
+		const finding = state.findings[candidate.id];
+		if (!finding || candidate.line === null) continue;
+
+		if (!review) {
+			outcome.failed.push({
+				id: candidate.id,
+				reason: reviewError ?? "revisão indisponível.",
+			});
+			continue;
+		}
+
+		const attempt = addReviewThread(runner, review.nodeId, finding, candidate.line);
+		if (attempt.ok) {
+			link(finding, attempt.commentId, attempt.url, "line");
+			outcome.posted.push({
+				id: candidate.id,
+				kind: "line",
+				commentId: attempt.commentId,
+				url: attempt.url,
+			});
+			continue;
+		}
+		postFallback(candidate, finding);
+	}
+
+	// Findings sem linha: comentário de arquivo (com fallback em geral).
+	for (const candidate of fileCandidates) {
+		const finding = state.findings[candidate.id];
+		if (!finding) continue;
+		postFallback(candidate, finding);
 	}
 
 	if (deferred.length > 0) {
@@ -416,6 +714,43 @@ export function submitFindings(options: {
 					outcome.failed.push({ id: finding.id, reason: general.reason });
 				}
 			}
+		}
+	}
+
+	// A revisão criada é finalizada; a existente fica pendente para o usuário.
+	if (lineCandidates.length > 0) {
+		if (review) {
+			const event: ReviewEvent = toSend.some(
+				(candidate) => candidate.severity === "blocking",
+			)
+				? "REQUEST_CHANGES"
+				: "COMMENT";
+			let finalized = false;
+			let error: string | undefined;
+			if (reviewCreated) {
+				const submitted = submitReview(
+					runner,
+					review.nodeId,
+					event,
+					renderReviewBody(toSend),
+				);
+				finalized = submitted.ok;
+				if (!submitted.ok) error = submitted.reason;
+			}
+			outcome.review = {
+				id: review.databaseId,
+				url: review.url,
+				created: reviewCreated,
+				finalized,
+				event: reviewCreated ? event : undefined,
+				error,
+			};
+		} else {
+			outcome.review = {
+				created: false,
+				finalized: false,
+				error: reviewError ?? "revisão indisponível.",
+			};
 		}
 	}
 

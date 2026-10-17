@@ -410,12 +410,34 @@ export function SubmitModal({
 /** Resumo do resultado do envio. */
 function ResultView({ outcome }: { outcome: SubmitOutcome }) {
 	const generalUrl = outcome.general?.url;
+	const review = outcome.review;
+	const reviewUrl = review?.url;
 	return (
 		<>
 			<div class="submit-summary">
 				Enviados <b>{outcome.posted.length}</b> · falhas{" "}
 				<b>{outcome.failed.length}</b> · pulados <b>{outcome.skipped.length}</b>.
 			</div>
+			{review && (
+				<p class="submit-empty">
+					{review.created
+						? review.finalized
+							? `Revisão #${review.id} finalizada (${review.event}).`
+							: `Revisão #${review.id} criada, mas não finalizada.`
+						: `Comentários adicionados à revisão pendente #${review.id}.`}{" "}
+					{reviewUrl && (
+						<a
+							class="sent-tag gh"
+							href={reviewUrl}
+							target="_blank"
+							rel="noreferrer"
+						>
+							<GitHub size={12} /> abrir
+						</a>
+					)}
+					{review.error && <> ❌ {review.error}</>}
+				</p>
+			)}
 			{generalUrl && (
 				<p class="submit-empty">
 					Comentário geral:{" "}

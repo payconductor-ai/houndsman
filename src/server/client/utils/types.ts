@@ -184,6 +184,14 @@ export type SubmitOutcome = {
 	failed: { id: string; reason: string }[];
 	skipped: { id: string; reason: string }[];
 	general?: { commentId: number; url?: string; ids: string[] };
+	review?: {
+		id?: number;
+		url?: string;
+		created: boolean;
+		finalized: boolean;
+		event?: "COMMENT" | "REQUEST_CHANGES";
+		error?: string;
+	};
 };
 
 export type SubmitResponse = {

@@ -87,6 +87,11 @@ function makeEnv(): {
 const get = (handler: (r: Request) => Promise<Response>, path: string) =>
 	handler(new Request(`http://localhost${path}`));
 
+/** Resposta OK do `gh` com um JSON. */
+function ghJson(payload: unknown) {
+	return { ok: true, code: 0, stderr: "", stdout: JSON.stringify(payload) };
+}
+
 describe("server API", () => {
 	test("GET /api/runs lista as runs com resumo", async () => {
 		const env = makeEnv();
@@ -231,27 +236,77 @@ describe("server API", () => {
 			const handler = createRequestHandler(env.config, {
 				storage: env.storage,
 				repo: env.repo,
-				ghRunner: (args) =>
-					args[0] === "pr"
-						? {
-								ok: true,
-								code: 0,
-								stderr: "",
-								stdout: JSON.stringify({
-									number: 12,
-									url: "https://github.com/acme/app/pull/12",
-									headRefOid: "deadbeef",
-								}),
-							}
-						: {
-								ok: true,
-								code: 0,
-								stderr: "",
-								stdout: JSON.stringify({
-									id: 501,
-									html_url: "https://x/501",
-								}),
-							},
+				ghRunner: (args) => {
+					if (args[0] === "pr") {
+						return ghJson({
+							number: 12,
+							url: "https://github.com/acme/app/pull/12",
+							headRefOid: "deadbeef",
+						});
+					}
+					if (args[1] === "graphql") {
+						const query = args.find((arg) => arg.startsWith("query=")) ?? "";
+						if (query.includes("states: [PENDING]")) {
+							return ghJson({
+								data: {
+									repository: {
+										pullRequest: {
+											id: "PR_1",
+											reviews: { nodes: [] },
+										},
+									},
+								},
+							});
+						}
+						if (query.includes("addPullRequestReview(input")) {
+							return ghJson({
+								data: {
+									addPullRequestReview: {
+										pullRequestReview: {
+											id: "REV_NEW",
+											databaseId: 11,
+											resourcePath:
+												"/acme/app/pull/12#pullrequestreview-11",
+										},
+									},
+								},
+							});
+						}
+						if (query.includes("addPullRequestReviewThread")) {
+							return ghJson({
+								data: {
+									addPullRequestReviewThread: {
+										thread: {
+											comments: {
+												nodes: [
+													{
+														databaseId: 501,
+														resourcePath:
+															"/acme/app/pull/12#discussion_r501",
+													},
+												],
+											},
+										},
+									},
+								},
+							});
+						}
+						if (query.includes("submitPullRequestReview")) {
+							return ghJson({
+								data: {
+									submitPullRequestReview: {
+										pullRequestReview: {
+											id: "REV_NEW",
+											databaseId: 11,
+											state: "CHANGES_REQUESTED",
+										},
+									},
+								},
+							});
+						}
+					}
+					return { ok: false, code: 404, stderr: "", stdout: "" };
+				},
 			});
 			const res = await handler(
 				new Request("http://localhost/api/runs/main/submit", {

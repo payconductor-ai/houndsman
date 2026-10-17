@@ -603,6 +603,21 @@ function renderSubmitOutcome(outcome: SubmitOutcome, json: boolean): string {
 		"",
 		`Enviados: ${outcome.posted.length} · Falhas: ${outcome.failed.length} · Pulados: ${outcome.skipped.length}`,
 	];
+	const review = outcome.review;
+	if (review?.id !== undefined) {
+		const target = review.url ? ` — ${review.url}` : "";
+		if (review.created) {
+			const status = review.finalized
+				? `finalizada (${review.event})`
+				: "criada, mas não finalizada";
+			lines.push(`Revisão #${review.id} ${status}${target}`);
+		} else {
+			lines.push(
+				`Comentários adicionados à revisão pendente #${review.id}${target}`,
+			);
+		}
+	}
+	if (review?.error) lines.push(`Revisão: ❌ ${review.error}`);
 	if (outcome.general) {
 		lines.push(
 			`Comentário geral: ${outcome.general.url ?? outcome.general.commentId} (${outcome.general.ids.length})`,
@@ -615,8 +630,9 @@ function renderSubmitOutcome(outcome: SubmitOutcome, json: boolean): string {
 }
 
 /**
- * Subcomando `findings submit` — envia os findings selecionados como comentários
- * na PR (via `gh`). `--dry-run` mostra a prévia sem postar. Assíncrono (gh).
+ * Subcomando `findings submit` — envia os findings selecionados numa revisão da
+ * PR (via `gh`): reaproveita a revisão pendente ou cria/finaliza uma nova.
+ * `--dry-run` mostra a prévia sem postar. Assíncrono (gh).
  */
 export async function runSubmitCommand(
 	config: HoundsmanConfig,
@@ -664,6 +680,6 @@ async function executeSubmit(
 
 	return {
 		output: renderSubmitOutcome(outcome, json),
-		exitCode: outcome.failed.length > 0 ? 1 : 0,
+		exitCode: outcome.failed.length > 0 || Boolean(outcome.review?.error) ? 1 : 0,
 	};
 }

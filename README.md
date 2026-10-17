@@ -26,8 +26,8 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 
 - **Bun** — runtime obrigatório.
 - **git** — o diff usa `git diff <base>...<head>`.
-- Opcionais: **`gh`** (contexto da PR) e **`TYPESAFE_API_KEY`** (pré-análise Jev). A revisão
-  funciona normalmente sem eles; o `houndsman doctor` valida a credencial Jev quando presente.
+- **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
+- **`TYPESAFE_API_KEY`** (Opcional) — Env a ser informada na raiz, usada em pré-analise com JEV
 
 ### 2. Instale o CLI (global)
 
@@ -103,9 +103,6 @@ O skill tem **4 capabilities**, todas em `/houndsman`:
 - Revisão normal: `/houndsman` ou `/houndsman hunt` (a branch é detectada; base default `main`).
 - Revisar outra branch: `/houndsman hunt feature/minha-branch`.
 - Validar e triar na UI: `houndsman server --open` — marque os achados a executar (`execute`).
-- Manual (sem skill): `houndsman context` → `houndsman --base main` → *(subagentes)* →
-  `houndsman --finalize`.
-- CI: `houndsman --finalize --fail-on-blocking` (exit 1 se houver bloqueantes).
 
 ---
 

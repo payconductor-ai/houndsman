@@ -19,6 +19,7 @@ import {
 	type GhRunner,
 	type PrTarget,
 	renderGeneralBody,
+	renderReviewBody,
 	resolvePrTarget,
 	selectSubmitCandidates,
 	submitFindings,
@@ -77,15 +78,6 @@ function stateWith(findings: FindingState[]): FindingsStateFile {
 
 const TARGET: PrTarget = { number: 7, repo: "acme/app", headSha: "abc" };
 
-function okComment(id: number): GhResult {
-	return {
-		ok: true,
-		code: 0,
-		stderr: "",
-		stdout: JSON.stringify({ id, html_url: `https://x/${id}` }),
-	};
-}
-
 /** Runner fake: o handler decide a resposta a partir dos args (os chamados ficam registrados). */
 function fakeRunner(handler: (args: string[]) => GhResult): {
 	runner: GhRunner;
@@ -99,15 +91,131 @@ function fakeRunner(handler: (args: string[]) => GhResult): {
 	return { runner, calls };
 }
 
-/** Respostas por tipo de destino: geral (issues), arquivo (subject_type=file) e linha. */
-function endpointRunner(ids: { line?: number; file?: number; general?: number } = {}): {
+/** Resposta OK do `gh` com um JSON. */
+function okJson(payload: unknown): GhResult {
+	return { ok: true, code: 0, stderr: "", stdout: JSON.stringify(payload) };
+}
+
+type ReviewRunnerOptions = {
+	/** Revisão PENDING já existente. */
+	pending?: { id: string; databaseId: number };
+	/** Erro GraphQL ao consultar/criar a revisão. */
+	lookupError?: string;
+	/** Erro ao adicionar a thread da linha. */
+	threadError?: string;
+	/** Erro ao finalizar a revisão. */
+	submitError?: string;
+	/** Erro no comentário de arquivo (REST). */
+	fileError?: boolean;
+	lineId?: number;
+	fileId?: number;
+	generalId?: number;
+};
+
+/**
+ * Runner fake do `gh`: responde às queries/mutations GraphQL da revisão e aos
+ * endpoints REST de fallback. Os chamados ficam registrados.
+ */
+function reviewRunner(options: ReviewRunnerOptions = {}): {
 	runner: GhRunner;
 	calls: string[][];
 } {
 	return fakeRunner((args) => {
-		if (args[1].includes("/issues/")) return okComment(ids.general ?? 900);
-		if (args.includes("subject_type=file")) return okComment(ids.file ?? 800);
-		return okComment(ids.line ?? 700);
+		if (args[0] === "api" && args[1] === "graphql") {
+			const query =
+				args.find((arg) => arg.startsWith("query="))?.slice("query=".length) ??
+				"";
+			if (query.includes("states: [PENDING]")) {
+				if (options.lookupError) {
+					return okJson({ errors: [{ message: options.lookupError }] });
+				}
+				return okJson({
+					data: {
+						repository: {
+							pullRequest: {
+								id: "PR_1",
+								reviews: {
+									nodes: options.pending
+										? [
+												{
+													id: options.pending.id,
+													databaseId:
+														options.pending.databaseId,
+													resourcePath: `/acme/app/pull/7#pullrequestreview-${options.pending.databaseId}`,
+												},
+											]
+										: [],
+								},
+							},
+						},
+					},
+				});
+			}
+			if (query.includes("addPullRequestReview(input")) {
+				return okJson({
+					data: {
+						addPullRequestReview: {
+							pullRequestReview: {
+								id: "REV_NEW",
+								databaseId: 11,
+								resourcePath: "/acme/app/pull/7#pullrequestreview-11",
+							},
+						},
+					},
+				});
+			}
+			if (query.includes("addPullRequestReviewThread")) {
+				if (options.threadError) {
+					return okJson({ errors: [{ message: options.threadError }] });
+				}
+				const lineId = options.lineId ?? 700;
+				return okJson({
+					data: {
+						addPullRequestReviewThread: {
+							thread: {
+								comments: {
+									nodes: [
+										{
+											databaseId: lineId,
+											resourcePath: `/acme/app/pull/7#discussion_r${lineId}`,
+										},
+									],
+								},
+							},
+						},
+					},
+				});
+			}
+			if (query.includes("submitPullRequestReview")) {
+				if (options.submitError) {
+					return okJson({ errors: [{ message: options.submitError }] });
+				}
+				return okJson({
+					data: {
+						submitPullRequestReview: {
+							pullRequestReview: {
+								id: "REV_NEW",
+								databaseId: 11,
+								state: "COMMENTED",
+							},
+						},
+					},
+				});
+			}
+			return okJson({ errors: [{ message: "mutation desconhecida" }] });
+		}
+		if (args[1]?.includes("/issues/")) {
+			const generalId = options.generalId ?? 900;
+			return okJson({ id: generalId, html_url: `https://x/${generalId}` });
+		}
+		if (args.includes("subject_type=file")) {
+			if (options.fileError) {
+				return { ok: false, code: 422, stderr: "fora do diff", stdout: "" };
+			}
+			const fileId = options.fileId ?? 800;
+			return okJson({ id: fileId, html_url: `https://x/${fileId}` });
+		}
+		return { ok: false, code: 404, stdout: "", stderr: "chamada não esperada" };
 	});
 }
 
@@ -189,6 +297,19 @@ describe("corpo dos comentários", () => {
 		expect(body).toContain("Regra X");
 		expect(body).toContain("src/a.ts");
 	});
+
+	test("renderReviewBody resume as severidades enviadas", () => {
+		const candidates = selectSubmitCandidates(
+			stateWith([
+				finding({ id: "a", severity: "blocking" }),
+				finding({ id: "b", severity: "nit" }),
+			]),
+		);
+		const body = renderReviewBody(candidates);
+		expect(body).toContain("2 achado");
+		expect(body).toContain("blocking");
+		expect(body).toContain("nit");
+	});
 });
 
 describe("resolvePrTarget", () => {
@@ -229,66 +350,120 @@ describe("resolvePrTarget", () => {
 });
 
 describe("submitFindings", () => {
-	test("posta na linha e no arquivo; grava o vínculo", () => {
-		const state = stateWith([finding({ id: "a" }), finding({ id: "c", line: null })]);
-		const { runner } = endpointRunner({ line: 100, file: 150, general: 200 });
+	test("cria a revisão e finaliza com COMMENT", () => {
+		const state = stateWith([finding({ id: "a", severity: "attention" })]);
+		const { runner, calls } = reviewRunner();
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
-		expect(outcome.posted).toHaveLength(2);
-		expect(outcome.failed).toEqual([]);
-		expect(outcome.general).toBeUndefined();
+		expect(outcome.posted).toEqual([
+			{
+				id: "a",
+				kind: "line",
+				commentId: 700,
+				url: "https://github.com/acme/app/pull/7#discussion_r700",
+			},
+		]);
+		expect(outcome.review).toMatchObject({
+			id: 11,
+			created: true,
+			finalized: true,
+			event: "COMMENT",
+		});
 		expect(state.findings.a.github).toMatchObject({
-			commentId: 100,
+			commentId: 700,
 			kind: "line",
 			pr: 7,
 		});
-		expect(state.findings.c.github).toMatchObject({
-			commentId: 150,
-			kind: "file",
-			pr: 7,
+		expect(calls.filter((args) => args[1] === "graphql")).toHaveLength(4);
+	});
+
+	test("cria a revisão e finaliza com REQUEST_CHANGES quando há blocking", () => {
+		const state = stateWith([finding({ id: "a", severity: "blocking" })]);
+		const { runner } = reviewRunner();
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.review?.event).toBe("REQUEST_CHANGES");
+		expect(outcome.review?.finalized).toBe(true);
+	});
+
+	test("adiciona à revisão pendente existente sem finalizar", () => {
+		const state = stateWith([finding({ id: "a" })]);
+		const { runner, calls } = reviewRunner({
+			pending: { id: "REV_OLD", databaseId: 42 },
 		});
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.review).toMatchObject({
+			id: 42,
+			created: false,
+			finalized: false,
+		});
+		expect(outcome.posted[0].kind).toBe("line");
+		expect(state.findings.a.github?.commentId).toBe(700);
+
+		const submitCall = calls.find((args) =>
+			args.some((arg) => arg.includes("submitPullRequestReview")),
+		);
+		expect(submitCall).toBeUndefined();
+		const threadCall = calls.find((args) =>
+			args.some((arg) => arg.includes("addPullRequestReviewThread")),
+		);
+		expect(threadCall).toContain("review=REV_OLD");
 	});
 
 	test("linha fora do diff cai no comentário de arquivo", () => {
 		const state = stateWith([finding({ id: "a" })]);
-		const { runner } = fakeRunner((args) =>
-			args.includes("subject_type=file")
-				? okComment(150)
-				: {
-						ok: false,
-						code: 422,
-						stderr: "line must be part of the diff",
-						stdout: "",
-					},
-		);
+		const { runner } = reviewRunner({ threadError: "line must be part of the diff" });
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
 		expect(outcome.failed).toEqual([]);
 		expect(outcome.general).toBeUndefined();
-		expect(state.findings.a.github).toMatchObject({
-			kind: "file",
-			commentId: 150,
-		});
+		expect(outcome.posted[0]).toMatchObject({ kind: "file", commentId: 800 });
+		expect(state.findings.a.github).toMatchObject({ kind: "file", commentId: 800 });
 	});
 
 	test("o que não cola em linha nem arquivo vai para o comentário geral", () => {
 		const state = stateWith([finding({ id: "a" })]);
-		const { runner } = fakeRunner((args) =>
-			args[1].includes("/issues/")
-				? okComment(200)
-				: { ok: false, code: 422, stderr: "fora do diff", stdout: "" },
-		);
+		const { runner } = reviewRunner({
+			threadError: "fora do diff",
+			fileError: true,
+		});
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
 		expect(outcome.failed).toHaveLength(1);
 		expect(outcome.general?.ids).toEqual(["a"]);
 		expect(state.findings.a.github?.kind).toBe("comment");
-		expect(state.findings.a.github?.commentId).toBe(200);
+		expect(state.findings.a.github?.commentId).toBe(900);
+	});
+
+	test("finding sem linha continua comentário de arquivo, sem revisão", () => {
+		const state = stateWith([finding({ id: "a", line: null })]);
+		const { runner, calls } = reviewRunner();
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.review).toBeUndefined();
+		expect(outcome.posted[0]).toMatchObject({ kind: "file", commentId: 800 });
+		expect(state.findings.a.github?.kind).toBe("file");
+		expect(calls.some((args) => args.includes("subject_type=file"))).toBe(true);
+		expect(calls.some((args) => args[1] === "graphql")).toBe(false);
+	});
+
+	test("mistura linha na revisão e finding sem linha no arquivo", () => {
+		const state = stateWith([finding({ id: "a" }), finding({ id: "c", line: null })]);
+		const { runner } = reviewRunner();
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.review?.created).toBe(true);
+		expect(outcome.posted.map((entry) => entry.kind).sort()).toEqual([
+			"file",
+			"line",
+		]);
+		expect(state.findings.c.github?.kind).toBe("file");
 	});
 
 	test("pula já enviados (sem chamar o gh)", () => {
 		const state = stateWith([finding({ id: "a", commentId: 55 })]);
-		const { runner, calls } = endpointRunner();
+		const { runner, calls } = reviewRunner();
 		const outcome = submitFindings({ state, target: TARGET, runner });
 
 		expect(calls).toHaveLength(0);
@@ -296,25 +471,50 @@ describe("submitFindings", () => {
 		expect(state.findings.a.github?.commentId).toBe(55);
 	});
 
-	test("manda commit_id e side=RIGHT na linha", () => {
+	test("manda path, line e body na thread da revisão", () => {
 		const state = stateWith([finding({ id: "a", line: 9 })]);
-		const { runner, calls } = endpointRunner({ line: 100 });
+		const { runner, calls } = reviewRunner({
+			pending: { id: "REV_OLD", databaseId: 42 },
+		});
 		submitFindings({ state, target: TARGET, runner });
 
-		const line = calls[0];
-		expect(line).toContain("line=9");
-		expect(line).toContain("side=RIGHT");
-		expect(line).toContain("commit_id=abc");
-		expect(line).toContain("path=src/a.ts");
+		const thread = calls.find((args) =>
+			args.some((arg) => arg.includes("addPullRequestReviewThread")),
+		);
+		expect(thread).toContain("path=src/a.ts");
+		expect(thread).toContain("line=9");
+		expect(thread).toContain("review=REV_OLD");
+		expect(thread?.some((arg) => arg.startsWith("body="))).toBe(true);
 	});
 
-	test("finding sem linha usa subject_type=file", () => {
-		const state = stateWith([finding({ id: "a", line: null })]);
-		const { runner, calls } = endpointRunner({ file: 150 });
-		submitFindings({ state, target: TARGET, runner });
+	test("falha ao finalizar reporta o erro e mantém o vínculo", () => {
+		const state = stateWith([finding({ id: "a" })]);
+		const { runner } = reviewRunner({
+			submitError: "review não pode ser submetida",
+		});
+		const outcome = submitFindings({ state, target: TARGET, runner });
 
-		expect(calls[0]).toContain("subject_type=file");
-		expect(calls[0]).not.toContain("side=RIGHT");
-		expect(state.findings.a.github?.kind).toBe("file");
+		expect(outcome.review).toMatchObject({
+			created: true,
+			finalized: false,
+			error: "review não pode ser submetida",
+		});
+		expect(state.findings.a.github?.commentId).toBe(700);
+	});
+
+	test("falha no lookup da revisão não volta a comentários soltos", () => {
+		const state = stateWith([finding({ id: "a" })]);
+		const { runner, calls } = reviewRunner({ lookupError: "sem permissão" });
+		const outcome = submitFindings({ state, target: TARGET, runner });
+
+		expect(outcome.posted).toEqual([]);
+		expect(outcome.general).toBeUndefined();
+		expect(outcome.failed).toEqual([{ id: "a", reason: "sem permissão" }]);
+		expect(outcome.review).toMatchObject({
+			created: false,
+			finalized: false,
+			error: "sem permissão",
+		});
+		expect(calls.some((args) => args.includes("subject_type=file"))).toBe(false);
 	});
 });
