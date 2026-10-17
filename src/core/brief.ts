@@ -160,6 +160,61 @@ function deltaLines(delta: AstDelta): string[] {
 }
 
 /**
+ * Plano de revisão sugerido por IA — complementa (nunca substitui) as regras.
+ */
+function aiPlanSection(args: WatchdogRenderArgs): string[] {
+	const plan = args.aiPlan;
+	if (!plan) return [];
+	const focus = plan.focus ?? [];
+	const questions = plan.questions ?? [];
+	const risks = plan.risks ?? [];
+	const logic = plan.logic ?? [];
+	const domain = plan.domain ?? [];
+	if (
+		focus.length === 0 &&
+		questions.length === 0 &&
+		risks.length === 0 &&
+		logic.length === 0 &&
+		domain.length === 0
+	) {
+		return [];
+	}
+	const lines = [
+		"## Plano de revisão (IA) — sugestão",
+		"",
+		"> Sugestão automática para orientar a leitura. **Não** substitui as regras",
+		"> do watchdog nem dispensa confirmar cada violação no código.",
+		"",
+	];
+	if (focus.length > 0) {
+		lines.push("**Foco de leitura:**", "");
+		for (const item of focus.slice(0, 5)) lines.push(`- ${item}`);
+		lines.push("");
+	}
+	if (questions.length > 0) {
+		lines.push("**Perguntas de verificação:**", "");
+		for (const item of questions.slice(0, 3)) lines.push(`- ${item}`);
+		lines.push("");
+	}
+	if (risks.length > 0) {
+		lines.push("**Riscos prováveis:**", "");
+		for (const item of risks.slice(0, 3)) lines.push(`- ${item}`);
+		lines.push("");
+	}
+	if (logic.length > 0) {
+		lines.push("**Consistência lógica:**", "");
+		for (const item of logic.slice(0, 3)) lines.push(`- ${item}`);
+		lines.push("");
+	}
+	if (domain.length > 0) {
+		lines.push("**Domínio de negócio:**", "");
+		for (const item of domain.slice(0, 3)) lines.push(`- ${item}`);
+		lines.push("");
+	}
+	return lines;
+}
+
+/**
  * Estrutura/delta dos arquivos do watchdog (AST). É um mapa para orientar a
  * leitura — o watchdog confirma no código e não trata como achado.
  */
@@ -220,6 +275,7 @@ export function defaultRenderBrief(
 
 	if (args.context) lines.push(...renderBriefContext(args.context));
 
+	lines.push(...aiPlanSection(args));
 	lines.push(...astSection(args));
 	lines.push(...optionalList("Prioridade de leitura", def.reviewFocus));
 	lines.push(

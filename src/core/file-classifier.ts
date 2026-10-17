@@ -90,6 +90,13 @@ export function isExcludedPath(filePath: string, patterns: readonly RegExp[]): b
 	return patterns.some((pattern) => pattern.test(filePath));
 }
 
+/** Id do watchdog de último recurso (primeiro declarado), se houver. */
+export function fallbackWatchdogId<TId extends string>(
+	config: HoundsmanConfig<TId>,
+): TId | undefined {
+	return config.watchdogIds.find((id) => config.watchdogs[id]?.fallback === true);
+}
+
 // ---------------------------------------------------------------------------
 // Parsing de `git diff --name-status`
 // ---------------------------------------------------------------------------
@@ -151,6 +158,8 @@ export function classifyEntries<TId extends string>(
 	const unclassified: string[] = [];
 	const excluded: string[] = [];
 	const deleted: string[] = [];
+	// Watchdog de último recurso: cobre apenas arquivos sem outro dono.
+	const fallbackId = fallbackWatchdogId(config);
 	// Leitura de conteúdo só é habilitada se algum watchdog declarar regra `content`.
 	const needsContent = hasContentRules(config.watchdogs, config.watchdogIds);
 
@@ -171,16 +180,22 @@ export function classifyEntries<TId extends string>(
 
 		const content = needsContent ? readFileContent(path) : undefined;
 		const facts = astFacts?.get(path);
-		const ids: string[] = matchWatchdogs(
+		const matched = matchWatchdogs(
 			path,
 			config.watchdogs,
 			config.watchdogIds,
 			content,
 			facts,
 		);
+		const ids = fallbackId ? matched.filter((id) => id !== fallbackId) : matched;
 
 		if (ids.length === 0) {
-			unclassified.push(path);
+			if (fallbackId) {
+				watchdogFiles[fallbackId] ??= [];
+				watchdogFiles[fallbackId].push(path);
+			} else {
+				unclassified.push(path);
+			}
 			continue;
 		}
 

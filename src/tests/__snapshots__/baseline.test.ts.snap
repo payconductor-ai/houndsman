@@ -188,6 +188,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1
   ".houndsman/core/types.ts",
   ".houndsman/doc-mappings.ts",
   ".houndsman/exclusions.ts",
+  ".houndsman/watchdogs/default.ts",
   ".houndsman/watchdogs/example.ts",
   ".houndsman/watchdogs/index.ts",
   "houndsman.config.ts",
@@ -334,6 +335,16 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
+	hints?: RuleHints;
+};
+
+/** Sinais opcionais de uma regra (símbolos, imports, decorators, paths, checks). */
+export type RuleHints = {
+	symbols?: string[];
+	imports?: string[];
+	decorators?: string[];
+	paths?: string[];
+	checks?: string[];
 };
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
@@ -355,6 +366,10 @@ export type WatchdogDefinition = WatchdogMeta & {
 	id: string;
 	description: string;
 	breakingChange?: boolean;
+	/** Só assume arquivos que nenhum outro watchdog casou. */
+	fallback?: boolean;
+	/** Permite findings emergentes (Lógica:/Domínio:) fora das regras. */
+	allowEmergentFindings?: boolean;
 	reviewFocus?: readonly string[];
 	exclude?: readonly string[];
 };
@@ -405,6 +420,42 @@ export type HoundsmanAst = {
 	aliases?: Record<string, string>;
 };
 
+/** Providers suportados pela camada de IA. */
+export type AiProviderKind = "deepseek" | "openai" | "anthropic";
+
+/** Features de IA do fluxo normal (todas fail-open). */
+export type HoundsmanAiFeatures = {
+	context?: boolean;
+	brief?: boolean;
+	classification?: boolean;
+	preAnalysis?: boolean;
+	verify?: boolean;
+};
+
+/** Overrides de IA por watchdog. */
+export type HoundsmanAiWatchdog = {
+	model?: string;
+	maxSteps?: number;
+	maxOutputTokens?: number;
+};
+
+/** Configuração da camada de IA (briefs, contexto, classificação e hunt nativo). */
+export type HoundsmanAi = {
+	enabled?: boolean;
+	provider?: AiProviderKind;
+	model?: string;
+	baseURL?: string;
+	concurrency?: number;
+	maxSteps?: number;
+	maxOutputTokens?: number;
+	temperature?: number;
+	timeoutMs?: number;
+	maxCallsPerReview?: number;
+	maxTokensPerReview?: number;
+	features?: HoundsmanAiFeatures;
+	watchdogs?: Record<string, HoundsmanAiWatchdog>;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -417,6 +468,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	budgets?: HoundsmanBudgets;
 	concurrency?: HoundsmanConcurrency;
 	ast?: HoundsmanAst;
+	ai?: HoundsmanAi;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
@@ -471,8 +523,8 @@ export const exampleWatchdog = defineWatchdog({
 	id: "example",
 	name: "Exemplo",
 	description: "Watchdog de exemplo — descreva o propósito em uma frase.",
-	scope: "Todo o repositório (ajuste o escopo)",
-	classify: [{ value: "^src/" }],
+	scope: "src/example/** (ajuste o escopo)",
+	classify: [{ value: "^src/example/" }],
 	rules: [
 		{
 			severity: "attention",
@@ -489,13 +541,15 @@ export const exampleWatchdog = defineWatchdog({
 "
 ,
   ".houndsman/watchdogs/index.ts": 
-"import { exampleWatchdog } from "./example";
+"import { defaultWatchdog } from "./default";
+import { exampleWatchdog } from "./example";
 
 /**
  * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
  * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
  */
 export const WATCHDOG_DEFINITIONS = {
+	default: defaultWatchdog,
 	example: exampleWatchdog,
 };
 
@@ -536,7 +590,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "06aedccd5688aaa8",
+    "sha256": "94ea2b8def871784",
   },
   {
     "file": ".houndsman/core/skill/README.md",
@@ -544,7 +598,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "c8b680c9b35e9b97",
+    "sha256": "7c70fbaff3fc3d5c",
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
@@ -556,7 +610,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "430570cba2b90699",
+    "sha256": "b55507d62d3c1fcd",
   },
   {
     "file": ".houndsman/core/skill/train.md",

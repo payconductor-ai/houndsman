@@ -106,10 +106,22 @@ export class ReviewWorkArea {
 		writeFileSync(this.briefFile(id), content);
 	}
 
+	/** Grava o relatório JSON de um watchdog (staging dos subagentes). */
+	writeFinding(id: string, content: string): void {
+		mkdirSync(this.findingsDir, { recursive: true });
+		writeFileSync(this.findingFile(id), content);
+	}
+
 	writeContext(context: unknown, brief: string): void {
 		mkdirSync(this.root, { recursive: true });
 		writeFileSync(this.contextPaths.context, `${JSON.stringify(context, null, 2)}\n`);
 		writeFileSync(this.contextPaths.brief, `${brief}\n`);
+	}
+
+	/** Grava o resumo do contexto (gerado pelo subagente ou pela IA). */
+	writeContextSummary(summary: unknown): void {
+		mkdirSync(this.root, { recursive: true });
+		writeFileSync(this.contextPaths.summary, `${JSON.stringify(summary, null, 2)}\n`);
 	}
 
 	/** Finds brutos gravados pelos subagentes (um JSON por watchdog). */

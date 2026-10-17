@@ -16,6 +16,13 @@
  * review.<watchdog>.md, context e context-summary.
  */
 
+import { readFileSync } from "node:fs";
+import type { AiClient } from "./ai/ai-client";
+import { AiBriefEnricher } from "./ai/features/brief-enricher";
+import { AiClassifier } from "./ai/features/classifier";
+import { AiContextSummarizer } from "./ai/features/context-summarizer";
+import { AiPreAnalyzer } from "./ai/features/pre-analyzer";
+import type { BriefPlan } from "./ai/schemas";
 import type { AstService } from "./ast/service";
 import type { AstAnalysis, AstFileBrief, AstImpact } from "./ast/types";
 import {
@@ -52,7 +59,11 @@ import {
 import { currentBranch } from "./pr-context";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
-import { type ManifestAst, ManifestWriter } from "./renderers/manifest-writer";
+import {
+	type ManifestAi,
+	type ManifestAst,
+	ManifestWriter,
+} from "./renderers/manifest-writer";
 import { ReportRenderer } from "./renderers/report-renderer";
 import { renderReviewResume } from "./renderers/resume-renderer";
 import {
@@ -82,6 +93,8 @@ export type ReviewOptions = {
 	noAst: boolean;
 	/** Força review completo (ignora o modo incremental). */
 	full: boolean;
+	/** Desativa as features de IA do fluxo normal (hunt não usa esta flag). */
+	noAi: boolean;
 };
 
 /** Valores default das opções (o CLI sobrepõe com as flags). */
@@ -95,6 +108,7 @@ export function defaultOptions(): ReviewOptions {
 		noJev: false,
 		noAst: false,
 		full: false,
+		noAi: false,
 	};
 }
 
@@ -156,6 +170,7 @@ function writeManifest(
 	pending: string[],
 	jev: JevCandidatesFile,
 	ast?: ManifestAst,
+	ai?: ManifestAi,
 ): void {
 	new ManifestWriter(
 		ctx.storage,
@@ -163,7 +178,7 @@ function writeManifest(
 		ctx.work,
 		new ProjectConfig(config),
 		opts,
-	).write(classification, activeIds, pending, jev, ast);
+	).write(classification, activeIds, pending, jev, ast, ai);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +195,7 @@ function writeBriefs(
 	config: HoundsmanConfig,
 	astAnalyses?: ReadonlyMap<string, AstAnalysis>,
 	astImpact?: AstImpact,
+	aiPlans?: ReadonlyMap<string, BriefPlan>,
 ): void {
 	const work = ctx.work;
 	const docs = discoverDocs(Object.keys(classification.files), config);
@@ -214,6 +230,7 @@ function writeBriefs(
 			context,
 			candidates: candidates.filter((c) => c.watchdogId === id),
 			ast: astFiles,
+			aiPlan: aiPlans?.get(id),
 		});
 		const content = `${brief}\n`;
 		work.writeBrief(id, content);
@@ -240,6 +257,7 @@ async function resolveCandidates(
 	ctx: ReviewContext,
 	config: HoundsmanConfig,
 	diff: DiffSource,
+	ai?: AiClient,
 ): Promise<JevCandidatesFile> {
 	const save = (data: JevCandidatesFile): JevCandidatesFile => {
 		ctx.storage.writeArtifact(ctx.review.id, {
@@ -249,6 +267,37 @@ async function resolveCandidates(
 		});
 		return data;
 	};
+
+	// Pré-análise por IA (opcional) tem precedência sobre o Jev.
+	if (ai && !opts.noAi) {
+		const analyzer = new AiPreAnalyzer(ai);
+		if (analyzer.enabled) {
+			const candidates: JevCandidate[] = [];
+			for (const [id, files] of Object.entries(classification.watchdogs)) {
+				const def = findWatchdog(config, id);
+				if (!def) continue;
+				const inputs = files.slice(0, 5).flatMap((file) => {
+					const snippet = readSnippet(file);
+					return snippet ? [{ file, snippet }] : [];
+				});
+				candidates.push(
+					...(await analyzer.analyze({
+						watchdogId: id,
+						name: def.name,
+						rules: def.rules,
+						files: inputs,
+					})),
+				);
+			}
+			return save({
+				available: true,
+				model: ai.modelId,
+				threshold: JevCandidatesStore.THRESHOLD,
+				analyzedFiles: Object.values(classification.watchdogs).flat().length,
+				candidates,
+			});
+		}
+	}
 
 	if (opts.noJev) {
 		return save(JevCandidatesStore.unavailable("desativado (--no-jev)"));
@@ -327,8 +376,121 @@ function budgetMessage(
 	];
 }
 
+/** Primeiras 80 linhas de um arquivo (pré-análise por IA; fail-open). */
+function readSnippet(file: string): string | null {
+	try {
+		return readFileSync(file, "utf8").split("\n").slice(0, 80).join("\n");
+	} catch {
+		return null;
+	}
+}
+
 /** Resultado do prepare — mensagens para o CLI imprimir. */
 export type PrepareResult = { messages: string[] };
+
+/**
+ * Classificação fallback por IA (opcional): atribui arquivos não classificados
+ * a watchdogs conhecidos. Fail-open — falha mantém `unclassified`.
+ */
+async function applyAiClassification(
+	classification: RunClassification,
+	config: HoundsmanConfig,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+): Promise<void> {
+	if (!ai || opts.noAi || classification.unclassified.length === 0) return;
+	const classifier = new AiClassifier(ai);
+	if (!classifier.enabled) return;
+	const watchdogs = config.watchdogIds.flatMap((id) => {
+		const def = config.watchdogs[id];
+		return def ? [{ id, name: def.name, scope: def.scope }] : [];
+	});
+	const assignments = await classifier.classify(classification.unclassified, watchdogs);
+	if (assignments.size === 0) return;
+	for (const [file, id] of assignments) {
+		const list = classification.watchdogs[id] ?? [];
+		if (!list.includes(file)) list.push(file);
+		classification.watchdogs[id] = list;
+		classification.stats[id] = list.length;
+	}
+	classification.unclassified = classification.unclassified.filter(
+		(file) => !assignments.has(file),
+	);
+}
+
+/**
+ * Resumo do contexto da PR: usa o do subagente ou, na ausência, a IA
+ * (`AiContextSummarizer`). Grava o artefato e o staging.
+ */
+async function resolveContextSummary(
+	ctx: ReviewContext,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+): Promise<ContextSummary | null> {
+	const existing = ctx.work.readContextSummary() ?? readPersistedContextSummary(ctx);
+	if (existing) return existing;
+	if (!ai || opts.noAi) return null;
+	const raw = ctx.work.readContextRaw();
+	if (!raw) return null;
+	const summary = await new AiContextSummarizer(ai).summarize(raw);
+	if (!summary) return null;
+	ctx.work.writeContextSummary(summary);
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: "context-summary.json",
+		kind: "context-summary",
+		content: `${JSON.stringify(summary, null, 2)}\n`,
+	});
+	return summary;
+}
+
+/**
+ * Planos de revisão por watchdog (uma chamada por brief, concorrência
+ * limitada). Sem IA/chave/feature, devolve mapa vazio e o brief fica igual.
+ */
+async function buildAiPlans(
+	activeIds: string[],
+	classification: ClassificationResult,
+	config: HoundsmanConfig,
+	context: ContextSummary | null,
+	astAnalyses: ReadonlyMap<string, AstAnalysis> | undefined,
+	astImpact: AstImpact | undefined,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+): Promise<Map<string, BriefPlan>> {
+	const plans = new Map<string, BriefPlan>();
+	if (!ai || opts.noAi) return plans;
+	const enricher = new AiBriefEnricher(ai);
+	if (!enricher.enabled) return plans;
+
+	const docs = discoverDocs(Object.keys(classification.files), config);
+	const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
+	const inputs = [];
+	for (const id of activeIds) {
+		const def = findWatchdog(config, id);
+		if (!def) continue;
+		const { selected } = budgetFor(classification, id, maxFilesPerBrief);
+		const astFiles: AstFileBrief[] = selected.flatMap((file) => {
+			const analysis = astAnalyses?.get(file);
+			if (!analysis?.delta) return [];
+			return [
+				{ file, delta: analysis.delta, importers: astImpact?.importers[file] },
+			];
+		});
+		inputs.push({
+			watchdogId: id,
+			name: def.name,
+			description: def.description,
+			scope: def.scope,
+			rules: def.rules,
+			files: selected,
+			churn: classification.churn,
+			context,
+			ast: astFiles,
+			docs,
+		});
+	}
+	return enricher.enrichAll(inputs);
+}
 
 /** Passo 1 — descobre os arquivos e grava briefs + manifesto. */
 export async function prepare(
@@ -337,6 +499,7 @@ export async function prepare(
 	config: HoundsmanConfig,
 	ctx: ReviewContext,
 	ast?: AstService,
+	ai?: AiClient,
 ): Promise<PrepareResult> {
 	const messages: string[] = [];
 	ctx.work.ensure();
@@ -377,6 +540,7 @@ export async function prepare(
 	});
 
 	const { classification, diff } = scope;
+	await applyAiClassification(classification, config, ai, opts);
 	ctx.storage.writeArtifact(ctx.review.id, {
 		name: "classification.json",
 		kind: "classification",
@@ -413,7 +577,7 @@ export async function prepare(
 		}
 	}
 
-	const jev = await resolveCandidates(opts, classification, ctx, config, diff);
+	const jev = await resolveCandidates(opts, classification, ctx, config, diff, ai);
 
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
@@ -438,8 +602,8 @@ export async function prepare(
 		);
 	}
 
-	const context = ctx.work.readContextSummary() ?? readPersistedContextSummary(ctx);
 	persistContext(ctx);
+	const context = await resolveContextSummary(ctx, ai, opts);
 
 	const manifestAst: ManifestAst | undefined = astAnalyses
 		? {
@@ -460,6 +624,44 @@ export async function prepare(
 			}
 		: undefined;
 
+	const aiPlans = await buildAiPlans(
+		activeIds,
+		classification,
+		config,
+		context,
+		astAnalyses,
+		astImpact,
+		ai,
+		opts,
+	);
+	if (aiPlans.size > 0) {
+		ctx.storage.writeArtifact(ctx.review.id, {
+			name: "ai-briefs.json",
+			kind: "ai-brief",
+			content: `${JSON.stringify(
+				{ plans: Object.fromEntries(aiPlans) },
+				null,
+				2,
+			)}\n`,
+		});
+	}
+	const aiUsage = ai?.recorder.total;
+	const manifestAi: ManifestAi | undefined =
+		ai && !opts.noAi && (aiPlans.size > 0 || (aiUsage?.calls ?? 0) > 0)
+			? {
+					enabled: true,
+					provider: ai.projectConfig.aiProvider,
+					model: ai.modelId,
+					briefPlans: aiPlans.size,
+					usage: aiUsage ?? {
+						inputTokens: 0,
+						outputTokens: 0,
+						totalTokens: 0,
+						calls: 0,
+					},
+				}
+			: undefined;
+
 	writeBriefs(
 		activeIds,
 		classification,
@@ -470,6 +672,7 @@ export async function prepare(
 		config,
 		astAnalyses,
 		astImpact,
+		aiPlans,
 	);
 	writeManifest(
 		ctx,
@@ -480,6 +683,7 @@ export async function prepare(
 		activeIds,
 		jev,
 		manifestAst,
+		manifestAi,
 	);
 
 	messages.push(
@@ -502,6 +706,17 @@ export async function prepare(
 		messages.push(
 			"Sem contexto da PR (rode `bun run houndsman context` antes, se houver PR).",
 		);
+	}
+	if (aiPlans.size > 0) {
+		messages.push(
+			`IA: plano de revisão em ${aiPlans.size} brief(s) (sugestão, não substitui regras).`,
+		);
+	}
+	if (aiUsage && aiUsage.calls > 0) {
+		messages.push(
+			`IA: ${aiUsage.calls} chamada(s), ${aiUsage.totalTokens} token(s).`,
+		);
+		ai?.recorder.write(ctx.storage, ctx.review.id);
 	}
 
 	messages.push(
@@ -542,6 +757,24 @@ function persistContext(ctx: ReviewContext): void {
 // ---------------------------------------------------------------------------
 // Passo 2 — finalizar
 // ---------------------------------------------------------------------------
+
+/** Reaproveita `ast`/`ai` do manifesto anterior (o finalize não os recalcula). */
+function readManifestExtras(ctx: ReviewContext): {
+	ast?: ManifestAst;
+	ai?: ManifestAi;
+} {
+	const artifact = ctx.storage.readArtifact(ctx.review.id, "manifest.json");
+	if (!artifact) return {};
+	try {
+		const parsed = JSON.parse(artifact.content) as {
+			ast?: ManifestAst;
+			ai?: ManifestAi;
+		};
+		return { ast: parsed.ast, ai: parsed.ai };
+	} catch {
+		return {};
+	}
+}
 
 /** Lê o `classification.json` persistido pelo prepare (lança se ausente). */
 function readClassification(ctx: ReviewContext): RunClassification {
@@ -666,7 +899,18 @@ export function finalize(
 	const { reports, pending, warnings } = ctx.work.readFindings(activeIds);
 	messages.push(...warnings);
 	const jev = readCandidates(ctx, config);
-	writeManifest(ctx, config, opts, classification, activeIds, pending, jev);
+	const extras = readManifestExtras(ctx);
+	writeManifest(
+		ctx,
+		config,
+		opts,
+		classification,
+		activeIds,
+		pending,
+		jev,
+		extras.ast,
+		extras.ai,
+	);
 
 	if (pending.length > 0) {
 		throw new Error(

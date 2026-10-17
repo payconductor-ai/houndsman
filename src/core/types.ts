@@ -6,6 +6,7 @@
  * `Rule` e `WatchdogMeta` descrevem as regras consumidas pela renderização.
  */
 
+import type { BriefPlan } from "./ai/schemas";
 import type { AstFileBrief } from "./ast/types";
 import type { JevRuleSpec } from "./jev/jev-types";
 
@@ -29,6 +30,19 @@ export const SEVERITY_EMOJI: Record<Severity, string> = {
 };
 
 /**
+ * Sinais opcionais de uma regra: ajudam o `RuleAnalyzer` a transformar texto
+ * em checagens concretas (símbolos, imports, decorators, paths e tools).
+ */
+export type RuleHints = {
+	symbols?: string[];
+	imports?: string[];
+	decorators?: string[];
+	paths?: string[];
+	/** Nomes de tools sugeridos (ex.: `symbol_context`). */
+	checks?: string[];
+};
+
+/**
  * Regra do watchdog: severidade + texto. O texto declara a polaridade de forma
  * explícita — `Promover:` (algo que DEVE acontecer) ou `Evitar:`/`Não`/`Nunca`
  * (algo que NÃO DEVE acontecer).
@@ -40,6 +54,7 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
+	hints?: RuleHints;
 };
 
 /**
@@ -125,6 +140,8 @@ export type WatchdogRenderArgs = {
 	candidates?: readonly WatchdogRenderCandidate[];
 	/** Estrutura/delta dos arquivos selecionados (AST). */
 	ast?: readonly AstFileBrief[];
+	/** Plano de revisão sugerido por IA (nunca substitui as regras). */
+	aiPlan?: BriefPlan;
 };
 
 /** Definição completa de um watchdog — 1 por arquivo em `project/watchdogs/`. */
@@ -135,6 +152,16 @@ export type WatchdogDefinition = WatchdogMeta & {
 	description: string;
 	/** Watchdog deve checar breaking change em arquivos deletados do seu domínio. */
 	breakingChange?: boolean;
+	/**
+	 * Watchdog de último recurso: só assume arquivos que nenhum outro casou.
+	 * Útil para padrões gerais/lógica; `classify` é ignorado.
+	 */
+	fallback?: boolean;
+	/**
+	 * Permite findings emergentes (`Lógica:`/`Domínio:`) fora das regras
+	 * explícitas. Exige evidência e severidade máxima `attention`.
+	 */
+	allowEmergentFindings?: boolean;
 	/** Prioridade de arquivos/paths (ex-`O Que Revisar`). Opcional. */
 	reviewFocus?: readonly string[];
 	/** O que NUNCA carregar/enviar (ex-`NÃO carregar`). Opcional. */

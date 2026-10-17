@@ -5,6 +5,25 @@
  * (`houndsman.config.ts`): watchdogs, tipos e helpers de autoria.
  */
 
+export type {
+	AiResult,
+	AiTool,
+	AiUsage,
+	ModelProvider,
+	ModelRequest,
+	ModelResponse,
+} from "./core/ai";
+export {
+	AiBriefEnricher,
+	AiClassifier,
+	AiClient,
+	AiContextSummarizer,
+	AiPreAnalyzer,
+	AiUsageBudget,
+	AiUsageRecorder,
+	AiVerifier,
+	ModelFactory,
+} from "./core/ai";
 export { ArgParser } from "./core/arg-parser";
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
 export { computeDelta, emptyDelta, parseHunks } from "./core/ast/diff";
@@ -29,6 +48,9 @@ export type { FindingsCommandResult } from "./core/commands/findings";
 export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export { ProjectScaffolder } from "./core/commands/scaffold";
 export type {
+	AiProviderKind,
+	HoundsmanAi,
+	HoundsmanAiFeatures,
 	HoundsmanAst,
 	HoundsmanBudgets,
 	HoundsmanConcurrency,
@@ -181,6 +203,7 @@ export type {
 	FileStatus,
 	FileStatusMap,
 	Rule,
+	RuleHints,
 	Severity,
 	WatchdogDefinition,
 	WatchdogMeta,
@@ -194,6 +217,7 @@ export {
 	SEVERITY_ORDER,
 	severityRank,
 } from "./core/types";
+export { applyConfidence, applyJev, summarizeVerify, verifyLocal } from "./core/verify";
 export {
 	findWatchdog,
 	getWatchdog,

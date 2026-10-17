@@ -6,8 +6,22 @@
  * O contrato do consumidor (`houndsman.config.ts`) não muda.
  */
 
-import type { HoundsmanAst, HoundsmanConfig, HoundsmanStorage } from "./config";
+import type {
+	AiProviderKind,
+	HoundsmanAi,
+	HoundsmanAiFeatures,
+	HoundsmanAst,
+	HoundsmanConfig,
+	HoundsmanStorage,
+} from "./config";
 import {
+	DEFAULT_AI_CONCURRENCY,
+	DEFAULT_AI_MAX_CALLS_PER_REVIEW,
+	DEFAULT_AI_MAX_OUTPUT_TOKENS,
+	DEFAULT_AI_MAX_STEPS,
+	DEFAULT_AI_MODEL,
+	DEFAULT_AI_PROVIDER,
+	DEFAULT_AI_TIMEOUT_MS,
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
 	DEFAULT_AST_MAX_FILE_BYTES,
 	DEFAULT_AST_MAX_IMPACT_FILES,
@@ -75,4 +89,90 @@ export class ProjectConfig<TId extends string = string> {
 	get docMappings(): readonly (readonly [RegExp, readonly string[]])[] {
 		return this.raw.docMappings;
 	}
+
+	/** Config de IA (objeto vazio quando ausente). */
+	get ai(): HoundsmanAi {
+		return this.raw.ai ?? {};
+	}
+
+	/** IA habilitada (default: ligada; sem chave é fail-open). */
+	get aiEnabled(): boolean {
+		return this.ai.enabled !== false;
+	}
+
+	get aiProvider(): AiProviderKind {
+		return this.ai.provider ?? DEFAULT_AI_PROVIDER;
+	}
+
+	get aiModel(): string {
+		const value = this.ai.model?.trim();
+		return value && value.length > 0 ? value : DEFAULT_AI_MODEL;
+	}
+
+	get aiConcurrency(): number {
+		return positive(this.ai.concurrency, DEFAULT_AI_CONCURRENCY);
+	}
+
+	get aiMaxSteps(): number {
+		return positive(this.ai.maxSteps, DEFAULT_AI_MAX_STEPS);
+	}
+
+	get aiMaxOutputTokens(): number {
+		return positive(this.ai.maxOutputTokens, DEFAULT_AI_MAX_OUTPUT_TOKENS);
+	}
+
+	get aiTemperature(): number {
+		const value = this.ai.temperature;
+		return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	}
+
+	get aiTimeoutMs(): number {
+		return positive(this.ai.timeoutMs, DEFAULT_AI_TIMEOUT_MS);
+	}
+
+	get aiMaxCallsPerReview(): number {
+		return positive(this.ai.maxCallsPerReview, DEFAULT_AI_MAX_CALLS_PER_REVIEW);
+	}
+
+	/** Teto de tokens por review (0/ausente = sem teto). */
+	get aiMaxTokensPerReview(): number | undefined {
+		const value = this.ai.maxTokensPerReview;
+		return value !== undefined && value > 0 ? value : undefined;
+	}
+
+	/** Features resolvidas com defaults (`context`/`brief` ligadas). */
+	get aiFeatures(): Required<HoundsmanAiFeatures> {
+		const features = this.ai.features ?? {};
+		return {
+			context: features.context !== false,
+			brief: features.brief !== false,
+			classification: features.classification === true,
+			preAnalysis: features.preAnalysis === true,
+			verify: features.verify === true,
+		};
+	}
+
+	/** Modelo efetivo de um watchdog (override por watchdog ou global). */
+	aiModelFor(watchdogId: string): string {
+		const override = this.ai.watchdogs?.[watchdogId]?.model?.trim();
+		return override && override.length > 0 ? override : this.aiModel;
+	}
+
+	/** Passos efetivos de um watchdog (override por watchdog ou global). */
+	aiMaxStepsFor(watchdogId: string): number {
+		return positive(this.ai.watchdogs?.[watchdogId]?.maxSteps, this.aiMaxSteps);
+	}
+
+	/** Tokens de saída efetivos de um watchdog. */
+	aiMaxOutputTokensFor(watchdogId: string): number {
+		return positive(
+			this.ai.watchdogs?.[watchdogId]?.maxOutputTokens,
+			this.aiMaxOutputTokens,
+		);
+	}
+}
+
+/** Inteiro positivo ou o default. */
+function positive(value: number | undefined, fallback: number): number {
+	return value !== undefined && Number.isFinite(value) && value > 0 ? value : fallback;
 }

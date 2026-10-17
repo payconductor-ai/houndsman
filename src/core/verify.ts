@@ -25,8 +25,8 @@ import type { Severity } from "./types";
 /** Resultado da verificação de um finding. */
 export type VerifyStatus = "resolved" | "persisting" | "uncertain" | "file-missing";
 
-/** Mecanismo que decidiu o status (reancoragem local ou LLM). */
-export type VerifyBasis = "anchor" | "jev";
+/** Mecanismo que decidiu o status (reancoragem local, Jev ou IA). */
+export type VerifyBasis = "anchor" | "jev" | "ai";
 
 /** Valores canônicos de status (ordem de exibição). */
 export const VERIFY_STATUSES: readonly VerifyStatus[] = [
@@ -121,26 +121,38 @@ export function verifyLocal(
 }
 
 /**
- * Tier 1 — aplica a confirmação do Jev aos casos ambíguos.
+ * Tier 1 genérico — aplica confirmações externas (Jev ou IA) aos casos ambíguos.
  * `confidence[id] >= threshold` ⇒ a violação persiste; abaixo ⇒ resolvida.
  * Ids sem resposta mantêm o provisório local (fail-open). Devolve o nº aplicado.
+ *
+ * `basis` identifica a fonte da decisão (`jev` ou `ai`).
  */
-export function applyJev(
+export function applyConfidence(
 	entries: VerifyEntry[],
 	confidence: Map<string, number>,
 	threshold: number,
+	basis: VerifyBasis = "jev",
 ): number {
 	let applied = 0;
 	for (const entry of entries) {
 		if (!entry.ambiguous) continue;
 		const value = confidence.get(entry.id);
 		if (value === undefined) continue;
-		entry.basis = "jev";
+		entry.basis = basis;
 		entry.confidence = value;
 		entry.status = value >= threshold ? "persisting" : "resolved";
 		applied++;
 	}
 	return applied;
+}
+
+/** Compatibilidade: confirmação via Jev. */
+export function applyJev(
+	entries: VerifyEntry[],
+	confidence: Map<string, number>,
+	threshold: number,
+): number {
+	return applyConfidence(entries, confidence, threshold, "jev");
 }
 
 export type VerifySummary = Record<VerifyStatus, number>;

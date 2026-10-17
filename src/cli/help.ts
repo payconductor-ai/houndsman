@@ -5,6 +5,7 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
+  hunt                Revisão nativa com IA (harness próprio): prepare + agentes + finalize
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
   server              Sobe a UI local de triagem (--port, --host, --open)
@@ -23,7 +24,14 @@ Flags:
   --full              Força review completo (ignora o modo incremental)
   --no-jev            Desativa a pré-análise Jev
   --no-ast            Desativa a análise estrutural (tree-sitter)
+  --no-ai             Desativa as features de IA do fluxo normal
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
+
+Flags do hunt:
+  --base <b> · --head <ref> · --branch <nome> · --watchdog <id>
+  --full · --clean · --no-ast · --with-jev
+  --resume · --allow-partial · --dry-run · --fail-on-blocking
+  --max-calls <n> · --concurrency <n> · --provider <p> · --model <m>
 
 Flags de findings:
   --decision <d>      pending | execute | ignore
@@ -42,6 +50,7 @@ Flags de findings:
   --fail-on-persisting (verify) Exit 1 se algum blocking persistir
   --include-sent      (submit) Reenvia findings já enviados à PR
   --dry-run           (submit) Só a prévia do envio, sem postar
+  --no-ping           (doctor) Pula a validação de rede das credenciais
 
 Persistência:
   Runs, findings e artefatos ficam no storage global (SQLite em
@@ -49,5 +58,7 @@ Persistência:
   voltar ao backend de arquivos. Nada é gravado em .houndsman/.runs.
 
 Ambiente (o Bun carrega .env automaticamente):
-  HOUNDSMAN_TYPE_SAFE_API_KEY  Pré-análise Jev (opcional)
-  HOUNDSMAN_DEEP_SEEK_API_KEY  IA do hunt nativo (opcional)`;
+  HOUNDSMAN_TYPE_SAFE_API_KEY   Pré-análise Jev (opcional)
+  HOUNDSMAN_DEEP_SEEK_API_KEY   IA (provider deepseek, opcional)
+  HOUNDSMAN_OPENAI_API_KEY     IA (provider openai, opcional)
+  HOUNDSMAN_ANTHROPIC_API_KEY  IA (provider anthropic, opcional)`;

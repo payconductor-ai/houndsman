@@ -6,6 +6,7 @@
  * de instanciar/importar tudo diretamente.
  */
 
+import { AiClient } from "../ai/ai-client";
 import { AstService } from "../ast/service";
 import type { HoundsmanConfig } from "../config";
 import type { ReviewOptions } from "../orchestrator";
@@ -28,6 +29,7 @@ export type EngineDeps = {
 	storage?: StorageProvider;
 	repo?: RepoIdentity;
 	ast?: AstService;
+	ai?: AiClient;
 };
 
 /** Composition root do motor. */
@@ -40,6 +42,7 @@ export class HoundsmanEngine {
 	readonly storage: StorageProvider;
 	readonly repo: RepoIdentity;
 	readonly ast: AstService;
+	readonly ai: AiClient;
 
 	constructor(raw: HoundsmanConfig, deps: EngineDeps = {}) {
 		this.project = new ProjectConfig(raw);
@@ -50,6 +53,7 @@ export class HoundsmanEngine {
 		this.storage = deps.storage ?? createStorage(raw);
 		this.repo = deps.repo ?? resolveRepoIdentity(this.git);
 		this.ast = deps.ast ?? new AstService(raw, this.git);
+		this.ai = deps.ai ?? new AiClient({ project: this.project });
 	}
 
 	/** Configuração crua (contrato do consumidor). */
@@ -65,6 +69,7 @@ export class HoundsmanEngine {
 			this.storage,
 			this.repo,
 			this.ast,
+			this.ai,
 		);
 	}
 

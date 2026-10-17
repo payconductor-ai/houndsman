@@ -14,6 +14,7 @@ import {
 	type GhRunner,
 	type SubmitSelection,
 } from "../core/github-review";
+import { logger } from "../core/logging";
 import { createStorage } from "../core/storage/factory";
 import { resolveRepoIdentity } from "../core/storage/repo-identity";
 import type { RepoIdentity, StorageProvider } from "../core/storage/types";
@@ -190,8 +191,8 @@ export class HoundsmanServer {
 		try {
 			this.runs.maintain();
 		} catch (error) {
-			console.warn(
-				`[houndsman] VACUUM falhou (seguindo sem compactar): ${
+			logger.warn(
+				`VACUUM falhou (seguindo sem compactar): ${
 					error instanceof Error ? error.message : String(error)
 				}`,
 			);

@@ -4,6 +4,7 @@
  * É o ponto de entrada do `prepare`/`finalize` para o CLI e para o engine.
  */
 
+import type { AiClient } from "../ai/ai-client";
 import type { AstService } from "../ast/service";
 import type { HoundsmanConfig } from "../config";
 import {
@@ -26,6 +27,7 @@ export class ReviewSession {
 	readonly branch: string;
 	readonly context: ReviewContext;
 	private readonly ast?: AstService;
+	private readonly ai?: AiClient;
 
 	constructor(
 		config: HoundsmanConfig,
@@ -34,11 +36,13 @@ export class ReviewSession {
 		storage: StorageProvider,
 		repo: RepoIdentity,
 		ast?: AstService,
+		ai?: AiClient,
 	) {
 		this.config = config;
 		this.options = options;
 		this.branch = branch;
 		this.ast = ast;
+		this.ai = ai;
 		const review = options.finalize
 			? storage.findReview(repo.key, branch)
 			: storage.getOrCreateReview({
@@ -63,6 +67,7 @@ export class ReviewSession {
 		storage: StorageProvider,
 		repo: RepoIdentity,
 		ast?: AstService,
+		ai?: AiClient,
 	): ReviewSession {
 		return new ReviewSession(
 			config,
@@ -71,12 +76,20 @@ export class ReviewSession {
 			storage,
 			repo,
 			ast,
+			ai,
 		);
 	}
 
 	/** Passo 1 — preparar. */
 	prepare(): Promise<PrepareResult> {
-		return prepare(this.options, this.branch, this.config, this.context, this.ast);
+		return prepare(
+			this.options,
+			this.branch,
+			this.config,
+			this.context,
+			this.ast,
+			this.ai,
+		);
 	}
 
 	/** Passo 3 — finalizar. */

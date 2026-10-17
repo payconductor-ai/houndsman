@@ -10,6 +10,8 @@
  * com o UUID interno no banco.
  */
 
+import { AiClient } from "../ai/ai-client";
+import { AiVerifier } from "../ai/features/verifier";
 import { type HoundsmanConfig, resolveJevConcurrency } from "../config";
 import { ENV_NAMES } from "../env";
 import {
@@ -41,6 +43,7 @@ import {
 } from "../github-review";
 import { VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
+import { ProjectConfig } from "../project-config";
 import { BatchPresenter } from "../renderers/batch-presenter";
 import { FindingsPresenter } from "../renderers/findings-presenter";
 import { VerifyPresenter } from "../renderers/verify-presenter";
@@ -486,6 +489,20 @@ export async function runVerifyCommand(
 	}
 }
 
+/** Trecho de ~20 linhas ao redor do finding (entrada da verificação por IA). */
+function snippetsAround(content: string | null, line: number | null): string {
+	if (!content) return "(arquivo indisponível)";
+	const lines = content.replace(/\r\n/g, "\n").split("\n");
+	const center = line && line > 0 ? line : 1;
+	const start = Math.max(1, center - 10);
+	const end = Math.min(lines.length, center + 10);
+	return lines
+		.slice(start - 1, end)
+		.map((text, index) => `${start + index}: ${text}`)
+		.join("\n")
+		.slice(0, 4_000);
+}
+
 async function executeVerify(
 	config: HoundsmanConfig,
 	storage: StorageProvider,
@@ -532,6 +549,44 @@ async function executeVerify(
 		}
 	}
 
+	// Tier 2 — IA opcional para os ambíguos que o Jev não respondeu.
+	let aiChecked = 0;
+	let aiReason: string | undefined;
+	const stillAmbiguous = entries.filter(
+		(entry) => entry.ambiguous && entry.basis === "anchor",
+	);
+	if (stillAmbiguous.length > 0) {
+		const client = new AiClient({ project: new ProjectConfig(config) });
+		const aiVerifier = new AiVerifier(client);
+		if (parsed.bools.has("--no-ai")) {
+			aiReason = "desativado (--no-ai)";
+		} else if (!client.available) {
+			aiReason = "IA não configurada";
+		} else if (!aiVerifier.enabled) {
+			aiReason = "feature ai.features.verify desligada";
+		} else {
+			const readFile = fileReader(process.cwd());
+			const byId = new Map(findings.map((finding) => [finding.id, finding]));
+			const confidence = await aiVerifier.verify({
+				findings: stillAmbiguous.map((entry) => ({
+					id: entry.id,
+					rule: entry.rule,
+					file: entry.file,
+					line: entry.line,
+					message: byId.get(entry.id)?.message ?? entry.message,
+					snippets: snippetsAround(readFile(entry.file), entry.line),
+				})),
+			});
+			aiChecked = verifier.applyConfidence(
+				entries,
+				confidence,
+				JevCandidatesStore.THRESHOLD,
+				"ai",
+			);
+			aiReason = `${aiChecked} caso(s) confirmado(s) pela IA`;
+		}
+	}
+
 	const summary = verifier.summarize(entries);
 	const location = ctx.storage.location(ctx.review.id);
 	ctx.storage.writeArtifact(ctx.review.id, {
@@ -558,6 +613,8 @@ async function executeVerify(
 					summary,
 					jevChecked,
 					jevReason,
+					aiChecked,
+					aiReason,
 					applied,
 					entries,
 				},

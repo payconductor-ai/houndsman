@@ -28,7 +28,9 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 - **git** — o diff usa `git diff <base>...<head>`.
 - **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
 - **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
-- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo.
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo e das features de IA.
+- **`HOUNDSMAN_OPENAI_API_KEY`** / **`HOUNDSMAN_ANTHROPIC_API_KEY`** (opcional) — apenas se
+  `ai.provider` for `openai`/`anthropic`.
 
 > Coloque as chaves em um `.env` na raiz do projeto; o Bun carrega automaticamente.
 
@@ -51,13 +53,14 @@ Cria a camada `.houndsman/`, que é **autocontida** (não instala nada no seu pr
 | Caminho | Dono | O que é |
 |---|---|---|
 | `houndsman.config.ts` | você | Configuração do projeto (um objeto de dados) |
-| `.houndsman/watchdogs/` | você | Suas regras — começa com **1 watchdog de exemplo** |
+| `.houndsman/watchdogs/` | você | Suas regras — começa com um watchdog `default` (fallback) e um `example` |
 | `.houndsman/exclusions.ts` | você | Arquivos que nunca entram na revisão |
 | `.houndsman/doc-mappings.ts` | você | path → documentação de contexto |
 | `.houndsman/core/**` | auto | Tipos + docs do skill (sincronizados por `houndsman update`) |
 
-> O `setup` já cria a camada inicial com um watchdog de exemplo — troque o exemplo pelas
-> regras reais do seu projeto (ou use `/houndsman train`).
+> O `setup` já cria a camada inicial com um watchdog `default` (fallback, cobre arquivos sem
+> domínio) e um `example` — troque o exemplo pelas regras reais do seu projeto (ou use
+> `/houndsman train`).
 
 ### 4. Escreva suas regras
 
@@ -80,6 +83,20 @@ No seu harness (Claude Code / agents), invoque o skill:
 O skill orquestra tudo e persiste o relatório no storage global (SQLite em
 `<HOUNDSMAN_HOME>/houndsman.db`); a UI lê os artefatos direto do storage. Não precisa rodar
 nenhum script à mão.
+
+### 7. Revisão nativa (opcional) — `houndsman hunt`
+
+Além do skill, o houndsman tem um **harness próprio**: o `hunt` roda o agente de revisão
+dentro do CLI, com tools read-only, investigação por evidência e a mesma saída `review.md`.
+
+```bash
+bun run houndsman hunt --dry-run     # inspeciona watchdogs/arquivos, sem IA
+HOUNDSMAN_DEEP_SEEK_API_KEY=... bun run houndsman hunt
+bun run houndsman hunt --resume      # preserva findings válidos do staging
+bun run houndsman hunt --fail-on-blocking
+```
+
+Detalhes (catálogo de tools, máquina de estados, custos e segurança): [`docs/HARNESS.md`](docs/HARNESS.md).
 
 ---
 

@@ -2,6 +2,8 @@
 
 > Tópicos além do [README](../README.md): como o motor funciona por dentro, onde o Jev entra,
 > referência de comandos e boas práticas para escrever regras.
+>
+> IA e harness nativo (`houndsman hunt`): [`HARNESS.md`](HARNESS.md).
 
 ---
 

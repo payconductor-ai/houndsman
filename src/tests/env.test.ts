@@ -52,4 +52,18 @@ describe("env", () => {
 		delete process.env[ENV_NAMES.typeSafeApiKey];
 		expect(env.typeSafeApiKey).toBeUndefined();
 	});
+
+	test("chaves de integração usam o prefixo HOUNDSMAN_", () => {
+		const native = new Set([
+			"LOCALAPPDATA",
+			"XDG_DATA_HOME",
+			"NO_COLOR",
+			"TERM",
+			"CI",
+		]);
+		for (const name of Object.values(ENV_NAMES)) {
+			if (native.has(name)) continue;
+			expect(name.startsWith("HOUNDSMAN_")).toBe(true);
+		}
+	});
 });

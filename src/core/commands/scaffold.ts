@@ -131,6 +131,16 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
+	hints?: RuleHints;
+};
+
+/** Sinais opcionais de uma regra (símbolos, imports, decorators, paths, checks). */
+export type RuleHints = {
+	symbols?: string[];
+	imports?: string[];
+	decorators?: string[];
+	paths?: string[];
+	checks?: string[];
 };
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
@@ -152,6 +162,10 @@ export type WatchdogDefinition = WatchdogMeta & {
 	id: string;
 	description: string;
 	breakingChange?: boolean;
+	/** Só assume arquivos que nenhum outro watchdog casou. */
+	fallback?: boolean;
+	/** Permite findings emergentes (Lógica:/Domínio:) fora das regras. */
+	allowEmergentFindings?: boolean;
 	reviewFocus?: readonly string[];
 	exclude?: readonly string[];
 };
@@ -202,6 +216,42 @@ export type HoundsmanAst = {
 	aliases?: Record<string, string>;
 };
 
+/** Providers suportados pela camada de IA. */
+export type AiProviderKind = "deepseek" | "openai" | "anthropic";
+
+/** Features de IA do fluxo normal (todas fail-open). */
+export type HoundsmanAiFeatures = {
+	context?: boolean;
+	brief?: boolean;
+	classification?: boolean;
+	preAnalysis?: boolean;
+	verify?: boolean;
+};
+
+/** Overrides de IA por watchdog. */
+export type HoundsmanAiWatchdog = {
+	model?: string;
+	maxSteps?: number;
+	maxOutputTokens?: number;
+};
+
+/** Configuração da camada de IA (briefs, contexto, classificação e hunt nativo). */
+export type HoundsmanAi = {
+	enabled?: boolean;
+	provider?: AiProviderKind;
+	model?: string;
+	baseURL?: string;
+	concurrency?: number;
+	maxSteps?: number;
+	maxOutputTokens?: number;
+	temperature?: number;
+	timeoutMs?: number;
+	maxCallsPerReview?: number;
+	maxTokensPerReview?: number;
+	features?: HoundsmanAiFeatures;
+	watchdogs?: Record<string, HoundsmanAiWatchdog>;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -214,6 +264,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	budgets?: HoundsmanBudgets;
 	concurrency?: HoundsmanConcurrency;
 	ast?: HoundsmanAst;
+	ai?: HoundsmanAi;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
@@ -242,8 +293,8 @@ export const exampleWatchdog = defineWatchdog({
 	id: "example",
 	name: "Exemplo",
 	description: "Watchdog de exemplo — descreva o propósito em uma frase.",
-	scope: "Todo o repositório (ajuste o escopo)",
-	classify: [{ value: "^src/" }],
+	scope: "src/example/** (ajuste o escopo)",
+	classify: [{ value: "^src/example/" }],
 	rules: [
 		{
 			severity: "attention",
@@ -259,13 +310,65 @@ export const exampleWatchdog = defineWatchdog({
 });
 `;
 
-const WATCHDOGS_INDEX = `import { exampleWatchdog } from "./example";
+const DEFAULT_WATCHDOG = `import { defineWatchdog } from "../core/types";
+
+/**
+ * Watchdog de padrões gerais e lógica (fallback).
+ *
+ * Só assume arquivos que nenhum outro watchdog casou. Cobre consistência
+ * lógica, invariantes de domínio e defeitos genéricos que não pertencem a um
+ * domínio específico. Findings fora das regras abaixo podem ser reportados com
+ * os prefixos reservados "Lógica:" e "Domínio:" (opt-in abaixo).
+ */
+export const defaultWatchdog = defineWatchdog({
+	id: "default",
+	name: "Padrões gerais e lógica",
+	description:
+		"Cobre arquivos sem domínio específico: consistência lógica, domínio e defeitos genéricos.",
+	scope: "Arquivos não classificados por outros watchdogs",
+	fallback: true,
+	allowEmergentFindings: true,
+	rules: [
+		{
+			severity: "attention",
+			text: "Promover: nome, contrato e documentação do símbolo correspondem ao comportamento real.",
+			hints: { checks: ["symbol_context"] },
+		},
+		{
+			severity: "attention",
+			text: "Evitar: engolir erros/exceções sem propagar, logar ou tratar.",
+		},
+		{
+			severity: "attention",
+			text: "Promover: transições de estado e efeitos colaterais do domínio são explícitos, ordenados e idempotentes.",
+		},
+		{
+			severity: "suggestion",
+			text: "Evitar: lógica de negócio duplicada ou divergente entre camadas.",
+			hints: { checks: ["find_references"] },
+		},
+		{
+			severity: "suggestion",
+			text: "Promover: casos de borda do domínio (vazio, zero, negativo, timezone, arredondamento) são tratados.",
+		},
+		{
+			severity: "suggestion",
+			text: "Promover: a lógica do domínio respeita as invariantes e contratos documentados.",
+		},
+	],
+	contextFiles: ["AGENTS.md"],
+});
+`;
+
+const WATCHDOGS_INDEX = `import { defaultWatchdog } from "./default";
+import { exampleWatchdog } from "./example";
 
 /**
  * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
  * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
  */
 export const WATCHDOG_DEFINITIONS = {
+	default: defaultWatchdog,
 	example: exampleWatchdog,
 };
 
@@ -327,6 +430,14 @@ class WatchdogExampleTemplate implements ScaffoldTemplate {
 
 	render(): string {
 		return WATCHDOG_EXAMPLE;
+	}
+}
+
+class DefaultWatchdogTemplate implements ScaffoldTemplate {
+	readonly path = join(PROJECT_DIR, "watchdogs", "default.ts");
+
+	render(): string {
+		return DEFAULT_WATCHDOG;
 	}
 }
 
@@ -425,6 +536,7 @@ export class ProjectScaffolder {
 		const context = this.context();
 		const templates: ScaffoldTemplate[] = [
 			new ConfigTemplate(),
+			new DefaultWatchdogTemplate(),
 			new WatchdogExampleTemplate(),
 			new WatchdogsIndexTemplate(),
 			new ExclusionsTemplate(),

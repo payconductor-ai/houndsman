@@ -55,6 +55,7 @@ src/
 │   ├── help.ts              # texto de ajuda
 │   └── commands/            # Command + CommandRegistry + 1 classe por comando
 ├── core/             # bibliotecas genéricas
+│   ├── ai/                  # camada genérica de IA (modelo, uso, schemas, features)
 │   ├── engine/              # HoundsmanEngine (composition root), ReviewSession,
 │   │                        # ReviewScopeResolver, carry-over
 │   ├── ast/                 # AST determinístico: parser wasm, símbolos, delta e impacto
@@ -95,13 +96,23 @@ src/
 │   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
 │   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
 │   └── client/              # app Preact — index.tsx (entry) + App/RunList/...
+├── harness/          # NOSSO harness nativo (hunt): tools, investigação, agente
+│   ├── config/              # HarnessConfig (overrides de execução)
+│   ├── hunt/                # HuntHarness, HuntSession, ReviewPlanner, options/result
+│   ├── agent/               # ReviewAgent (máquina de estados), runner, scheduler
+│   ├── tools/               # contrato AgentTool, registry, policy, middleware, builtin/
+│   ├── investigation/       # RuleAnalyzer, planner, AgentState, evidência, crítico, journal
+│   ├── prompts/             # reviewer-prompt-builder + prompts de estado
+│   └── validation/          # FindingValidator
 ├── skill/*.md        # assets markdown (copiados pelo `setup` no consumidor)
 └── tests/            # suíte project-agnóstica
 ```
 
 **Camadas:** `cli/` = bootstrap + `Command` objects (log/exit); `core/` = engine/domínio/
-serviços/renderers (sem `process.argv`/`exit`, sem log; devolve dados); `server/` = servidor
-local; `skill/` = markdown embarcado; `tests/` = suíte.
+serviços/renderers (sem `process.argv`/`exit`, sem log; devolve dados); `harness/` = runtime
+de agentes do hunt; `server/` = servidor local; `skill/` = markdown embarcado; `tests/` = suíte.
+
+> **Dependência:** `cli → harness → core`. `core/` **nunca** importa `harness/`.
 
 > **OO:** o motor tem um composition root (`HoundsmanEngine`) que injeta `ProjectConfig`,
 > `GitRepository`, `FileClassifier`, `Verifier`, `FixBatchBuilder`. Domínio (`Watchdog`,
@@ -132,7 +143,28 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   instalação **global** sem dependência local no projeto.
 - **Jev é opcional e falha-aberto.** Sem `HOUNDSMAN_TYPE_SAFE_API_KEY` (ou com `--no-jev`), a revisão roda
   idêntica, sem chamadas de rede. Nunca torne o Jev obrigatório.
+- **IA do fluxo normal é opcional e falha-aberto.** Sem `HOUNDSMAN_DEEP_SEEK_API_KEY`
+  (ou com `--no-ai`), briefs/contexto/classificação/verify seguem sem rede. `hunt` é a
+  exceção explícita: exige IA (use `--dry-run` para inspecionar).
+- **O harness nativo vive em `src/harness/`.** Toda tool é read-only, declara capabilities
+  e passa por validação Zod, `PathGuard`, budget, cache, limite e redaction. Nenhuma tool
+  devolve arquivo inteiro; leitura é sempre por faixa/símbolo/snippet.
+- **Investigação é obrigatória.** `ORIENT → PLAN → INVESTIGATE → VERIFY → CONCLUDE`;
+  finding sem evidência reancorada é descartado pelo crítico e toda regra termina com
+  cobertura (`checked`/`not_applicable`/`skipped`).
+- **`fallback: true` é último recurso.** Um watchdog fallback só assume arquivos que
+  nenhum outro casou; `classify` é ignorado e múltiplos fallbacks geram warning.
+- **Findings emergentes são opt-in.** `allowEmergentFindings: true` permite `Lógica:`/
+  `Domínio:` fora das regras, sempre com evidência e severidade máxima `attention`.
+- **Env é fonte única e prefixado.** Chaves de integração usam `HOUNDSMAN_`
+  (`HOUNDSMAN_DEEP_SEEK_API_KEY`, `HOUNDSMAN_OPENAI_API_KEY`,
+  `HOUNDSMAN_ANTHROPIC_API_KEY`, `HOUNDSMAN_TYPE_SAFE_API_KEY`, `HOUNDSMAN_HOME`).
+  Só variáveis nativas do SO/CI (`LOCALAPPDATA`, `XDG_DATA_HOME`, `NO_COLOR`, `TERM`, `CI`)
+  mantêm o nome global. Mesmo ambiente em `src/core/env.ts`.
 - Comandos que produzem efeito (log/exit) ficam em `cli/`; `core/` devolve dados.
+- **Saída visual centralizada.** `core/logging` expõe a classe `Logger` e a instância
+  `logger` (chalk/ora), usada por `cli/`, `harness/` e `server/`. Módulos de negócio do
+  `core/` continuam sem log.
 - **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`
   (arquivo + regra + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é cache,
   recalculada por `syncState`. Não volte a chavear por `(file, line)`.
@@ -169,3 +201,4 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
 
 - Vocabulário do projeto — o que é brief, findings, manifest, budget, churn, candidato, Jev
   e outros termos com sentido de domínio: `docs/GLOSSARY.md`.
+- Harness nativo (tools, investigação, flags e custos): `docs/HARNESS.md`.

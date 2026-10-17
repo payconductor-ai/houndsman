@@ -29,12 +29,14 @@
 
 import { loadConfig } from "../core/config-loader";
 import { HoundsmanEngine } from "../core/engine/houndsman-engine";
+import { logger } from "../core/logging";
 import { ArgParser } from "./arg-parser";
 import type { CliContext } from "./commands/command";
 import { ContextCommand } from "./commands/context-command";
 import { DoctorCommand } from "./commands/doctor-command";
 import { FindingsCommand } from "./commands/findings-command";
 import { HelpCommand } from "./commands/help-command";
+import { HuntCommand } from "./commands/hunt-command";
 import { CommandRegistry } from "./commands/registry";
 import { ReviewCommand } from "./commands/review-command";
 import { ServerCommand } from "./commands/server-command";
@@ -53,6 +55,7 @@ function buildRegistry(): CommandRegistry {
 	return new CommandRegistry()
 		.register(new ReviewCommand(), { fallback: true })
 		.register(new HelpCommand())
+		.register(new HuntCommand())
 		.register(new ContextCommand())
 		.register(new FindingsCommand())
 		.register(new StatusCommand())
@@ -77,15 +80,16 @@ export async function main(): Promise<void> {
 	const command = registry.resolve(commandName);
 
 	if (!command) {
-		console.error(`Subcomando desconhecido: '${commandName}'.\n`);
-		console.error(HELP);
+		logger.error(`Subcomando desconhecido: '${commandName}'.\n`);
+		logger.info(HELP);
 		process.exit(1);
 	}
 
 	const context: CliContext = {
 		cwd: process.cwd(),
-		out: (message) => console.log(message),
-		err: (message) => console.error(message),
+		logger,
+		out: (message) => logger.info(message),
+		err: (message) => logger.error(message),
 		engine: async () => {
 			const { config } = await loadConfig({
 				configPath: parser.value("--config"),
@@ -100,7 +104,7 @@ export async function main(): Promise<void> {
 
 if (import.meta.main) {
 	await main().catch((error) => {
-		console.error(error instanceof Error ? error.message : String(error));
+		logger.error(error instanceof Error ? error.message : String(error));
 		process.exit(1);
 	});
 }

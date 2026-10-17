@@ -12,10 +12,11 @@ import type {
 	FindingsStateFile,
 } from "../findings-state";
 import {
-	applyJev,
+	applyConfidence,
 	applyResolutions,
 	selectVerifiable,
 	summarizeVerify,
+	type VerifyBasis,
 	type VerifyEntry,
 	type VerifySummary,
 	verifyLocal,
@@ -33,13 +34,23 @@ export class Verifier {
 		return verifyLocal(findings, readFile);
 	}
 
-	/** Tier 1 — aplica a confirmação do Jev aos casos ambíguos. */
+	/** Tier 1 — aplica confirmações externas (Jev ou IA) aos casos ambíguos. */
+	applyConfidence(
+		entries: VerifyEntry[],
+		confidence: Map<string, number>,
+		threshold: number,
+		basis: VerifyBasis = "jev",
+	): number {
+		return applyConfidence(entries, confidence, threshold, basis);
+	}
+
+	/** Compatibilidade: confirmação via Jev. */
 	applyJev(
 		entries: VerifyEntry[],
 		confidence: Map<string, number>,
 		threshold: number,
 	): number {
-		return applyJev(entries, confidence, threshold);
+		return applyConfidence(entries, confidence, threshold, "jev");
 	}
 
 	/** Contagem por status. */

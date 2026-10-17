@@ -94,6 +94,10 @@ export type ArtifactKind =
 	| "verify"
 	| "ast"
 	| "ast-impact"
+	| "ai"
+	| "ai-usage"
+	| "ai-brief"
+	| "harness-transcript"
 	| "other";
 
 /** Artefato persistido de uma review. */

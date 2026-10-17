@@ -6,13 +6,18 @@
  */
 
 import type { HoundsmanEngine } from "../../core/engine/houndsman-engine";
+import type { LoggerLike } from "../../core/logging";
 
 /** Contexto de execução de um comando. */
 export type CliContext = {
 	cwd: string;
 	/** Carrega a config do projeto e devolve o engine (lazy). */
 	engine: () => Promise<HoundsmanEngine>;
+	/** Logger único do CLI (cores/spinner/progresso). */
+	logger: LoggerLike;
+	/** @deprecated use `logger.info`. */
 	out: (message: string) => void;
+	/** @deprecated use `logger.error`. */
 	err: (message: string) => void;
 };
 

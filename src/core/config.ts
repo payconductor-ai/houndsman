@@ -11,6 +11,13 @@ import { ProjectConfig } from "./project-config";
 import type { WatchdogDefinition } from "./types";
 
 export {
+	DEFAULT_AI_CONCURRENCY,
+	DEFAULT_AI_MAX_CALLS_PER_REVIEW,
+	DEFAULT_AI_MAX_OUTPUT_TOKENS,
+	DEFAULT_AI_MAX_STEPS,
+	DEFAULT_AI_MODEL,
+	DEFAULT_AI_PROVIDER,
+	DEFAULT_AI_TIMEOUT_MS,
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
 	DEFAULT_AST_MAX_FILE_BYTES,
 	DEFAULT_AST_MAX_IMPACT_FILES,
@@ -45,6 +52,60 @@ export type HoundsmanAst = {
 export type HoundsmanConcurrency = {
 	/** Chamadas Jev simultâneas (default: 5). */
 	jev?: number;
+};
+
+/** Providers suportados pela camada de IA. */
+export type AiProviderKind = "deepseek" | "openai" | "anthropic";
+
+/** Features de IA do fluxo determinístico (todas fail-open). */
+export type HoundsmanAiFeatures = {
+	/** Resume o contexto da PR (`context-summary`) quando o subagente não gerou. */
+	context?: boolean;
+	/** Enriquece os briefs com um plano de revisão sugerido. */
+	brief?: boolean;
+	/** Classifica arquivos que nenhum watchdog casou. */
+	classification?: boolean;
+	/** Gera candidatos de pré-análise (substitui o Jev quando disponível). */
+	preAnalysis?: boolean;
+	/** Confirma/refuta findings ambíguos no `verify`. */
+	verify?: boolean;
+};
+
+/** Overrides de IA por watchdog. */
+export type HoundsmanAiWatchdog = {
+	model?: string;
+	maxSteps?: number;
+	maxOutputTokens?: number;
+};
+
+/** Configuração da camada de IA (genérica; o harness nativo também a consome). */
+export type HoundsmanAi = {
+	/** Liga a IA do fluxo normal (default: `true`; sem chave é fail-open). */
+	enabled?: boolean;
+	/** Provider de modelo (default: `deepseek`). */
+	provider?: AiProviderKind;
+	/** Modelo (default em `defaults.ts`). */
+	model?: string;
+	/** Base URL customizada do provider. */
+	baseURL?: string;
+	/** Chamadas simultâneas (default: 2). */
+	concurrency?: number;
+	/** Passos por agente (default: 12). */
+	maxSteps?: number;
+	/** Teto de tokens de saída por chamada. */
+	maxOutputTokens?: number;
+	/** Temperatura (default: 0). */
+	temperature?: number;
+	/** Timeout por chamada em ms (default: 120_000). */
+	timeoutMs?: number;
+	/** Teto de chamadas por review (default: 40). */
+	maxCallsPerReview?: number;
+	/** Teto de tokens por review. */
+	maxTokensPerReview?: number;
+	/** Features do fluxo normal. */
+	features?: HoundsmanAiFeatures;
+	/** Overrides por watchdog. */
+	watchdogs?: Record<string, HoundsmanAiWatchdog>;
 };
 
 /** Backend de persistência (reviews, findings e artefatos). */
@@ -90,6 +151,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	concurrency?: HoundsmanConcurrency;
 	/** AST determinístico (classificação estrutural, brief e impacto). */
 	ast?: HoundsmanAst;
+	/** Camada de IA (briefs, contexto, classificação e o harness nativo). */
+	ai?: HoundsmanAi;
 };
 
 /** Entrada de `defineHoundsmanConfig` — `watchdogIds` é derivado, não informado. */

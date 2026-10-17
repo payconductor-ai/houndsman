@@ -25,6 +25,18 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **drift** | Divergência entre config/regras e o código real. Detectada pelo `doctor`. | `src/core/registry-check.ts` |
 | **Jev** | Pré-análise **opcional** por LLM (seção 7). | `src/core/jev/` |
 | **AST** | Análise estrutural determinística (tree-sitter/wasm) de arquivos TS/JS — fatos, delta e impacto, sem LLM. | `src/core/ast/`, `assets/grammars/` |
+| **IA do fluxo normal** | Features opcionais e fail-open: resumo de contexto, plano de brief, classificação fallback, pré-análise e verify. Sem chave, nada muda. | `src/core/ai/` |
+| **harness nativo** | Runtime de agentes do próprio houndsman (`houndsman hunt`): tools, investigação, máquina de estados. Não confundir com o skill externo. | `src/harness/` |
+| **tool** | Operação read-only exposta ao agente (leitura por faixa, busca, símbolos, AST, regras, docs). Toda tool declara capabilities e passa por middleware. | `src/harness/tools/` |
+| **capability (tool)** | O que a tool sabe fazer (`read`, `search`, `symbol`, `references`, `ast`, `impact`, `rules`, `tests`, `docs`); a `ToolPolicy` libera por estado. | `src/harness/tools/tool-policy.ts` |
+| **evidência** | Trecho de arquivo que sustenta um finding (arquivo + linhas + snippet), validado/reancorado no working tree. | `src/harness/investigation/evidence.ts` |
+| **cobertura (coverage)** | Status final de cada regra: `checked`, `not_applicable` ou `skipped` com motivo. | `AgentState` |
+| **crítico (critic)** | Segunda passada que tenta refutar cada draft (`keep`/`drop`/`downgrade`). | `src/harness/investigation/finding-critic.ts` |
+| **transcript** | `harness-transcript.json`: estados, tool calls, métricas, truncamentos e uso — sem prompt/segredo. | storage da review |
+| **budget de IA** | Teto de chamadas/tokens por review; ao estourar, o agente para sem inventar achado. | `src/core/ai/usage-budget.ts` |
+| **fallback (watchdog)** | Watchdog de último recurso (`fallback: true`) que só assume arquivos sem outro dono; `classify` é ignorado. | `src/core/file-classifier.ts` |
+| **finding emergente** | Achado de lógica/domínio fora das regras explícitas, permitido por `allowEmergentFindings`; prefixos `Lógica:`/`Domínio:`, evidência obrigatória, severidade máxima `attention`. | `src/core/rule-text.ts` |
+| **logger** | Instância única de saída do CLI/harness (cores, spinner, progresso), em `core/logging`; módulos de negócio do core não logam. | `src/core/logging/` |
 
 ## 2. O fluxo em 4 passos
 

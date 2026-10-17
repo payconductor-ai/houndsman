@@ -6,6 +6,7 @@
  * findings apontam para o staging da review.
  */
 
+import type { AiUsage } from "../ai/types";
 import { Classification } from "../domain/classification";
 import type { ClassificationResult } from "../file-classifier";
 import type { JevCandidatesFile } from "../jev";
@@ -32,6 +33,15 @@ export type ManifestAst = {
 		importers: number;
 		exportedChanges: number;
 	};
+};
+
+/** Resumo da IA no manifesto (só quando a IA foi usada). */
+export type ManifestAi = {
+	enabled: boolean;
+	provider: string;
+	model: string;
+	briefPlans: number;
+	usage: AiUsage;
 };
 
 /** Classificação enriquecida gravada pelo prepare (modo + incremental). */
@@ -70,6 +80,7 @@ export class ManifestWriter {
 		pending: string[],
 		jev: JevCandidatesFile,
 		ast?: ManifestAst,
+		ai?: ManifestAi,
 	): void {
 		const view = Classification.from(classification);
 		const maxFilesPerBrief = this.project.maxFilesPerBrief;
@@ -78,9 +89,11 @@ export class ManifestWriter {
 		const watchdogs = activeIds.map((id) => {
 			const selection = view.budgetFor(id, maxFilesPerBrief);
 			filesOverBudget += selection.overflow.length;
+			const domain = this.project.watchdogs.find(id);
 			return {
 				id,
 				name: this.project.watchdogs.nameOf(id),
+				...(domain?.definition.fallback ? { fallback: true } : {}),
 				files: selection.selected,
 				overflow: selection.overflow.length,
 				brief: this.work.briefFile(id),
@@ -128,6 +141,7 @@ export class ManifestWriter {
 				files: 0,
 				impact: { affectedFiles: 0, importers: 0, exportedChanges: 0 },
 			},
+			ai,
 			deleted: classification.deleted,
 			unclassified: classification.unclassified,
 			excludedCount: classification.excludedCount,

@@ -66,6 +66,10 @@ export type ArtifactKind =
 	| "verify"
 	| "ast"
 	| "ast-impact"
+	| "ai"
+	| "ai-usage"
+	| "ai-brief"
+	| "harness-transcript"
 	| "other";
 
 /** Metadados de artefato retornados pela API (sem conteúdo). */

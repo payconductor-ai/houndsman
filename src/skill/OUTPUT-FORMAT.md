@@ -70,3 +70,15 @@ staging global da review:
 - Um achado por regra violada; não agrupar regras diferentes.
 - `file:line` sempre que possível; `evidence` quando o achado não é óbvio.
 - Não inventar achados — se não houver violação, o array fica vazio.
+
+## Findings emergentes (opt-in)
+
+Quando o watchdog declara `allowEmergentFindings: true`, você pode reportar falhas de
+**lógica** ou **domínio** que não correspondem a uma regra explícita usando os prefixos
+reservados:
+
+- `Lógica: <descrição>` — nome/contrato vs comportamento, fluxos, estados, bordas.
+- `Domínio: <descrição>` — transições, idempotência, invariantes, arredondamento, timezone.
+
+Esses findings continuam exigindo `evidence` e têm severidade máxima `attention`. Sem o
+opt-in, todo finding precisa citar uma regra existente.

@@ -30,6 +30,7 @@ export function parseReviewArgs(args: string[]): ReviewOptions {
 	if (parser.has("--no-jev")) opts.noJev = true;
 	if (parser.has("--no-ast")) opts.noAst = true;
 	if (parser.has("--full")) opts.full = true;
+	if (parser.has("--no-ai")) opts.noAi = true;
 
 	return opts;
 }

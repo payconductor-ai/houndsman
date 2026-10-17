@@ -157,6 +157,14 @@ export class AstService {
 		return buildImpact(analyses, importersByFile);
 	}
 
+	/** Fatos estruturais do arquivo atual (usado pelas tools do harness). */
+	async factsOf(filePath: string): Promise<AstFacts | null> {
+		if (!this.enabled) return null;
+		const content = this.readWorkingFile(filePath);
+		if (content === null) return null;
+		return this.parser.parseFile(filePath, content);
+	}
+
 	/** Lê o conteúdo atual do arquivo; `null` se ausente/ilegível. */
 	private readWorkingFile(filePath: string): string | null {
 		try {

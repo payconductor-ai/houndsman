@@ -9,7 +9,9 @@ no seu projeto é **autocontida** — não exige nenhuma dependência local do p
 - **git** — o diff usa `git diff <base>...<head> --name-status`.
 - **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
 - **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
-- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo.
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo e das features de IA.
+- **`HOUNDSMAN_OPENAI_API_KEY`** / **`HOUNDSMAN_ANTHROPIC_API_KEY`** (opcional) — apenas se
+  `ai.provider` for `openai`/`anthropic`.
 
 ## Instalação (global)
 
