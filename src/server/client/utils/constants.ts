@@ -69,6 +69,7 @@ export function describeRunStatus(
 /** Ordem canônica dos tipos de artefato na lista da UI. */
 const KIND_ORDER: ArtifactKind[] = [
 	"review",
+	"resume",
 	"domain-review",
 	"verify",
 	"brief",
@@ -86,6 +87,7 @@ const KIND_ORDER: ArtifactKind[] = [
 const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: number }> =
 	{
 		review: { key: "report", label: "Relatórios", order: 0 },
+		resume: { key: "report", label: "Relatórios", order: 0 },
 		"domain-review": { key: "report", label: "Relatórios", order: 0 },
 		verify: { key: "verify", label: "Verificação", order: 1 },
 		brief: { key: "brief", label: "Briefs (auditoria)", order: 2 },
@@ -102,6 +104,7 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 /** Rótulo curto do tipo (badge do item). */
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
 	review: "relatório",
+	resume: "resumo",
 	"domain-review": "domínio",
 	verify: "verify",
 	brief: "brief",
@@ -127,6 +130,8 @@ export function describeArtifact(meta: ArtifactMeta): string {
 	switch (meta.kind) {
 		case "review":
 			return "Relatório consolidado da revisão — o entregável.";
+		case "resume":
+			return "Resumo final da revisão: visão de negócio + números técnicos diretos (leitura humana).";
 		case "domain-review":
 			return "Relatório isolado do domínio: achados daquele watchdog.";
 		case "verify":

@@ -61,6 +61,7 @@ export type ArtifactKind =
 	| "context-summary"
 	| "finding-report"
 	| "review"
+	| "resume"
 	| "domain-review"
 	| "verify"
 	| "other";

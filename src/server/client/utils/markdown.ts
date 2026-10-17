@@ -29,7 +29,8 @@ export type InlineToken =
 	| { type: "code"; text: string }
 	| { type: "strong"; text: string }
 	| { type: "em"; text: string }
-	| { type: "link"; text: string; url: string };
+	| { type: "link"; text: string; url: string }
+	| { type: "path"; text: string };
 
 const FENCE = /^\s*```(\S*)\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
@@ -76,6 +77,27 @@ function parseAlignments(line: string): (MarkdownAlign | undefined)[] {
 		if (right) return "right";
 		if (left) return "left";
 		return undefined;
+	});
+}
+
+/** Célula numérica ou razão (`12`, `3/4`) — colunas assim vão para a direita. */
+const NUMERIC_CELL = /^[\d\s/]+$/;
+
+/** Resolve o alinhamento: explícito > coluna só de números/barra > padrão. */
+function resolveAlignments(
+	align: (MarkdownAlign | undefined)[],
+	rows: string[][],
+): (MarkdownAlign | undefined)[] {
+	return align.map((value, column) => {
+		if (value) return value;
+		let filled = 0;
+		for (const row of rows) {
+			const cell = (row[column] ?? "").trim();
+			if (cell.length === 0) continue;
+			if (!NUMERIC_CELL.test(cell) || !/\d/.test(cell)) return undefined;
+			filled++;
+		}
+		return filled > 0 ? "right" : undefined;
 	});
 }
 
@@ -136,7 +158,12 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 				rows.push(splitTableRow(lines[index]));
 				index++;
 			}
-			blocks.push({ type: "table", align, header, rows });
+			blocks.push({
+				type: "table",
+				align: resolveAlignments(align, rows),
+				header,
+				rows,
+			});
 			continue;
 		}
 
@@ -193,6 +220,45 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 	return blocks;
 }
 
+/** Extensão reconhecida como arquivo (evita destacar texto comum). */
+const FILE_EXTENSION =
+	/\.(?:[cm]?[jt]sx?|json|md|ya?ml|toml|css|scss|html?|py|go|rs|java|kt|cs|php|rb|sh|sql|txt|lock)$/i;
+
+/** Caminho/arquivo dentro de um texto corrido (`src/foo.ts`, `review.md`). */
+const PATH_TOKEN =
+	/(?:[\w.-]+[\\/])*[\w-]+\.(?:[cm]?[jt]sx?|json|md|ya?ml|toml|css|scss|html?|py|go|rs|java|kt|cs|php|rb|sh|sql|txt|lock)\b/g;
+
+/** `true` se o texto parece um caminho/arquivo (sem espaços e com extensão). */
+export function isFilePath(value: string): boolean {
+	const text = value.trim();
+	if (!text || /\s/.test(text)) return false;
+	if (/^(?:https?:|mailto:|#)/i.test(text)) return false;
+	const base = text.split(/[\\/]/).pop() ?? text;
+	if (FILE_EXTENSION.test(base)) return true;
+	return (
+		text.startsWith("./") ||
+		text.startsWith("../") ||
+		text.startsWith("/") ||
+		/^[A-Za-z]:[\\/]/.test(text)
+	);
+}
+
+/** Quebra texto corrido em tokens, destacando caminhos de arquivo. */
+function pushTextTokens(tokens: InlineToken[], text: string): void {
+	let last = 0;
+	for (const match of text.matchAll(PATH_TOKEN)) {
+		const index = match.index ?? 0;
+		if (index > last) {
+			tokens.push({ type: "text", text: text.slice(last, index) });
+		}
+		tokens.push({ type: "path", text: match[0] });
+		last = index + match[0].length;
+	}
+	if (last < text.length) {
+		tokens.push({ type: "text", text: text.slice(last) });
+	}
+}
+
 /** Tokeniza formatação inline preservando o texto e a ordem dos marcadores. */
 export function parseInline(text: string): InlineToken[] {
 	const tokens: InlineToken[] = [];
@@ -203,7 +269,7 @@ export function parseInline(text: string): InlineToken[] {
 	for (const match of text.matchAll(pattern)) {
 		const start = match.index ?? 0;
 		if (start > last) {
-			tokens.push({ type: "text", text: text.slice(last, start) });
+			pushTextTokens(tokens, text.slice(last, start));
 		}
 		const raw = match[0];
 		if (raw.startsWith("`")) {
@@ -217,13 +283,13 @@ export function parseInline(text: string): InlineToken[] {
 			if (link) {
 				tokens.push({ type: "link", text: link[1], url: link[2] });
 			} else {
-				tokens.push({ type: "text", text: raw });
+				pushTextTokens(tokens, raw);
 			}
 		}
 		last = start + raw.length;
 	}
 	if (last < text.length) {
-		tokens.push({ type: "text", text: text.slice(last) });
+		pushTextTokens(tokens, text.slice(last));
 	}
 	return tokens;
 }

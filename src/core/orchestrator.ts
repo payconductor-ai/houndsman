@@ -39,12 +39,18 @@ import {
 	parseCandidates,
 	serializeCandidates,
 } from "./jev";
-import { displayPath, OUTPUT_FORMAT_PATH, REVIEW_FILE } from "./paths";
+import {
+	displayPath,
+	OUTPUT_FORMAT_PATH,
+	REVIEW_FILE,
+	REVIEW_RESUME_FILE,
+} from "./paths";
 import { currentBranch } from "./pr-context";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
 import { ManifestWriter } from "./renderers/manifest-writer";
 import { ReportRenderer } from "./renderers/report-renderer";
+import { renderReviewResume } from "./renderers/resume-renderer";
 import {
 	type ContextSummary,
 	type DomainReport,
@@ -584,6 +590,19 @@ export function finalize(
 		name: REVIEW_FILE,
 		kind: "review",
 		content: `${incrementalNote(classification)}${markdown}\n`,
+	});
+	// Resumo final para leitura humana — não participa de nenhuma etapa seguinte.
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: REVIEW_RESUME_FILE,
+		kind: "resume",
+		content: renderReviewResume({
+			branch,
+			date: now.slice(0, 10),
+			context,
+			classification,
+			findings: merged,
+			nameOf,
+		}),
 	});
 
 	const location = ctx.storage.location(ctx.review.id);

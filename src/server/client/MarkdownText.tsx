@@ -1,28 +1,47 @@
 /**
- * Render de markdown mínimo para o campo `action` do finding.
+ * Render de markdown mínimo para o campo `action` do finding e artefatos.
  *
  * Sem HTML cru: tudo vira nós do Preact. Blocos de código reutilizam o
- * highlight de código; links passam por `safeUrl`.
+ * highlight de código; links passam por `safeUrl` e caminhos de arquivo ganham
+ * destaque próprio.
  */
 
 import { useMemo } from "preact/hooks";
 import { highlightCode, languageFromName } from "./utils/code-highlight";
-import { type InlineToken, parseInline, parseMarkdown, safeUrl } from "./utils/markdown";
+import {
+	type InlineToken,
+	isFilePath,
+	parseInline,
+	parseMarkdown,
+	safeUrl,
+} from "./utils/markdown";
 
 function renderInlineToken(token: InlineToken) {
 	switch (token.type) {
 		case "code":
-			return <code class="md-code">{token.text}</code>;
+			return (
+				<code class={`md-code${isFilePath(token.text) ? " md-path" : ""}`}>
+					{token.text}
+				</code>
+			);
+		case "path":
+			return <code class="md-path">{token.text}</code>;
 		case "strong":
 			return <strong>{token.text}</strong>;
 		case "em":
 			return <em>{token.text}</em>;
 		case "link": {
+			const label = token.text.replace(/^`+|`+$/g, "");
 			const url = safeUrl(token.url);
-			return url ? (
-				<a href={url} target="_blank" rel="noreferrer">
-					{token.text}
-				</a>
+			if (url) {
+				return (
+					<a href={url} target="_blank" rel="noreferrer">
+						{label}
+					</a>
+				);
+			}
+			return isFilePath(label) || isFilePath(token.url) ? (
+				<code class="md-path">{label}</code>
 			) : (
 				token.text
 			);

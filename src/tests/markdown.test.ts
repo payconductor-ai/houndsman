@@ -3,7 +3,12 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { parseInline, parseMarkdown, safeUrl } from "../server/client/utils/markdown";
+import {
+	isFilePath,
+	parseInline,
+	parseMarkdown,
+	safeUrl,
+} from "../server/client/utils/markdown";
 
 describe("parseMarkdown", () => {
 	test("separa parágrafos, listas, quote e bloco de código", () => {
@@ -58,6 +63,16 @@ describe("parseMarkdown", () => {
 			{ type: "hr" },
 		]);
 	});
+
+	test("colunas só de números e barra alinham à direita", () => {
+		const blocks = parseMarkdown(
+			"| Arquivo | Linhas | Razão |\n|---|---|---|\n| a.ts | 12 | 3/4 |\n| b.ts | 7 | 1/2 |",
+		);
+		expect(blocks[0]).toMatchObject({
+			type: "table",
+			align: [undefined, "right", "right"],
+		});
+	});
 });
 
 describe("parseInline", () => {
@@ -89,6 +104,26 @@ describe("parseInline", () => {
 			{ type: "text", text: "seja " },
 			{ type: "em", text: "rápido" },
 		]);
+	});
+
+	test("destaca caminhos de arquivo no texto corrido", () => {
+		expect(parseInline("veja src/foo/bar.ts e review.md")).toEqual([
+			{ type: "text", text: "veja " },
+			{ type: "path", text: "src/foo/bar.ts" },
+			{ type: "text", text: " e " },
+			{ type: "path", text: "review.md" },
+		]);
+	});
+});
+
+describe("isFilePath", () => {
+	test("reconhece arquivos e caminhos, sem confundir texto comum", () => {
+		expect(isFilePath("src/foo/bar.ts")).toBe(true);
+		expect(isFilePath("review.md")).toBe(true);
+		expect(isFilePath("./scripts/ci.sh")).toBe(true);
+		expect(isFilePath("M/D")).toBe(false);
+		expect(isFilePath("duas palavras.ts")).toBe(false);
+		expect(isFilePath("https://x.dev/file.ts")).toBe(false);
 	});
 });
 

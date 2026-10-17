@@ -432,6 +432,9 @@ describe("baseline — artefatos de prepare/finalize", () => {
 				const artifact = storage.readArtifact(review.id, name);
 				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);
 			}
+			const resume = storage.readArtifact(review.id, "review-resume.md");
+			expect(resume?.kind).toBe("resume");
+			expect((resume?.content ?? "").length).toBeLessThanOrEqual(2500);
 			expect(
 				normalize(JSON.stringify(storage.readFindings(review.id), null, 2)),
 			).toMatchSnapshot("state.json");

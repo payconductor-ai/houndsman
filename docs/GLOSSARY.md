@@ -32,7 +32,7 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **Passo 0 — contexto** | Coleta a PR via `gh` e resume objetivo/motivação/alterações. Opcional (falha-aberto). | `houndsman context` → `context.json`, `context-brief.md`, `context-summary.json` |
 | **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o Jev e **grava um brief por watchdog**. | `houndsman` → `classification.json`, `candidates.json`, `briefs/`, `manifest.json` |
 | **Passo 2 — revisar** | N subagentes (em **ondas**) executam os briefs e gravam os achados. | `findings/<watchdog>.json` |
-| **Passo 3 — finalizar** | Valida, deduplica, agrupa e renderiza o relatório. | `houndsman --finalize` → `review.md` |
+| **Passo 3 — finalizar** | Valida, deduplica, agrupa e renderiza o relatório. | `houndsman --finalize` → `review.md`, `review-resume.md` |
 | **Passo 1.5** | Apelido do Jev dentro do Passo 1. | `candidates.json` |
 
 > Por que comandos separados? Entre o Passo 1 e o 3 acontece trabalho de LLM (os subagentes).
@@ -53,6 +53,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
+| **`review-resume.md`** | Resumo final para leitura humana (≤ 2.5k caracteres): visão de negócio + números técnicos diretos. Não é lido por watchdogs nem participa de etapas seguintes. |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **registro de review** | Identidade (repo/branch), commit revisado, status (`reviewing`/`review_done`/`fixing`/`fix_done`) e timestamps. |
 | **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 11. |
