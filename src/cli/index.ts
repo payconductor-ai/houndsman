@@ -14,7 +14,7 @@
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
- *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/...)
+ *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/submit/...)
  *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
  *   update               Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -36,7 +36,7 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0)
-  findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · path)
+  findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   server              Sobe a UI local de triagem (--port, --host, --open)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -69,7 +69,9 @@ Flags de findings:
   --offset <n>        Paginação dentro do grupo (batch)
   --include-done      Inclui já concluídos no batch
   --apply             (verify) Marca os resolvidos como done
-  --fail-on-persisting (verify) Exit 1 se algum blocking persistir`;
+  --fail-on-persisting (verify) Exit 1 se algum blocking persistir
+  --include-sent      (submit) Reenvia findings já enviados à PR
+  --dry-run           (submit) Só a prévia do envio, sem postar`;
 
 function readFlag(args: string[], flag: string): string | undefined {
 	const index = args.indexOf(flag);
@@ -181,14 +183,16 @@ async function runWatchdog(config: HoundsmanConfig, args: string[]): Promise<voi
  * o JSON. O `verify` é assíncrono (consulta opcional ao Jev) — roteado à parte.
  */
 async function runFindings(config: HoundsmanConfig, args: string[]): Promise<void> {
-	const { runFindingsCommand, runVerifyCommand } = await import(
+	const { runFindingsCommand, runSubmitCommand, runVerifyCommand } = await import(
 		"../core/commands/findings"
 	);
 	const sub = args.find((arg) => !arg.startsWith("-"));
 	const result =
 		sub === "verify"
 			? await runVerifyCommand(config, args)
-			: runFindingsCommand(config, args);
+			: sub === "submit"
+				? await runSubmitCommand(config, args)
+				: runFindingsCommand(config, args);
 	if (result.exitCode !== 0) {
 		console.error(result.output);
 		process.exit(result.exitCode);

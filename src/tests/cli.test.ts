@@ -124,6 +124,26 @@ describe("cli smoke — imports dinâmicos", () => {
 		}
 	});
 
+	test("findings submit --dry-run devolve a prévia (fail-open sem gh)", () => {
+		const project = makeProject();
+		try {
+			const result = runCli(project.cwd, [
+				"findings",
+				"submit",
+				"--dry-run",
+				"--json",
+				"--dir",
+				project.artifacts,
+				"--branch",
+				"main",
+			]);
+			expect(result.code).toBe(0);
+			expect(JSON.parse(result.stdout).totals.candidates).toBe(1);
+		} finally {
+			project.cleanup();
+		}
+	});
+
 	test("doctor valida a config (import lazy de registry-check)", () => {
 		const project = makeProject();
 		try {

@@ -28,6 +28,14 @@ import {
 	summarize,
 	syncState,
 } from "../core/findings-state";
+import {
+	buildSubmitPreview,
+	defaultGhRunner,
+	type GhRunner,
+	resolvePrTarget,
+	type SubmitSelection,
+	submitFindings,
+} from "../core/github-review";
 import { STATE_FILE } from "../core/paths";
 import { pingFindingsStatus, type RunStatus, readRunStatus } from "../core/run-status";
 import type { Severity } from "../core/types";
@@ -194,6 +202,46 @@ function syncRun(dir: string, slug: string): Response {
 	return json({ result, summary: summarize(state) });
 }
 
+/** Prévia do envio da revisão: candidatos + disponibilidade da PR (via gh). */
+function submitPreview(dir: string, slug: string, ghRunner: GhRunner): Response {
+	const state = loadState(dir, slug);
+	const target = resolvePrTarget(ghRunner, state.branch || slug);
+	return json(buildSubmitPreview(state, target));
+}
+
+/**
+ * Envia os findings selecionados como comentários na PR. Fail-open: sem PR/gh
+ * devolve `{ available:false, reason }` (a UI só informa). Persiste o vínculo
+ * (`finding.github`) no `state.json` e atualiza o status da run.
+ */
+async function submitRun(
+	dir: string,
+	slug: string,
+	ghRunner: GhRunner,
+	request: Request,
+): Promise<Response> {
+	const state = loadState(dir, slug);
+	const body = (await request.json().catch(() => ({}))) as SubmitSelection;
+	const selection: SubmitSelection = {
+		severities: body.severities,
+		execStates: body.execStates,
+		includeSent: body.includeSent,
+	};
+
+	const target = resolvePrTarget(ghRunner, state.branch || slug);
+	if (!target.ok) return json({ available: false, reason: target.reason });
+
+	const outcome = submitFindings({
+		state,
+		target: target.target,
+		runner: ghRunner,
+		selection,
+	});
+	new FindingsStateStore(join(dir, STATE_FILE), slug).write(state);
+	pingFindingsStatus(dir, state);
+	return json({ available: true, target: target.target, outcome });
+}
+
 function serveArtifact(dir: string, name: string): Response {
 	if (!/\.(json|md)$/i.test(name)) return notFound("tipo de artefato não servido");
 	const content = readRunFile(dir, name);
@@ -220,7 +268,11 @@ async function serveLogo(): Promise<Response> {
 	});
 }
 
-async function route(request: Request, artifactDir: string): Promise<Response> {
+async function route(
+	request: Request,
+	artifactDir: string,
+	ghRunner: GhRunner,
+): Promise<Response> {
 	const url = new URL(request.url);
 	const path = url.pathname;
 
@@ -250,6 +302,12 @@ async function route(request: Request, artifactDir: string): Promise<Response> {
 		return json(findingsFor(dir, slug, url.searchParams));
 	}
 	if (rest === "/sync" && request.method === "POST") return syncRun(dir, slug);
+	if (rest === "/submit-preview" && request.method === "GET") {
+		return submitPreview(dir, slug, ghRunner);
+	}
+	if (rest === "/submit" && request.method === "POST") {
+		return submitRun(dir, slug, ghRunner, request);
+	}
 
 	const findingMatch = rest.match(/^\/findings\/([^/]+)$/);
 	if (findingMatch) {
@@ -274,14 +332,19 @@ async function route(request: Request, artifactDir: string): Promise<Response> {
 	return notFound();
 }
 
+/** Dependências injetáveis do servidor (testes). */
+export type ServerDeps = { ghRunner?: GhRunner };
+
 /** Cria o handler de requisições (testável sem abrir porta). */
 export function createRequestHandler(
 	config: HoundsmanConfig,
+	deps: ServerDeps = {},
 ): (request: Request) => Promise<Response> {
 	const artifactDir = resolveArtifactDir(config);
+	const ghRunner = deps.ghRunner ?? defaultGhRunner;
 	return async (request) => {
 		try {
-			return await route(request, artifactDir);
+			return await route(request, artifactDir, ghRunner);
 		} catch (error) {
 			return json(
 				{ error: error instanceof Error ? error.message : String(error) },
@@ -295,6 +358,8 @@ export type ServerOptions = {
 	config: HoundsmanConfig;
 	port?: number;
 	host?: string;
+	/** Runner do `gh` (injetável nos testes). */
+	ghRunner?: GhRunner;
 };
 
 /** Sobe o servidor e devolve a instância + URL. */
@@ -304,7 +369,7 @@ export function startServer(options: ServerOptions): { server: BunServer; url: s
 	const server = Bun.serve({
 		hostname: host,
 		port,
-		fetch: createRequestHandler(options.config),
+		fetch: createRequestHandler(options.config, { ghRunner: options.ghRunner }),
 	});
 	return { server, url: `http://${host}:${server.port}` };
 }
@@ -385,6 +450,11 @@ code, pre, .mono { font-family:var(--font-mono); }
 .btn:disabled { opacity:.55; cursor:not-allowed; }
 .btn .icon.spin { animation:spin .8s linear infinite; }
 .content { width:100%; max-width:1180px; margin:0 auto; padding:22px 24px 64px; }
+.page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }
+.page-header-text { min-width:0; }
+.page-header-actions { display:flex; align-items:center; gap:10px; flex:none; }
+.btn.submit-review { color:#1b1305; background:linear-gradient(180deg, var(--accent-strong), var(--accent)); border-color:transparent; box-shadow:0 4px 14px rgba(240,165,44,.22); }
+.btn.submit-review:hover { background:linear-gradient(180deg, var(--accent-strong), var(--accent)); border-color:transparent; filter:brightness(1.07); }
 .page-title { margin:0 0 8px; font-size:26px; font-weight:700; letter-spacing:-.02em; word-break:break-word; }
 .page-sub { margin:0; max-width:78ch; color:var(--muted); font-size:12.5px; line-height:1.55; }
 .page-sub code { color:var(--fg); background:rgba(255,255,255,.06); border-radius:6px; padding:1px 6px; font-size:11.5px; }
@@ -503,6 +573,37 @@ code, pre, .mono { font-family:var(--font-mono); }
 .artifact-desc { margin:0 0 12px; color:var(--muted); font-size:12.5px; line-height:1.55; }
 .artifact-view { margin:0; padding:14px; max-height:70vh; overflow:auto; font-size:12px; line-height:1.6; color:#cdc7bf;
   background:#0b0b0e; border:1px solid var(--border); border-radius:var(--radius); }
+.sent-tag { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--success); background:rgba(69,192,122,.12); border:1px solid rgba(69,192,122,.32); border-radius:999px; text-decoration:none; }
+.sent-tag:hover { color:#fff; }
+.modal-layer { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:24px; }
+.modal-backdrop { position:absolute; inset:0; width:100%; padding:0; background:rgba(5,5,7,.66); border:0; cursor:default; backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
+.modal { position:relative; width:min(640px, 100%); max-height:min(78vh, 780px); display:flex; flex-direction:column; overflow:hidden;
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--radius-lg); box-shadow:0 24px 70px rgba(0,0,0,.5); }
+.modal-head { display:flex; align-items:flex-start; justify-content:space-between; gap:14px; padding:18px 20px 14px; border-bottom:1px solid var(--border); }
+.modal-title { margin:0; font-size:17px; font-weight:700; letter-spacing:-.01em; }
+.modal-sub { margin:5px 0 0; font-size:12px; color:var(--muted); line-height:1.5; }
+.modal-close { flex:none; display:grid; place-items:center; width:30px; height:30px; font:inherit; font-size:19px; line-height:1; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:9px; cursor:pointer; }
+.modal-close:hover { color:var(--fg); border-color:var(--border-strong); }
+.modal-body { display:flex; flex-direction:column; gap:16px; padding:16px 20px; overflow-y:auto; }
+.modal-foot { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 20px; background:var(--surface-2); border-top:1px solid var(--border); }
+.submit-field { display:flex; flex-direction:column; gap:8px; }
+.submit-label { font-size:10px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--muted-2); }
+.submit-summary { padding:13px 15px; font-size:12.5px; color:var(--fg); background:var(--accent-soft); border:1px solid var(--accent-line); border-radius:var(--radius); }
+.submit-summary b { font-family:var(--font-mono); }
+.submit-list { display:flex; flex-direction:column; gap:6px; max-height:240px; overflow-y:auto; padding-right:2px; }
+.submit-item { display:flex; align-items:center; gap:10px; padding:8px 11px; font-size:12px; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; }
+.submit-item.sent { opacity:.7; }
+.submit-item .rule { flex:1; min-width:0; color:var(--muted); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.submit-empty { color:var(--muted); font-size:12.5px; }
+.submit-field .chips { flex-wrap:wrap; }
+.submit-check { display:inline-flex; align-items:center; gap:8px; font-size:12.5px; color:var(--muted); cursor:pointer; }
+.submit-check input { accent-color:var(--accent); }
+.submit-actions { display:flex; align-items:center; gap:8px; }
+.sev-badge.sev-blocking { color:var(--blocking); background:rgba(242,89,94,.12); }
+.sev-badge.sev-attention { color:var(--attention); background:rgba(237,161,58,.12); }
+.sev-badge.sev-suggestion { color:var(--suggestion); background:rgba(90,164,240,.12); }
+.sev-badge.sev-nit { color:var(--nit); background:rgba(255,255,255,.06); }
 @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.8); } }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:980px) { .kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }

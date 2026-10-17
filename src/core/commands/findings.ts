@@ -36,6 +36,15 @@ import {
 	syncState,
 } from "../findings-state";
 import { buildFixBatch, type FixBatchResult } from "../fix-batch";
+import {
+	buildSubmitPreview,
+	defaultGhRunner,
+	resolvePrTarget,
+	type SubmitOutcome,
+	type SubmitPreview,
+	type SubmitSelection,
+	submitFindings,
+} from "../github-review";
 import { relFromRoot, VERIFY_FILE } from "../paths";
 import { currentBranch } from "../pr-context";
 import { pingFindingsStatus } from "../run-status";
@@ -613,4 +622,123 @@ async function executeVerify(
 		);
 
 	return { output, exitCode: failOnPersisting ? 1 : 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Envio (findings submit)
+// ---------------------------------------------------------------------------
+
+/** Flag de lista `a,b,c` → itens não vazios. */
+function splitList(raw: string | undefined): string[] {
+	return (raw ?? "")
+		.split(",")
+		.map((value) => value.trim())
+		.filter(Boolean);
+}
+
+/** Seleção do envio a partir das flags (`--severity`, `--exec`, `--include-sent`). */
+function submitSelection(parsed: ParsedArgs): SubmitSelection {
+	const severities = splitList(parsed.values["--severity"]).filter(
+		(value): value is Severity =>
+			(SEVERITY_ORDER as readonly string[]).includes(value),
+	);
+	const execStates = splitList(parsed.values["--exec"]).filter(
+		(value): value is FindingExecState =>
+			(FINDING_EXEC_STATES as readonly string[]).includes(value),
+	);
+	return {
+		severities: severities.length > 0 ? severities : undefined,
+		execStates: execStates.length > 0 ? execStates : undefined,
+		includeSent: parsed.bools.has("--include-sent"),
+	};
+}
+
+/** Render da prévia do envio (markdown ou JSON). */
+function renderSubmitPreview(preview: SubmitPreview, json: boolean): string {
+	if (json) return JSON.stringify(preview, null, 2);
+	const totals = preview.totals;
+	if (!preview.available) {
+		return [
+			`PR indisponível para envio: ${preview.reason}`,
+			`Prévia local: ${totals.candidates} candidato(s) — ${totals.inline} inline · ${totals.body} no corpo · ${totals.sent} já enviado(s).`,
+		].join("\n");
+	}
+	const lines = [
+		`# Envio da revisão — PR #${preview.target?.number} (${preview.target?.repo})`,
+		"",
+		`A enviar: ${totals.toSend} (${totals.inline} inline · ${totals.body} no corpo) · já enviados: ${totals.sent}`,
+	];
+	if (totals.toSend === 0) lines.push("", "Nada a enviar.");
+	return lines.join("\n");
+}
+
+/** Render do resultado do envio (markdown ou JSON). */
+function renderSubmitOutcome(outcome: SubmitOutcome, json: boolean): string {
+	if (json) return JSON.stringify(outcome, null, 2);
+	const lines = [
+		"# Envio da revisão",
+		"",
+		`Enviados: ${outcome.posted.length} · Falhas: ${outcome.failed.length} · Pulados: ${outcome.skipped.length}`,
+	];
+	if (outcome.general) {
+		lines.push(
+			`Comentário geral: ${outcome.general.url ?? outcome.general.commentId} (${outcome.general.ids.length})`,
+		);
+	}
+	for (const failure of outcome.failed) {
+		lines.push(`- ❌ \`${failure.id}\`: ${failure.reason}`);
+	}
+	return lines.join("\n");
+}
+
+/**
+ * Subcomando `findings submit` — envia os findings selecionados como comentários
+ * na PR (via `gh`). `--dry-run` mostra a prévia sem postar. Assíncrono (gh).
+ */
+export async function runSubmitCommand(
+	config: HoundsmanConfig,
+	args: string[],
+): Promise<FindingsCommandResult> {
+	const parsed = parseArgs(args);
+	try {
+		return await executeSubmit(config, parsed);
+	} catch (error) {
+		return {
+			output: error instanceof Error ? error.message : String(error),
+			exitCode: 1,
+		};
+	}
+}
+
+async function executeSubmit(
+	config: HoundsmanConfig,
+	parsed: ParsedArgs,
+): Promise<FindingsCommandResult> {
+	const state = loadState(config, parsed);
+	const selection = submitSelection(parsed);
+	const target = resolvePrTarget(defaultGhRunner, state.branch);
+	const preview = buildSubmitPreview(state, target, selection);
+	const json = parsed.bools.has("--json");
+
+	// Prévia explícita, ou alvo indisponível (fail-open) — nada a postar.
+	if (parsed.bools.has("--dry-run") || !target.ok) {
+		return { output: renderSubmitPreview(preview, json), exitCode: 0 };
+	}
+
+	const outcome = submitFindings({
+		state,
+		target: target.target,
+		runner: defaultGhRunner,
+		selection,
+	});
+	FindingsStateStore.at(
+		parsed.values["--dir"] ?? resolveArtifactDir(config),
+		state.branch,
+	).write(state);
+	pingStatus(config, parsed);
+
+	return {
+		output: renderSubmitOutcome(outcome, json),
+		exitCode: outcome.failed.length > 0 ? 1 : 0,
+	};
 }

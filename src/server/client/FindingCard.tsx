@@ -45,7 +45,7 @@ export function FindingCard({
 
 	// O cartão acompanha o estado de execução: feito colapsa, reaberto expande.
 	useEffect(() => {
-		setOpen(finding.execState !== "done" && finding.decision !== 'ignore');
+		setOpen(finding.execState !== "done" && finding.decision !== "ignore");
 	}, [isDone]);
 
 	// Só reidrata o comentário quando o servidor tem um valor novo e nada local pendente.
@@ -143,6 +143,22 @@ export function FindingCard({
 						ausente
 					</span>
 				)}
+				{finding.github &&
+					(finding.github.url ? (
+						<a
+							class="sent-tag"
+							href={finding.github.url}
+							target="_blank"
+							rel="noreferrer"
+							title="Comentário enviado à PR"
+						>
+							<ExternalLink size={12} /> enviado
+						</a>
+					) : (
+						<span class="sent-tag" title="Comentário enviado à PR">
+							<ExternalLink size={12} /> enviado
+						</span>
+					))}
 				<span class="spacer" />
 				<button
 					type="button"

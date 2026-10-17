@@ -133,3 +133,11 @@ export const Watch = (p: IconProps) => (
 		<circle cx="12" cy="12" r="2.6" />
 	</Svg>
 );
+
+/** Avião de papel — "enviar revisão". */
+export const Send = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M22 2 11 13" />
+		<path d="M22 2 15 22l-4-9-9-4z" />
+	</Svg>
+);

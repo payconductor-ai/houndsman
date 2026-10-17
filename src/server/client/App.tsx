@@ -11,8 +11,9 @@ import { api, computeSummary } from "./api";
 import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./constants";
 import { Filters, type FiltersState } from "./Filters";
 import { FindingsList } from "./FindingsList";
-import { Layers, ListIcon, Refresh } from "./icons";
+import { Layers, ListIcon, Refresh, Send } from "./icons";
 import { RunList } from "./RunList";
+import { SubmitModal } from "./SubmitModal";
 import { SummaryBar } from "./SummaryBar";
 import type { Finding, FindingsResponse, RunSummary } from "./types";
 
@@ -46,6 +47,7 @@ export function App() {
 	const [lastSync, setLastSync] = useState(() => Date.now());
 	const [refreshing, setRefreshing] = useState(false);
 	const [syncing, setSyncing] = useState(false);
+	const [submitOpen, setSubmitOpen] = useState(false);
 	/** Refs espelhando estado volátil — o polling não deve recriar o intervalo. */
 	const lastSyncRef = useRef(lastSync);
 	const slugRef = useRef<string | null>(null);
@@ -152,6 +154,12 @@ export function App() {
 		}
 	}, [slug, loadFindings, reloadRuns, markSynced]);
 
+	/** Após enviar a revisão: a triagem ganhou o vínculo remoto — recarrega. */
+	const afterSubmit = useCallback(() => {
+		if (slugRef.current) void loadFindings(slugRef.current);
+		void reloadRuns();
+	}, [loadFindings, reloadRuns]);
+
 	const findings = useMemo(() => {
 		const needle = filters.query.trim().toLowerCase();
 		return (data?.findings ?? [])
@@ -226,8 +234,23 @@ export function App() {
 
 				<div class="content">
 					<div class="page-header">
-						{slug && <h1 class="page-title">{branch}</h1>}
-						<p class="page-sub">{TAB_CAPTIONS[tab]}</p>
+						<div class="page-header-text">
+							{slug && <h1 class="page-title">{branch}</h1>}
+							<p class="page-sub">{TAB_CAPTIONS[tab]}</p>
+						</div>
+						{slug && tab === "findings" && data && (
+							<div class="page-header-actions">
+								<button
+									type="button"
+									class="btn submit-review"
+									title="Publicar os findings selecionados como comentários na PR (via gh)"
+									onClick={() => setSubmitOpen(true)}
+								>
+									<Send size={15} />
+									Enviar revisão
+								</button>
+							</div>
+						)}
 					</div>
 					{error && <p class="error">{error}</p>}
 
@@ -245,6 +268,15 @@ export function App() {
 					{slug && tab === "artifacts" && <ArtifactsPanel slug={slug} />}
 					{!slug && !error && <p class="empty">Nenhuma execução para triar.</p>}
 				</div>
+				{slug && (
+					<SubmitModal
+						slug={slug}
+						branch={branch}
+						open={submitOpen}
+						onClose={() => setSubmitOpen(false)}
+						onSubmitted={afterSubmit}
+					/>
+				)}
 			</main>
 		</div>
 	);

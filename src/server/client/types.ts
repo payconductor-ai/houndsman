@@ -12,6 +12,15 @@ export type ExecState = "pending" | "in_progress" | "done" | "stale";
 /** Estados de execução de uma run (espelham `core/run-status.ts`). */
 export type RunStatus = "reviewing" | "review_done" | "fixing" | "fix_done";
 
+/** Vínculo com o comentário remoto no GitHub (envio da revisão). */
+export type GitHubLink = {
+	commentId: number;
+	url?: string;
+	kind: "inline" | "comment";
+	pr: number;
+	at: string;
+};
+
 export type Finding = {
 	id: string;
 	rule: string;
@@ -29,6 +38,8 @@ export type Finding = {
 	comment?: string;
 	execState: ExecState;
 	watchdogIds: string[];
+	/** Comentário remoto no GitHub, quando já enviado. */
+	github?: GitHubLink;
 };
 
 export type Summary = {
@@ -51,4 +62,54 @@ export type FindingsResponse = {
 	branch: string;
 	findings: Finding[];
 	summary: Summary;
+};
+
+/** Candidato ao envio da revisão (espelha `core/github-review.ts`). */
+export type SubmitCandidate = {
+	id: string;
+	file: string;
+	line: number | null;
+	severity: Severity;
+	execState: ExecState;
+	rule: string;
+	message: string;
+	inline: boolean;
+	sent: boolean;
+	sentUrl?: string;
+	skip: boolean;
+};
+
+export type PrTarget = {
+	number: number;
+	repo: string;
+	headSha?: string;
+	url?: string;
+};
+
+export type SubmitPreview = {
+	available: boolean;
+	reason?: string;
+	target?: PrTarget;
+	candidates: SubmitCandidate[];
+	totals: {
+		candidates: number;
+		toSend: number;
+		inline: number;
+		body: number;
+		sent: number;
+	};
+};
+
+export type SubmitOutcome = {
+	posted: { id: string; kind: "inline" | "comment"; commentId: number; url?: string }[];
+	failed: { id: string; reason: string }[];
+	skipped: { id: string; reason: string }[];
+	general?: { commentId: number; url?: string; ids: string[] };
+};
+
+export type SubmitResponse = {
+	available: boolean;
+	reason?: string;
+	target?: PrTarget;
+	outcome?: SubmitOutcome;
 };

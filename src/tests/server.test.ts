@@ -47,6 +47,41 @@ function makeEnv(): {
 	};
 }
 
+/** Semeia um `state.json` com um finding inline (tem linha) na run. */
+function seedState(artifactDir: string, branch: string): void {
+	writeFileSync(
+		join(artifactDir, branch, "state.json"),
+		JSON.stringify({
+			version: 2,
+			branch,
+			slug: branch,
+			updatedAt: "2026-01-01T00:00:00.000Z",
+			order: ["f1"],
+			findings: {
+				f1: {
+					id: "f1",
+					fingerprint: "fp1",
+					watchdogIds: ["alpha"],
+					rule: "Nunca usar any",
+					severity: "blocking",
+					file: "src/alpha/f.ts",
+					line: 2,
+					message: "any detectado",
+					action: "tipar",
+					anchor: null,
+					count: 1,
+					present: true,
+					decision: "pending",
+					execState: "pending",
+					createdAt: "2026-01-01T00:00:00.000Z",
+					updatedAt: "2026-01-01T00:00:00.000Z",
+					history: [],
+				},
+			},
+		}),
+	);
+}
+
 const get = (handler: (r: Request) => Promise<Response>, path: string) =>
 	handler(new Request(`http://localhost${path}`));
 
@@ -151,6 +186,88 @@ describe("server API", () => {
 			expect(res.status).toBe(200);
 			const body = (await res.json()) as { result: { stale: string[] } };
 			expect(Array.isArray(body.result.stale)).toBe(true);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("GET submit-preview resolve a PR e lista os candidatos", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config, {
+				ghRunner: () => ({
+					ok: true,
+					code: 0,
+					stderr: "",
+					stdout: JSON.stringify({
+						number: 12,
+						url: "https://github.com/acme/app/pull/12",
+						headRefOid: "deadbeef",
+					}),
+				}),
+			});
+			const res = await get(handler, "/api/runs/main/submit-preview");
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				available: boolean;
+				target: { number: number };
+				candidates: unknown[];
+			};
+			expect(body.available).toBe(true);
+			expect(body.target.number).toBe(12);
+			expect(body.candidates).toHaveLength(1);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("POST submit posta comentários e grava o vínculo no estado", async () => {
+		const env = makeEnv();
+		try {
+			seedState(env.artifactDir, "main");
+			const handler = createRequestHandler(env.config, {
+				ghRunner: (args) =>
+					args[0] === "pr"
+						? {
+								ok: true,
+								code: 0,
+								stderr: "",
+								stdout: JSON.stringify({
+									number: 12,
+									url: "https://github.com/acme/app/pull/12",
+									headRefOid: "deadbeef",
+								}),
+							}
+						: {
+								ok: true,
+								code: 0,
+								stderr: "",
+								stdout: JSON.stringify({
+									id: 501,
+									html_url: "https://x/501",
+								}),
+							},
+			});
+			const res = await handler(
+				new Request("http://localhost/api/runs/main/submit", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({}),
+				}),
+			);
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				available: boolean;
+				outcome: { posted: { kind: string }[] };
+			};
+			expect(body.available).toBe(true);
+			expect(body.outcome.posted).toHaveLength(1);
+			expect(body.outcome.posted[0].kind).toBe("inline");
+
+			const after = (await (
+				await get(handler, "/api/runs/main/findings?all=1")
+			).json()) as { findings: { github?: { commentId: number } }[] };
+			expect(after.findings[0].github?.commentId).toBe(501);
 		} finally {
 			env.cleanup();
 		}

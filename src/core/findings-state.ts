@@ -67,6 +67,22 @@ export type FindingHistoryEntry = {
 	by?: string;
 };
 
+/**
+ * Vínculo com o comentário remoto no GitHub (envio da revisão). Gravado pelo
+ * `findings submit` / UI — permite pular reenvios e abrir o comentário.
+ */
+export type GitHubLink = {
+	/** Id do comentário (review comment inline ou issue comment geral). */
+	commentId: number;
+	url?: string;
+	/** Origem do comentário remoto. */
+	kind: "inline" | "comment";
+	/** Número da PR de destino. */
+	pr: number;
+	/** Quando foi enviado (ISO). */
+	at: string;
+};
+
 /** Marco da revisão que originou o estado: commit revisado + quando. */
 export type FindingsReviewed = {
 	/** SHA do commit revisado (head do diff no `--finalize`). */
@@ -99,6 +115,8 @@ export type FindingState = {
 	createdAt: string;
 	updatedAt: string;
 	history: FindingHistoryEntry[];
+	/** Vínculo com o comentário remoto no GitHub (envio da revisão). */
+	github?: GitHubLink;
 };
 
 /** Conteúdo do `state.json`. */
@@ -345,6 +363,7 @@ export function buildStateFromFindings(
 			createdAt: prev?.createdAt ?? now,
 			updatedAt: now,
 			history: prev?.history ?? [],
+			github: prev?.github,
 		};
 		byFingerprint.set(fingerprint, created);
 		result[created.id] = created;
