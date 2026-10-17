@@ -14,6 +14,28 @@
 - Novo endpoint interno para reprocessar eventos manualmente.
 - Registro de tentativas no handler de envio.
 
+## Relatórios por domínio
+
+| Watchdog | Achados | Revisados | Relatório |
+|---|---|---|---|
+| Arquitetura Backend | 2 | 3/3 | [`review.backend-architecture.md`](review.backend-architecture.md) |
+| Pagamentos & Integrações | 1 | 4/4 | [`review.payments-integrations.md`](review.payments-integrations.md) |
+| Acquirer Integrations | 2 | 3/4 | [`review.acquirer-integrations.md`](review.acquirer-integrations.md) |
+
+## Cobertura
+
+| Watchdog | Arquivos revisados | Findings |
+|---|---|---|
+| API & Contratos | 2 | 0 |
+| Arquitetura Backend | 3 | 2 |
+| Pagamentos & Integrações | 4 | 1 |
+| Acquirer Integrations | 3/4 (faltam 1) | 2 |
+
+## Conclusão
+
+**Status:** ❌ Mudanças Necessárias
+**Resumo:** 2 violações bloqueantes, 1 ponto de atenção, 1 sugestão e 1 nit.
+
 ## ❌ blocking
 
 - **Webhook handler sem verifySignature** — `server/src/services/integrations/acquirer/webhook/handle-charge-event.ts:15` · _Acquirer Integrations, Pagamentos & Integrações_
@@ -42,17 +64,3 @@
 - **Ordem de membros** — `server/src/services/webhook/webhook-retry-service.ts:12` · _Arquitetura Backend_
   Campo privado declarado antes do construtor público.
   **Ação:** Reordenar membros (públicos primeiro).
-
-## Cobertura
-
-| Watchdog | Arquivos revisados | Findings |
-|---|---|---|
-| API & Contratos | 2 | 0 |
-| Arquitetura Backend | 3 | 1 |
-| Pagamentos & Integrações | 4 | 2 |
-| Acquirer Integrations | 3/4 (faltam 1) | 2 |
-
-## Conclusão
-
-**Status:** ❌ Mudanças Necessárias
-**Resumo:** 2 violações bloqueantes, 1 ponto de atenção, 1 sugestão.

@@ -294,6 +294,7 @@ function renderConclusion(counts: Record<Severity, number>): string[] {
 		"",
 		`**Status:** ${status}`,
 		`**Resumo:** ${counts.blocking} violações bloqueantes, ${counts.attention} pontos de atenção, ${counts.suggestion} sugestões e ${counts.nit} nits.`,
+		"",
 	];
 }
 
@@ -453,6 +454,12 @@ export function renderReport(
 
 	if (context) lines.push(...renderContext(context));
 
+	// Sumário primeiro: quem lê o review.md vê domínios, cobertura e conclusão
+	// antes dos pontos específicos.
+	lines.push(...renderDomainIndex(domains));
+	lines.push(...renderCoverage(reports, coverage, nameOf));
+	lines.push(...renderConclusion(counts));
+
 	lines.push(...renderFindingsSections(merged, nameOf));
 
 	if (merged.length === 0) {
@@ -462,10 +469,6 @@ export function renderReport(
 	if (candidates && candidates.length > 0) {
 		lines.push(...renderUnconfirmedCandidates(candidates, merged));
 	}
-
-	lines.push(...renderDomainIndex(domains));
-	lines.push(...renderCoverage(reports, coverage, nameOf));
-	lines.push(...renderConclusion(counts));
 
 	return lines.join("\n");
 }

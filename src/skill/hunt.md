@@ -165,13 +165,15 @@ houndsman --finalize
 Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. Quando todos existem:
 1. Valida o schema de cada JSON
 2. Deduplica achados por `(file, line, rule)` mesclando watchdogs sobrepostos
-3. Agrupa por severidade: ❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit
-4. Grava o artefato `review.md` no storage + tabela de cobertura
-5. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` (não bloqueiam)
-6. Agrupa os achados **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
-7. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
+3. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
    (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
-8. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
+4. Grava o `review.md` abrindo pelo **sumário**: contexto, relatórios por domínio, cobertura e
+   conclusão — antes dos achados
+5. Agrupa os achados por severidade (❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit) e
+   **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
+6. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` ao final
+   (não bloqueiam)
+7. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
    finding, preservados entre execuções
 
 Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
@@ -195,14 +197,6 @@ comandos `findings` levam do achado à correção.
 **Resumo das alterações:**
 - ...
 
-## ❌ blocking
-### `src/routes/order-route.ts`
-- **<regra>** — `src/routes/order-route.ts:5` · _<watchdogs>_
-  <mensagem>
-  **Ação:** <ação>
-
-## 🔎 Candidatos não verificados (Jev)   ← se houver
-
 ## Relatórios por domínio
 | Watchdog | Achados | Revisados | Relatório |
 |---|---|---|---|
@@ -213,7 +207,18 @@ comandos `findings` levam do achado à correção.
 
 ## Conclusão
 **Status:** ✅ Aprovado / ⚠️ Aprovado com Ressalvas / ❌ Mudanças Necessárias
+
+## ❌ blocking
+### `src/routes/order-route.ts`
+- **<regra>** — `src/routes/order-route.ts:5` · _<watchdogs>_
+  <mensagem>
+  **Ação:** <ação>
+
+## 🔎 Candidatos não verificados (Jev)   ← se houver, sempre ao final
 ```
+
+> O **sumário** (relatórios por domínio, cobertura e conclusão) vem **antes** dos achados;
+> os pontos específicos ficam no fim.
 
 ---
 

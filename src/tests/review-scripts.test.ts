@@ -673,6 +673,79 @@ describe("report-builder", () => {
 		expect(md).toContain("review.alpha.md");
 	});
 
+	test("renderReport coloca o sumário antes dos achados", () => {
+		const md = renderReport(
+			"main",
+			[{ watchdogId: "alpha", reviewedFiles: ["a.ts"], skipped: [], findings: [] }],
+			[
+				{
+					rule: "R1",
+					severity: "blocking" as const,
+					file: "a.ts",
+					line: 1,
+					message: "m",
+					action: "a",
+					watchdogs: ["alpha"],
+				},
+			],
+			{ classified: { alpha: ["a.ts"] } },
+			null,
+			undefined,
+			undefined,
+			[
+				{
+					id: "alpha",
+					name: "Alpha",
+					file: "review.alpha.md",
+					findings: 1,
+					reviewedFiles: 1,
+					expectedFiles: 1,
+				},
+			],
+		);
+		const sections = [
+			"## Relatórios por domínio",
+			"## Cobertura",
+			"## Conclusão",
+			"## ❌ blocking",
+		].map((section) => md.indexOf(section));
+		expect(sections.every((index) => index >= 0)).toBe(true);
+		expect([...sections].sort((a, b) => a - b)).toEqual(sections);
+	});
+
+	test("renderReport anexa candidatos Jev depois dos achados", () => {
+		const md = renderReport(
+			"main",
+			[{ watchdogId: "alpha", reviewedFiles: [], skipped: [], findings: [] }],
+			[
+				{
+					rule: "R1",
+					severity: "blocking" as const,
+					file: "a.ts",
+					line: 1,
+					message: "m",
+					action: "a",
+					watchdogs: ["alpha"],
+				},
+			],
+			{},
+			null,
+			[
+				{
+					watchdogId: "alpha",
+					rule: "R2",
+					severity: "attention",
+					file: "b.ts",
+					confidence: 0.6,
+					questionKey: "q",
+				},
+			],
+		);
+		expect(md.indexOf("## ❌ blocking")).toBeLessThan(
+			md.indexOf("## 🔎 Candidatos não verificados"),
+		);
+	});
+
 	test("renderDomainReport mostra cobertura e não revisados", () => {
 		const md = renderDomainReport(
 			"main",
