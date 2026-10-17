@@ -3,9 +3,14 @@
  * o toggle "ausentes".
  */
 
-import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS, SEVERITY_ORDER } from "./constants";
 import { Search, Watch } from "./icons";
-import type { Decision, Severity } from "./types";
+import {
+	DECISION_LABELS,
+	DECISIONS,
+	SEVERITY_LABELS,
+	SEVERITY_ORDER,
+} from "./utils/constants";
+import type { Decision, Severity } from "./utils/types";
 
 export type FiltersState = {
 	query: string;

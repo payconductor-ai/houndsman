@@ -156,6 +156,14 @@ export function isJsonArtifact(meta: ArtifactMeta | undefined): boolean {
 	return meta.contentType.includes("json") || meta.name.toLowerCase().endsWith(".json");
 }
 
+/** `true` se o conteúdo deve ser renderizado como markdown. */
+export function isMarkdownArtifact(meta: ArtifactMeta | undefined): boolean {
+	if (!meta) return false;
+	return (
+		meta.contentType.includes("markdown") || meta.name.toLowerCase().endsWith(".md")
+	);
+}
+
 /** Agrupa os artefatos para a navegação lateral (ordem estável). */
 export function groupArtifacts(
 	items: ArtifactMeta[],
@@ -193,5 +201,5 @@ export const TAB_CAPTIONS = {
 	findings:
 		"Triagem dos achados da revisão: decida Executar, Ignorar ou deixe Pendente — o comentário orienta o auto-fix. Agente: houndsman findings list --decision pending --json · findings done <id>.",
 	artifacts:
-		"Artefatos persistidos da run: relatórios, briefs de auditoria, manifesto, classificação, Jev, contexto da PR e verificação. JSON com destaque de sintaxe.",
+		"Artefatos persistidos da run: relatórios, briefs de auditoria, manifesto, classificação, Jev, contexto da PR e verificação. JSON com destaque de sintaxe; markdown renderizado com highlight de código.",
 } as const;

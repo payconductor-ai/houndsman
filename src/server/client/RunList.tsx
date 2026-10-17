@@ -3,10 +3,10 @@
  * com data/hora, relação de findings presentes e badge de correção pronta.
  */
 
-import { describeRunStatus } from "./constants";
-import { formatRunTime } from "./format";
 import { BranchIcon, Clock, Sparkles } from "./icons";
-import type { RunSummary } from "./types";
+import { describeRunStatus } from "./utils/constants";
+import { formatRunTime } from "./utils/format";
+import type { RunSummary } from "./utils/types";
 
 export function RunList({
 	runs,

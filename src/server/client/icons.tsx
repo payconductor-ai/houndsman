@@ -51,6 +51,14 @@ export const ExternalLink = (p: IconProps) => (
 	</Svg>
 );
 
+/** Marca do GitHub (contorno) — usada em achados já publicados na PR. */
+export const GitHub = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M9 19c-4.3 1.3-4.3-2.2-6-2.7" />
+		<path d="M15 22v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.8a5.3 5.3 0 0 0-1.4-3.7 4.9 4.9 0 0 0-.1-3.6s-1.1-.4-3.7 1.4a12.7 12.7 0 0 0-6.8 0C5.6 1 4.5 1.4 4.5 1.4a4.9 4.9 0 0 0-.1 3.6A5.3 5.3 0 0 0 3 8.7c0 5.2 3.1 6.4 6.1 6.8a3.4 3.4 0 0 0-.9 2.6V22" />
+	</Svg>
+);
+
 export const Sparkles = (p: IconProps) => (
 	<Svg {...p}>
 		<path d="M11 3.5l1.7 4.3 4.3 1.7-4.3 1.7L11 15.5 9.3 11.2 5 9.5l4.3-1.7z" />

@@ -7,21 +7,22 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import { api } from "./api";
-import { highlightCode, languageFromFile } from "./code-highlight";
-import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS } from "./constants";
-import { vscodeFileLink } from "./format";
 import {
 	Check,
 	ChevronRight,
 	CodeIcon,
 	ExternalLink,
+	GitHub,
 	Sparkles,
 	Spinner,
 	Watch,
 } from "./icons";
 import { MarkdownText } from "./MarkdownText";
-import type { Finding } from "./types";
+import { api } from "./utils/api";
+import { highlightCode, languageFromFile } from "./utils/code-highlight";
+import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS } from "./utils/constants";
+import { vscodeFileLink } from "./utils/format";
+import type { Finding } from "./utils/types";
 
 /** Debounce do auto-save do comentário (ms). */
 const AUTOSAVE_MS = 700;
@@ -155,17 +156,20 @@ export function FindingCard({
 				{finding.github &&
 					(finding.github.url ? (
 						<a
-							class="sent-tag"
+							class="sent-tag gh"
 							href={finding.github.url}
 							target="_blank"
 							rel="noreferrer"
-							title="Comentário enviado à PR"
+							title={`Comentário enviado ao GitHub (PR #${finding.github.pr}) — abrir`}
 						>
-							<ExternalLink size={12} /> enviado
+							<GitHub size={12} /> enviado ao GitHub
 						</a>
 					) : (
-						<span class="sent-tag" title="Comentário enviado à PR">
-							<ExternalLink size={12} /> enviado
+						<span
+							class="sent-tag gh"
+							title={`Comentário enviado ao GitHub (PR #${finding.github.pr})`}
+						>
+							<GitHub size={12} /> enviado ao GitHub
 						</span>
 					))}
 				<span class="spacer" />

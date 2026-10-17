@@ -6,8 +6,8 @@
  */
 
 import { useMemo } from "preact/hooks";
-import { highlightCode, languageFromName } from "./code-highlight";
-import { type InlineToken, parseInline, parseMarkdown, safeUrl } from "./markdown";
+import { highlightCode, languageFromName } from "./utils/code-highlight";
+import { type InlineToken, parseInline, parseMarkdown, safeUrl } from "./utils/markdown";
 
 function renderInlineToken(token: InlineToken) {
 	switch (token.type) {
@@ -59,7 +59,7 @@ function CodeBlock({ code, language }: { code: string; language: string | null }
 	);
 }
 
-/** Renderiza o markdown do action preservando quebras de linha e listas. */
+/** Renderiza o markdown do action/artefato preservando blocos e listas. */
 export function MarkdownText({ text }: { text: string }) {
 	const blocks = useMemo(() => parseMarkdown(text), [text]);
 	return (
@@ -72,6 +72,21 @@ export function MarkdownText({ text }: { text: string }) {
 								<InlineTokens text={block.text} />
 							</p>
 						);
+					case "heading": {
+						const level = Math.min(Math.max(block.level, 1), 6);
+						const Tag = `h${level}` as
+							| "h1"
+							| "h2"
+							| "h3"
+							| "h4"
+							| "h5"
+							| "h6";
+						return (
+							<Tag class={`md-h md-h${level}`}>
+								<InlineTokens text={block.text} />
+							</Tag>
+						);
+					}
 					case "list": {
 						const items = block.items.map((item) => (
 							<li>
@@ -84,6 +99,44 @@ export function MarkdownText({ text }: { text: string }) {
 							<ul class="md-list">{items}</ul>
 						);
 					}
+					case "table":
+						return (
+							<div class="md-table-wrap">
+								<table class="md-table">
+									<thead>
+										<tr>
+											{block.header.map((cell, column) => (
+												<th
+													style={{
+														textAlign: block.align[column],
+													}}
+												>
+													<InlineTokens text={cell} />
+												</th>
+											))}
+										</tr>
+									</thead>
+									<tbody>
+										{block.rows.map((row) => (
+											<tr key={row.join("|")}>
+												{block.header.map((_, column) => (
+													<td
+														style={{
+															textAlign:
+																block.align[column],
+														}}
+													>
+														<InlineTokens
+															text={row[column] ?? ""}
+														/>
+													</td>
+												))}
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						);
 					case "code":
 						return <CodeBlock code={block.code} language={block.language} />;
 					case "quote":
@@ -92,6 +145,8 @@ export function MarkdownText({ text }: { text: string }) {
 								<InlineTokens text={block.text} />
 							</blockquote>
 						);
+					case "hr":
+						return <hr class="md-hr" />;
 					default:
 						return null;
 				}

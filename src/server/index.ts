@@ -412,12 +412,24 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 .action-text p:last-child { margin-bottom:0; }
 .md-list { margin:0 0 6px; padding-left:20px; font-size:13px; line-height:1.65; color:#f0ece6; }
 .md-list li { margin:0 0 2px; }
-.md-quote { margin:0 0 6px; padding:2px 0 2px 10px; border-left:2px solid var(--accent-line); color:var(--muted); font-size:13px; line-height:1.65; }
+.md-quote { margin:0 0 6px; padding:2px 0 2px 10px; border-left:2px solid var(--accent-line); color:var(--muted); font-size:13px; line-height:1.65; white-space:pre-wrap; }
 .action-text code, .md-code { font-family:var(--font-mono); font-size:11.5px; padding:1px 5px; color:#f0ece6; background:rgba(255,255,255,.06); border:1px solid var(--border); border-radius:5px; }
-.action-text a { color:var(--accent-strong); text-decoration:underline; text-underline-offset:2px; }
-.action-text strong { color:#fff; font-weight:600; }
-.action-text em { color:#e9e4dc; }
+.action-text a, .md-p a, .md-list a, .md-quote a, .md-table a, .md-h a { color:var(--accent-strong); text-decoration:underline; text-underline-offset:2px; }
+.action-text strong, .md-p strong, .md-list strong, .md-quote strong, .md-table strong, .md-h strong { color:#fff; font-weight:600; }
+.action-text em, .md-p em, .md-list em, .md-quote em, .md-table em, .md-h em { color:#e9e4dc; }
 .md-code-block { margin:6px 0; padding:10px 12px; max-height:320px; overflow:auto; white-space:pre; font-size:11.5px; line-height:1.6; color:#cdc7bf; background:#0b0b0e; border-radius:10px; }
+.md-h { margin:16px 0 8px; font-size:14px; font-weight:700; line-height:1.35; letter-spacing:-.01em; color:#f4f0ea; }
+.md-h:first-child { margin-top:0; }
+.md-h1 { font-size:19px; }
+.md-h2 { font-size:16px; }
+.md-h3 { font-size:14px; }
+.md-h4, .md-h5, .md-h6 { font-size:13px; color:#ddd8d1; }
+.md-hr { margin:14px 0; border:0; border-top:1px solid var(--border); }
+.md-table-wrap { margin:8px 0 10px; overflow-x:auto; }
+.md-table { width:100%; border-collapse:collapse; font-size:12px; line-height:1.5; }
+.md-table th, .md-table td { padding:6px 9px; text-align:left; vertical-align:top; border:1px solid var(--border); }
+.md-table th { color:var(--muted); font-weight:600; background:var(--surface-2); }
+.md-table td { color:#d8d3cc; }
 .decision-tags-block { display:flex; align-items:center; gap:8px; }
 .evidence { margin:0; padding: 16px; white-space:break-spaces; font-size:12px; line-height:1.6; color:#cdc7bf;
   background:#0b0b0e; border:1px solid var(--border); border-radius:var(--radius); }
@@ -476,6 +488,10 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
   border:1px solid var(--accent-line); border-radius:999px; }
 .artifact-view { margin:0; padding:14px 16px; max-height:70vh; overflow:auto; font-size:12px; line-height:1.6; color:#cdc7bf;
   background:#0b0b0e; border:1px solid var(--border); border-radius:var(--radius); }
+.artifact-markdown { white-space:normal; }
+.artifact-markdown .md-p, .artifact-markdown .md-list, .artifact-markdown .md-quote { font-size:12.5px; }
+.artifact-markdown .md-p, .artifact-markdown .md-list { color:#d8d3cc; }
+.artifact-markdown .md-code-block { border:1px solid var(--border); }
 .json-view { white-space:pre; }
 .json-key { color:var(--accent-strong); }
 .json-string { color:#9ddc8a; }
@@ -486,6 +502,8 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 .sent-tag { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
   color:var(--success); background:rgba(69,192,122,.12); border:1px solid rgba(69,192,122,.32); border-radius:999px; text-decoration:none; }
 .sent-tag:hover { color:#fff; }
+.sent-tag.gh { color:#b9c7d6; background:rgba(139,164,191,.12); border-color:rgba(139,164,191,.35); }
+.sent-tag.gh:hover { color:#fff; background:rgba(139,164,191,.2); }
 .modal-layer { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:24px; }
 .modal-backdrop { position:absolute; inset:0; width:100%; padding:0; background:rgba(5,5,7,.66); border:0; cursor:default; backdrop-filter:blur(5px); -webkit-backdrop-filter:blur(5px); }
 .modal { position:relative; width:min(640px, 100%); max-height:min(78vh, 780px); display:flex; flex-direction:column; overflow:hidden;

@@ -9,16 +9,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import { api } from "./api";
-import { EXEC_STATES, SEVERITY_LABELS, SEVERITY_ORDER } from "./constants";
-import { ExternalLink, Send, Spinner } from "./icons";
+import { GitHub, Send, Spinner } from "./icons";
+import { api } from "./utils/api";
+import { EXEC_STATES, SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
 import type {
 	ExecState,
 	Severity,
 	SubmitOutcome,
 	SubmitPreview,
 	SubmitResponse,
-} from "./types";
+} from "./utils/types";
 
 const EXEC_LABELS: Record<ExecState, string> = {
 	pending: "Pendente",
@@ -333,6 +333,27 @@ export function SubmitModal({
 															arquivo
 														</span>
 													)}
+													{candidate.sent &&
+														(candidate.sentUrl ? (
+															<a
+																class="sent-tag gh"
+																href={candidate.sentUrl}
+																target="_blank"
+																rel="noreferrer"
+																title="Já enviado ao GitHub — abrir comentário"
+															>
+																<GitHub size={12} />
+																enviado
+															</a>
+														) : (
+															<span
+																class="sent-tag gh"
+																title="Já enviado ao GitHub"
+															>
+																<GitHub size={12} />
+																enviado
+															</span>
+														))}
 												</div>
 											))}
 										</div>
@@ -399,12 +420,12 @@ function ResultView({ outcome }: { outcome: SubmitOutcome }) {
 				<p class="submit-empty">
 					Comentário geral:{" "}
 					<a
-						class="sent-tag"
+						class="sent-tag gh"
 						href={generalUrl}
 						target="_blank"
 						rel="noreferrer"
 					>
-						<ExternalLink size={12} /> abrir
+						<GitHub size={12} /> abrir
 					</a>
 				</p>
 			)}

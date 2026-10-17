@@ -3,10 +3,10 @@
  */
 
 import { useMemo } from "preact/hooks";
-import { SEVERITY_LABELS, SEVERITY_ORDER } from "./constants";
 import { FindingCard } from "./FindingCard";
 import { Alert } from "./icons";
-import type { Finding, Severity } from "./types";
+import { SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
+import type { Finding, Severity } from "./utils/types";
 
 export function FindingsList({
 	slug,

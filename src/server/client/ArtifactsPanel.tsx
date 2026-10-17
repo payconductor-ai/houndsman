@@ -1,20 +1,23 @@
 /**
  * Painel de artefatos: lista todos os artefatos persistidos da run e renderiza
- * o conteúdo bruto. JSON ganha destaque de sintaxe; briefs e relatórios são
+ * o conteúdo bruto. JSON ganha destaque de sintaxe; markdown é renderizado com
+ * o mesmo parser/highlight do restante da UI. Briefs e relatórios ficam
  * auditáveis pela mesma navegação.
  */
 
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { api } from "./api";
+import { MarkdownText } from "./MarkdownText";
+import { api } from "./utils/api";
 import {
 	ARTIFACT_KIND_LABELS,
 	describeArtifact,
 	displayArtifactName,
 	groupArtifacts,
 	isJsonArtifact,
-} from "./constants";
-import { formatJson, highlightJson } from "./json-highlight";
-import type { ArtifactMeta } from "./types";
+	isMarkdownArtifact,
+} from "./utils/constants";
+import { formatJson, highlightJson } from "./utils/json-highlight";
+import type { ArtifactMeta } from "./utils/types";
 
 /** Prefere o relatório consolidado; senão, o primeiro artefato disponível. */
 function pickDefault(items: ArtifactMeta[]): string {
@@ -149,6 +152,10 @@ export function ArtifactsPanel({ slug }: { slug: string }) {
 					) : selected ? (
 						isJsonArtifact(selected) ? (
 							<JsonView content={content} />
+						) : isMarkdownArtifact(selected) ? (
+							<div class="artifact-view artifact-markdown">
+								<MarkdownText text={content} />
+							</div>
 						) : (
 							<pre class="artifact-view">{content || "—"}</pre>
 						)

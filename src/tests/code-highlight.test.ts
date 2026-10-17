@@ -10,7 +10,7 @@ import {
 	highlightCode,
 	languageFromFile,
 	languageFromName,
-} from "../server/client/code-highlight";
+} from "../server/client/utils/code-highlight";
 
 /** O texto concatenado dos tokens deve ser idêntico ao input. */
 function joined(tokens: { text: string }[]): string {

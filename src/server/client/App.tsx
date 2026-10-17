@@ -7,15 +7,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ArtifactsPanel } from "./ArtifactsPanel";
 import { AutoRefresh } from "./AutoRefresh";
-import { api, computeSummary } from "./api";
-import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./constants";
 import { Filters, type FiltersState } from "./Filters";
 import { FindingsList } from "./FindingsList";
 import { Layers, ListIcon, Refresh, Send } from "./icons";
 import { RunList } from "./RunList";
 import { SubmitModal } from "./SubmitModal";
 import { SummaryBar } from "./SummaryBar";
-import type { Finding, FindingsResponse, RunSummary } from "./types";
+import { api, computeSummary } from "./utils/api";
+import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./utils/constants";
+import type { Finding, FindingsResponse, RunSummary } from "./utils/types";
 
 type Tab = "findings" | "artifacts";
 

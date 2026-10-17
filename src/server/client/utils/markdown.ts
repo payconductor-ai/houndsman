@@ -1,16 +1,28 @@
 /**
- * Markdown mínimo do campo `action` (cliente).
+ * Markdown mínimo do cliente (campo `action` do finding e artefatos).
  *
- * Suporta o suficiente para instruções curtas: parágrafos, quebras de linha,
- * listas, blockquote, blocos de código e formatação inline (`code`, **bold**,
- * *itálico*, links). Sem lib externa e sem HTML cru.
+ * Suporta o suficiente para instruções curtas e relatórios: parágrafos,
+ * quebras de linha, listas, blockquote, títulos, tabelas, blocos de código e
+ * formatação inline (`code`, **bold**, *itálico*, links). Sem lib externa e
+ * sem HTML cru.
  */
+
+/** Alinhamento de coluna em tabela markdown. */
+export type MarkdownAlign = "left" | "center" | "right";
 
 export type MarkdownBlock =
 	| { type: "paragraph"; text: string }
 	| { type: "list"; ordered: boolean; items: string[] }
 	| { type: "code"; language: string | null; code: string }
-	| { type: "quote"; text: string };
+	| { type: "quote"; text: string }
+	| { type: "heading"; level: number; text: string }
+	| {
+			type: "table";
+			align: (MarkdownAlign | undefined)[];
+			header: string[];
+			rows: string[][];
+	  }
+	| { type: "hr" };
 
 export type InlineToken =
 	| { type: "text"; text: string }
@@ -23,11 +35,48 @@ const FENCE = /^\s*```(\S*)\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
 const ORDERED = /^\s*\d+\.\s+(.*)$/;
 const QUOTE = /^\s*>\s?(.*)$/;
+const HEADING = /^(#{1,6})\s+(.*)$/;
+const HR = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)+\|?\s*$/;
 
 function isBlockStart(line: string): boolean {
 	return (
-		FENCE.test(line) || BULLET.test(line) || ORDERED.test(line) || QUOTE.test(line)
+		FENCE.test(line) ||
+		HEADING.test(line) ||
+		HR.test(line) ||
+		BULLET.test(line) ||
+		ORDERED.test(line) ||
+		QUOTE.test(line)
 	);
+}
+
+/** Quebra uma linha de tabela em células (remove os pipes das pontas). */
+function splitTableRow(line: string): string[] {
+	return line
+		.trim()
+		.replace(/^\|/, "")
+		.replace(/\|$/, "")
+		.split("|")
+		.map((cell) => cell.trim());
+}
+
+/** `true` quando há um cabeçalho seguido da linha separadora de tabela. */
+function isTableStart(lines: string[], index: number): boolean {
+	if (index + 1 >= lines.length) return false;
+	if (!lines[index].includes("|")) return false;
+	return TABLE_SEP.test(lines[index + 1]);
+}
+
+/** Alinhamentos declarados na linha separadora (`:---`, `:---:`, `---:`). */
+function parseAlignments(line: string): (MarkdownAlign | undefined)[] {
+	return splitTableRow(line).map((cell) => {
+		const left = cell.startsWith(":");
+		const right = cell.endsWith(":");
+		if (left && right) return "center";
+		if (right) return "right";
+		if (left) return "left";
+		return undefined;
+	});
 }
 
 /** Divide o texto em blocos simples (sem aninhamento profundo). */
@@ -54,6 +103,40 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 			}
 			if (index < lines.length) index++;
 			blocks.push({ type: "code", language, code: code.join("\n") });
+			continue;
+		}
+
+		const heading = HEADING.exec(line);
+		if (heading) {
+			blocks.push({
+				type: "heading",
+				level: heading[1].length,
+				text: heading[2].trim(),
+			});
+			index++;
+			continue;
+		}
+
+		if (HR.test(line)) {
+			blocks.push({ type: "hr" });
+			index++;
+			continue;
+		}
+
+		if (isTableStart(lines, index)) {
+			const header = splitTableRow(line);
+			const align = parseAlignments(lines[index + 1]);
+			const rows: string[][] = [];
+			index += 2;
+			while (
+				index < lines.length &&
+				lines[index].trim().length > 0 &&
+				lines[index].includes("|")
+			) {
+				rows.push(splitTableRow(lines[index]));
+				index++;
+			}
+			blocks.push({ type: "table", align, header, rows });
 			continue;
 		}
 
@@ -98,7 +181,8 @@ export function parseMarkdown(text: string): MarkdownBlock[] {
 		while (
 			index < lines.length &&
 			lines[index].trim().length > 0 &&
-			!isBlockStart(lines[index])
+			!isBlockStart(lines[index]) &&
+			!isTableStart(lines, index)
 		) {
 			paragraph.push(lines[index]);
 			index++;

@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { parseInline, parseMarkdown, safeUrl } from "../server/client/markdown";
+import { parseInline, parseMarkdown, safeUrl } from "../server/client/utils/markdown";
 
 describe("parseMarkdown", () => {
 	test("separa parágrafos, listas, quote e bloco de código", () => {
@@ -41,6 +41,22 @@ describe("parseMarkdown", () => {
 
 	test("texto vazio não gera blocos", () => {
 		expect(parseMarkdown("  \n\n ")).toEqual([]);
+	});
+
+	test("reconhece títulos, tabela e régua horizontal", () => {
+		const blocks = parseMarkdown(
+			"# Relatório\n\n| Arquivo | Severidade |\n|---|:---:|\n| a.ts | blocking |\n\n---",
+		);
+		expect(blocks).toEqual([
+			{ type: "heading", level: 1, text: "Relatório" },
+			{
+				type: "table",
+				align: [undefined, "center"],
+				header: ["Arquivo", "Severidade"],
+				rows: [["a.ts", "blocking"]],
+			},
+			{ type: "hr" },
+		]);
 	});
 });
 

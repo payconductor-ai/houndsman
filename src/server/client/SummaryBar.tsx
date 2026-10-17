@@ -3,7 +3,7 @@
  * progresso da correção (feitos ÷ total).
  */
 
-import type { Summary } from "./types";
+import type { Summary } from "./utils/types";
 
 function Kpi({
 	label,

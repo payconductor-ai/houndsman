@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from "preact/hooks";
-import { formatElapsed } from "./format";
+import { formatElapsed } from "./utils/format";
 
 export function AutoRefresh({
 	lastSync,
