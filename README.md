@@ -27,7 +27,10 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 - **Bun** — runtime obrigatório.
 - **git** — o diff usa `git diff <base>...<head>`.
 - **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
-- **`TYPESAFE_API_KEY`** (Opcional) — Env a ser informada na raiz, usada em pré-analise com JEV
+- **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo.
+
+> Coloque as chaves em um `.env` na raiz do projeto; o Bun carrega automaticamente.
 
 ### 2. Instale o CLI (global)
 

@@ -22,6 +22,18 @@ export type ManifestOptions = {
 	head: string;
 };
 
+/** Resumo do AST no manifesto. */
+export type ManifestAst = {
+	enabled: boolean;
+	languages: string[];
+	files: number;
+	impact: {
+		affectedFiles: number;
+		importers: number;
+		exportedChanges: number;
+	};
+};
+
 /** Classificação enriquecida gravada pelo prepare (modo + incremental). */
 export type ManifestClassification = ClassificationResult & {
 	headSha?: string;
@@ -57,6 +69,7 @@ export class ManifestWriter {
 		activeIds: string[],
 		pending: string[],
 		jev: JevCandidatesFile,
+		ast?: ManifestAst,
 	): void {
 		const view = Classification.from(classification);
 		const maxFilesPerBrief = this.project.maxFilesPerBrief;
@@ -109,6 +122,12 @@ export class ManifestWriter {
 						skipped: jev.skipped?.length ?? 0,
 					}
 				: { available: false, reason: jev.reason },
+			ast: ast ?? {
+				enabled: false,
+				languages: [],
+				files: 0,
+				impact: { affectedFiles: 0, importers: 0, exportedChanges: 0 },
+			},
 			deleted: classification.deleted,
 			unclassified: classification.unclassified,
 			excludedCount: classification.excludedCount,

@@ -1,9 +1,11 @@
 /**
  * Subcomando `update` — sincroniza os arquivos **auto-gerados** da camada `.houndsman/`.
  *
- * Reescreve `core/types.ts`, `core/skill/*.md`, `.houndsman/.gitignore` e os
- * ponteiros de skill dos harnesses. Nunca toca nos arquivos do usuário
- * (`watchdogs/`, `doc-mappings.ts`, `exclusions.ts`, `houndsman.config.ts`).
+ * Reescreve `core/types.ts`, `core/skill/*.md`, `core/grammars/*.wasm`,
+ * `.houndsman/.gitignore` e os ponteiros de skill dos harnesses. Nunca toca nos
+ * arquivos do usuário (`watchdogs/`, `doc-mappings.ts`, `exclusions.ts`,
+ * `houndsman.config.ts`). As grammars do AST são sincronizadas aqui — o
+ * consumidor não precisa rodar nenhum comando extra.
  */
 
 import { createScaffoldContext, syncGeneratedFiles } from "./scaffold";

@@ -7,6 +7,7 @@
  * decide. O custo é uma chamada por arquivo ambíguo, não uma revisão completa.
  */
 
+import { ENV_NAMES } from "../env";
 import { diffPatch, readFileAt } from "../git-revision";
 import type { JevClient } from "./jev-client";
 import type { JevAnswer, JevQuestion } from "./jev-types";
@@ -104,7 +105,7 @@ export class JevVerifier {
 				confidence,
 				checked: 0,
 				skipped: cases.length,
-				reason: "TYPESAFE_API_KEY não configurada",
+				reason: `${ENV_NAMES.typeSafeApiKey} não configurada`,
 			};
 		}
 

@@ -9,17 +9,18 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { HoundsmanConfig } from "../config";
+import { ENV_NAMES, env } from "../env";
 
-export const HOUNDSMAN_HOME_ENV = "HOUNDSMAN_HOME";
+export const HOUNDSMAN_HOME_ENV = ENV_NAMES.home;
 
 /** Diretório-base global do houndsman. */
 export function houndsmanHome(): string {
-	const override = process.env[HOUNDSMAN_HOME_ENV];
-	if (override && override.trim().length > 0) return resolve(override);
+	const override = env.home;
+	if (override) return resolve(override);
 
 	const home = homedir();
 	if (process.platform === "win32") {
-		const local = process.env.LOCALAPPDATA;
+		const local = env.localAppData;
 		return join(
 			local && local.length > 0 ? local : join(home, "AppData", "Local"),
 			"houndsman",
@@ -28,7 +29,7 @@ export function houndsmanHome(): string {
 	if (process.platform === "darwin") {
 		return join(home, "Library", "Application Support", "houndsman");
 	}
-	const xdg = process.env.XDG_DATA_HOME;
+	const xdg = env.xdgDataHome;
 	return join(xdg && xdg.length > 0 ? xdg : join(home, ".local", "share"), "houndsman");
 }
 

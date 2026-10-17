@@ -16,6 +16,8 @@
  * review.<watchdog>.md, context e context-summary.
  */
 
+import type { AstService } from "./ast/service";
+import type { AstAnalysis, AstFileBrief, AstImpact } from "./ast/types";
 import {
 	type HoundsmanConfig,
 	resolveJevConcurrency,
@@ -27,6 +29,7 @@ import { Classification } from "./domain/classification";
 import { Watchdog } from "./domain/watchdog";
 import { mergeCarryover } from "./engine/carryover";
 import { ReviewScopeResolver, type RunClassification } from "./engine/review-scope";
+import { ENV_NAMES } from "./env";
 import type { BudgetSelection, ClassificationResult } from "./file-classifier";
 import { buildStateFromFindings, fileReader } from "./findings-state";
 import { resolveSha } from "./git-revision";
@@ -49,7 +52,7 @@ import {
 import { currentBranch } from "./pr-context";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
-import { ManifestWriter } from "./renderers/manifest-writer";
+import { type ManifestAst, ManifestWriter } from "./renderers/manifest-writer";
 import { ReportRenderer } from "./renderers/report-renderer";
 import { renderReviewResume } from "./renderers/resume-renderer";
 import {
@@ -75,6 +78,8 @@ export type ReviewOptions = {
 	failOnBlocking: boolean;
 	clean: boolean;
 	noJev: boolean;
+	/** Desativa a análise estrutural (AST) nesta run. */
+	noAst: boolean;
 	/** Força review completo (ignora o modo incremental). */
 	full: boolean;
 };
@@ -88,6 +93,7 @@ export function defaultOptions(): ReviewOptions {
 		failOnBlocking: false,
 		clean: false,
 		noJev: false,
+		noAst: false,
 		full: false,
 	};
 }
@@ -149,6 +155,7 @@ function writeManifest(
 	activeIds: string[],
 	pending: string[],
 	jev: JevCandidatesFile,
+	ast?: ManifestAst,
 ): void {
 	new ManifestWriter(
 		ctx.storage,
@@ -156,7 +163,7 @@ function writeManifest(
 		ctx.work,
 		new ProjectConfig(config),
 		opts,
-	).write(classification, activeIds, pending, jev);
+	).write(classification, activeIds, pending, jev, ast);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +178,8 @@ function writeBriefs(
 	context: ContextSummary | null,
 	candidates: JevCandidate[],
 	config: HoundsmanConfig,
+	astAnalyses?: ReadonlyMap<string, AstAnalysis>,
+	astImpact?: AstImpact,
 ): void {
 	const work = ctx.work;
 	const docs = discoverDocs(Object.keys(classification.files), config);
@@ -180,6 +189,17 @@ function writeBriefs(
 		const def = findWatchdog(config, id);
 		if (!def) continue;
 		const { selected, overflow } = budgetFor(classification, id, maxFilesPerBrief);
+		const astFiles: AstFileBrief[] = selected.flatMap((file) => {
+			const analysis = astAnalyses?.get(file);
+			if (!analysis?.delta) return [];
+			return [
+				{
+					file,
+					delta: analysis.delta,
+					importers: astImpact?.importers[file],
+				},
+			];
+		});
 		const brief = renderer.render(new Watchdog(def), {
 			watchdogId: id,
 			files: selected,
@@ -193,6 +213,7 @@ function writeBriefs(
 			docs,
 			context,
 			candidates: candidates.filter((c) => c.watchdogId === id),
+			ast: astFiles,
 		});
 		const content = `${brief}\n`;
 		work.writeBrief(id, content);
@@ -235,7 +256,9 @@ async function resolveCandidates(
 
 	const client = new JevClient();
 	if (!client.isConfigured()) {
-		return save(JevCandidatesStore.unavailable("TYPESAFE_API_KEY não configurada"));
+		return save(
+			JevCandidatesStore.unavailable(`${ENV_NAMES.typeSafeApiKey} não configurada`),
+		);
 	}
 
 	try {
@@ -313,6 +336,7 @@ export async function prepare(
 	branch: string,
 	config: HoundsmanConfig,
 	ctx: ReviewContext,
+	ast?: AstService,
 ): Promise<PrepareResult> {
 	const messages: string[] = [];
 	ctx.work.ensure();
@@ -322,7 +346,11 @@ export async function prepare(
 	// Marca o commit revisado e decide entre completo, incremental ou no-op.
 	const headSha = resolveSha(opts.head);
 	const previous = ctx.storage.readFindings(ctx.review.id);
-	const scope = new ReviewScopeResolver(opts, config).resolve(previous, headSha);
+	const scope = await new ReviewScopeResolver(
+		opts,
+		config,
+		opts.noAst ? undefined : ast,
+	).resolve(previous, headSha);
 
 	// Mesmo commit já revisado: preserva artefatos e triagem, sem re-revisar.
 	if (scope.kind === "noop") {
@@ -355,6 +383,36 @@ export async function prepare(
 		content: `${JSON.stringify(classification, null, 2)}\n`,
 	});
 
+	const astAnalyses = scope.ast;
+	const astImpact = astAnalyses && ast ? await ast.impact(astAnalyses) : undefined;
+	if (astAnalyses && ast?.enabled) {
+		const summary = {
+			enabled: true,
+			files: Object.fromEntries(
+				[...astAnalyses].map(([path, analysis]) => [
+					path,
+					{
+						facts: analysis.facts,
+						delta: analysis.delta,
+						deleted: analysis.deleted,
+					},
+				]),
+			),
+		};
+		ctx.storage.writeArtifact(ctx.review.id, {
+			name: "ast-summary.json",
+			kind: "ast",
+			content: `${JSON.stringify(summary, null, 2)}\n`,
+		});
+		if (astImpact) {
+			ctx.storage.writeArtifact(ctx.review.id, {
+				name: "ast-impact.json",
+				kind: "ast-impact",
+				content: `${JSON.stringify(astImpact, null, 2)}\n`,
+			});
+		}
+	}
+
 	const jev = await resolveCandidates(opts, classification, ctx, config, diff);
 
 	const activeIds = Object.keys(classification.watchdogs);
@@ -383,14 +441,60 @@ export async function prepare(
 	const context = ctx.work.readContextSummary() ?? readPersistedContextSummary(ctx);
 	persistContext(ctx);
 
-	writeBriefs(activeIds, classification, ctx, branch, context, jev.candidates, config);
-	writeManifest(ctx, config, opts, classification, activeIds, activeIds, jev);
+	const manifestAst: ManifestAst | undefined = astAnalyses
+		? {
+				enabled: ast?.enabled ?? false,
+				languages: [
+					...new Set(
+						[...astAnalyses.values()].map(
+							(analysis) => analysis.facts.language,
+						),
+					),
+				].sort(),
+				files: astAnalyses.size,
+				impact: {
+					affectedFiles: astImpact?.affectedFiles.length ?? 0,
+					importers: Object.keys(astImpact?.importers ?? {}).length,
+					exportedChanges: astImpact?.exportedChanges.length ?? 0,
+				},
+			}
+		: undefined;
+
+	writeBriefs(
+		activeIds,
+		classification,
+		ctx,
+		branch,
+		context,
+		jev.candidates,
+		config,
+		astAnalyses,
+		astImpact,
+	);
+	writeManifest(
+		ctx,
+		config,
+		opts,
+		classification,
+		activeIds,
+		activeIds,
+		jev,
+		manifestAst,
+	);
 
 	messages.push(
 		...discoveryMessages(activeIds, classification, ctx.work.briefsDir),
 		...budgetMessage(classification, config),
 		...jevSummary(jev),
 	);
+	if (astAnalyses) {
+		messages.push(
+			`AST: ${astAnalyses.size} arquivo(s) analisado(s), ` +
+				`${astImpact?.affectedFiles.length ?? 0} impactado(s).`,
+		);
+	} else {
+		messages.push("AST: desabilitado ou sem grammar compatível.");
+	}
 
 	if (context) {
 		messages.push("Contexto da PR resumido e injetado nos briefs.");

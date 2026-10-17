@@ -192,6 +192,40 @@ function checkBudgets(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
+/** Valida a configuração do AST (a disponibilidade das grammars é checada no doctor). */
+function checkAstConfig(
+	config: HoundsmanConfig,
+	problems: string[],
+	warnings: string[],
+): void {
+	const ast = config.ast;
+	if (!ast) return;
+
+	if (ast.maxFileBytes !== undefined && ast.maxFileBytes <= 0) {
+		warnings.push(
+			`ast.maxFileBytes = ${ast.maxFileBytes} — não-positivo; usando o default.`,
+		);
+	}
+	if (ast.maxImpactFiles !== undefined && ast.maxImpactFiles < 0) {
+		warnings.push(
+			`ast.maxImpactFiles = ${ast.maxImpactFiles} — negativo; impacto será desabilitado.`,
+		);
+	}
+	const valid = new Set(["typescript", "tsx", "javascript"]);
+	for (const [extension, language] of Object.entries(ast.languages ?? {})) {
+		if (!valid.has(language)) {
+			problems.push(
+				`ast.languages['${extension}'] = '${language}' (esperado typescript|tsx|javascript)`,
+			);
+		}
+	}
+	for (const [alias, target] of Object.entries(ast.aliases ?? {})) {
+		if (!alias.trim() || !target.trim()) {
+			warnings.push(`ast.aliases['${alias}'] vazio — alias ignorado.`);
+		}
+	}
+}
+
 export function checkRegistry(config: HoundsmanConfig): {
 	problems: string[];
 	warnings: string[];
@@ -207,6 +241,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkRuleDuplication(config, warnings);
 	checkMetadataPrecision(config, warnings);
 	checkBudgets(config, warnings);
+	checkAstConfig(config, problems, warnings);
 	const jevQuestions = checkJevSpecs(config, problems);
 
 	return { problems, warnings, jevQuestions };

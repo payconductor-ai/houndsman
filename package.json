@@ -51,14 +51,17 @@
 		"ci:check:fix": "biome check --fix",
 		"ci:fix": "bun run ci:check:fix && bun run ci:format:fix",
 		"ci:format": "biome format",
-		"ci:format:fix": "biome format --fix"
+		"ci:format:fix": "biome format --fix",
+		"grammars:sync": "bun run ./scripts/sync-grammars.ts"
 	},
 	"dependencies": {
 		"axios": "^1.12.2",
-		"preact": "^11.0.1"
+		"preact": "^11.0.1",
+		"web-tree-sitter": "0.27.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.2.4",
+		"@vscode/tree-sitter-wasm": "0.3.1",
 		"bun-types": "^1.3.14",
 		"typescript": "^7.0.2"
 	}

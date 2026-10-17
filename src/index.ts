@@ -7,11 +7,29 @@
 
 export { ArgParser } from "./core/arg-parser";
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
+export { computeDelta, emptyDelta, parseHunks } from "./core/ast/diff";
+export { buildImpact, resolveImport } from "./core/ast/impact";
+export { AstParser, languageForPath } from "./core/ast/parser";
+export { AstService } from "./core/ast/service";
+export type {
+	AstAnalysis,
+	AstDelta,
+	AstEntry,
+	AstExport,
+	AstFacts,
+	AstFileBrief,
+	AstImpact,
+	AstImport,
+	AstLanguage,
+	AstSymbol,
+	AstSymbolKind,
+} from "./core/ast/types";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
 export type { FindingsCommandResult } from "./core/commands/findings";
 export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export { ProjectScaffolder } from "./core/commands/scaffold";
 export type {
+	HoundsmanAst,
 	HoundsmanBudgets,
 	HoundsmanConcurrency,
 	HoundsmanConfig,
@@ -20,6 +38,8 @@ export type {
 } from "./core/config";
 export {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
+	DEFAULT_AST_MAX_FILE_BYTES,
+	DEFAULT_AST_MAX_IMPACT_FILES,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 	defineHoundsmanConfig,
@@ -47,6 +67,8 @@ export { buildCarryover, mergeCarryover } from "./core/engine/carryover";
 export { HoundsmanEngine } from "./core/engine/houndsman-engine";
 export { ReviewScopeResolver } from "./core/engine/review-scope";
 export { ReviewSession } from "./core/engine/review-session";
+export type { HoundsmanEnv } from "./core/env";
+export { ENV_NAMES, env, readEnv } from "./core/env";
 export {
 	churnOf,
 	classifyEntries,

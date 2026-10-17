@@ -22,6 +22,7 @@ Flags:
   --clean             Descarta findings brutos do staging anterior
   --full              Força review completo (ignora o modo incremental)
   --no-jev            Desativa a pré-análise Jev
+  --no-ast            Desativa a análise estrutural (tree-sitter)
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
 
 Flags de findings:
@@ -45,4 +46,8 @@ Flags de findings:
 Persistência:
   Runs, findings e artefatos ficam no storage global (SQLite em
   <HOUNDSMAN_HOME>/houndsman.db). Use storage.provider: "file" na config para
-  voltar ao backend de arquivos. Nada é gravado em .houndsman/.runs.`;
+  voltar ao backend de arquivos. Nada é gravado em .houndsman/.runs.
+
+Ambiente (o Bun carrega .env automaticamente):
+  HOUNDSMAN_TYPE_SAFE_API_KEY  Pré-análise Jev (opcional)
+  HOUNDSMAN_DEEP_SEEK_API_KEY  IA do hunt nativo (opcional)`;

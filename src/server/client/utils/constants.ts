@@ -91,6 +91,8 @@ const KIND_ORDER: ArtifactKind[] = [
 	"manifest",
 	"classification",
 	"candidates",
+	"ast",
+	"ast-impact",
 	"context",
 	"context-brief",
 	"context-summary",
@@ -109,6 +111,8 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 		manifest: { key: "core", label: "Núcleo da revisão", order: 3 },
 		classification: { key: "core", label: "Núcleo da revisão", order: 3 },
 		candidates: { key: "core", label: "Núcleo da revisão", order: 3 },
+		ast: { key: "core", label: "Núcleo da revisão", order: 3 },
+		"ast-impact": { key: "core", label: "Núcleo da revisão", order: 3 },
 		context: { key: "context", label: "Contexto da PR", order: 4 },
 		"context-brief": { key: "context", label: "Contexto da PR", order: 4 },
 		"context-summary": { key: "context", label: "Contexto da PR", order: 4 },
@@ -126,6 +130,8 @@ export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
 	manifest: "manifesto",
 	classification: "classificação",
 	candidates: "jev",
+	ast: "ast",
+	"ast-impact": "impacto",
 	context: "contexto",
 	"context-brief": "brief ctx",
 	"context-summary": "resumo ctx",
@@ -159,6 +165,10 @@ export function describeArtifact(meta: ArtifactMeta): string {
 			return "Classificação do diff: watchdogs ativados por arquivo, status (A/M/D/R) e churn.";
 		case "candidates":
 			return "Indícios da pré-análise Jev (regra + arquivo + confiança) — não são achados.";
+		case "ast":
+			return "Fatos estruturais e delta por arquivo (símbolos, imports, exports e assinaturas).";
+		case "ast-impact":
+			return "Impacto reverso: arquivos que importam os alterados e exports públicos modificados.";
 		case "context":
 			return "Payload bruto da PR coletado via `gh` (ou marcador de indisponível).";
 		case "context-brief":

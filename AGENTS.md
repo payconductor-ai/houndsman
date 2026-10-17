@@ -34,6 +34,7 @@ projeto **autocontida**), carregada em runtime.
 | `bun run typecheck` | `tsc -b` |
 | `bun run lint` / `bun run format` | Biome |
 | `bun run build` | `bun build` → `dist/` (bundle único) |
+| `bun run grammars:sync` | (dev) atualiza `assets/grammars/`; o `houndsman update` copia para a camada |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
@@ -56,6 +57,7 @@ src/
 ├── core/             # bibliotecas genéricas
 │   ├── engine/              # HoundsmanEngine (composition root), ReviewSession,
 │   │                        # ReviewScopeResolver, carry-over
+│   ├── ast/                 # AST determinístico: parser wasm, símbolos, delta e impacto
 │   ├── domain/              # Watchdog, Classification, Diff, budget (regras puras)
 │   ├── services/            # GitRepository, GhClient, FileClassifier, Verifier,
 │   │                        # FixBatchBuilder, ProjectFiles, Clock
@@ -110,6 +112,11 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
 
 - **`core/` é agnóstico ao projeto.** Nenhum id, path, nome de projeto ou regra de negócio de
   consumidor. Tudo chega por `HoundsmanConfig`.
+- **AST é fail-open.** `core/ast/` nunca bloqueia a revisão: grammar ausente, ABI incompatível,
+  arquivo grande/binário ou erro de git viram ausência de fatos. O regex continua sendo o
+  fallback e `unclassified` continua existindo. As grammars wasm vivem em `assets/grammars/` e
+  são resolvidas por `import.meta.dir` (`core/assets.ts`), nunca pelo cwd. O `setup`/`update`
+  copiam os wasm para `.houndsman/core/grammars/`; o consumidor **não** roda sync manual.
 - **Composition root:** `HoundsmanEngine` injeta a config e os colaboradores (`GitRepository`,
   `FileClassifier`, `Verifier`, `FixBatchBuilder`). Pipelines não instanciam dependências
   diretamente; a CLI só conhece `Command`/`CommandRegistry`.
@@ -123,7 +130,7 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
 - O `setup` gera uma camada **autocontida** (não importa o pacote `@payconductor/houndsman` —
   só tipos espelhados em `.houndsman/core/types.ts`). Mantenha assim: é o que permite
   instalação **global** sem dependência local no projeto.
-- **Jev é opcional e falha-aberto.** Sem `TYPESAFE_API_KEY` (ou com `--no-jev`), a revisão roda
+- **Jev é opcional e falha-aberto.** Sem `HOUNDSMAN_TYPE_SAFE_API_KEY` (ou com `--no-jev`), a revisão roda
   idêntica, sem chamadas de rede. Nunca torne o Jev obrigatório.
 - Comandos que produzem efeito (log/exit) ficam em `cli/`; `core/` devolve dados.
 - **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`

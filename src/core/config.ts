@@ -6,11 +6,14 @@
  * (camada `houndsman/`) — único ponto de troca ao portar para outro repositório.
  */
 
+import type { AstLanguage } from "./ast/types";
 import { ProjectConfig } from "./project-config";
 import type { WatchdogDefinition } from "./types";
 
 export {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
+	DEFAULT_AST_MAX_FILE_BYTES,
+	DEFAULT_AST_MAX_IMPACT_FILES,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 } from "./defaults";
@@ -19,6 +22,23 @@ export {
 export type HoundsmanBudgets = {
 	/** Máx. de arquivos por brief (default: 40). Excedente vai para "fora do orçamento". */
 	maxFilesPerBrief?: number;
+};
+
+/** Configuração do subsistema AST (determinístico, sem LLM). */
+export type HoundsmanAst = {
+	/**
+	 * Liga/desliga o AST (default: `true`). Com grammars ausentes ou ABI
+	 * incompatível, o motor segue sem AST (fail-open).
+	 */
+	enabled?: boolean;
+	/** Teto de bytes por arquivo (default: 512_000). */
+	maxFileBytes?: number;
+	/** Teto de arquivos candidatos na análise de impacto (default: 200). */
+	maxImpactFiles?: number;
+	/** Override de extensão → linguagem (`".vue": "typescript"`). */
+	languages?: Record<string, AstLanguage>;
+	/** Aliases de import (`"@/": "src/"`). */
+	aliases?: Record<string, string>;
 };
 
 /** Concorrência das fases paralelas internas. */
@@ -68,6 +88,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	budgets?: HoundsmanBudgets;
 	/** Concorrência das fases paralelas internas. */
 	concurrency?: HoundsmanConcurrency;
+	/** AST determinístico (classificação estrutural, brief e impacto). */
+	ast?: HoundsmanAst;
 };
 
 /** Entrada de `defineHoundsmanConfig` — `watchdogIds` é derivado, não informado. */

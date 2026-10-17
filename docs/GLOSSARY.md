@@ -24,13 +24,14 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **capability** | Uma das quatro lentes do skill: `hunt` (revisar PR), `train` (manter regras), `fix` (corrigir findings), `verify` (violações resolvidas?); selecionada por argumento (`/houndsman <capability>`). | `src/skill/<capability>.md` |
 | **drift** | Divergência entre config/regras e o código real. Detectada pelo `doctor`. | `src/core/registry-check.ts` |
 | **Jev** | Pré-análise **opcional** por LLM (seção 7). | `src/core/jev/` |
+| **AST** | Análise estrutural determinística (tree-sitter/wasm) de arquivos TS/JS — fatos, delta e impacto, sem LLM. | `src/core/ast/`, `assets/grammars/` |
 
 ## 2. O fluxo em 4 passos
 
 | Passo | Significado | Comando → artefatos |
 | --- | --- | --- |
 | **Passo 0 — contexto** | Coleta a PR via `gh` e resume objetivo/motivação/alterações. Opcional (falha-aberto). | `houndsman context` → `context.json`, `context-brief.md`, `context-summary.json` |
-| **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o Jev e **grava um brief por watchdog**. | `houndsman` → `classification.json`, `candidates.json`, `briefs/`, `manifest.json` |
+| **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o AST e o Jev e **grava um brief por watchdog**. | `houndsman` → `classification.json`, `ast-summary.json`, `ast-impact.json`, `candidates.json`, `briefs/`, `manifest.json` |
 | **Passo 2 — revisar** | N subagentes (em **ondas**) executam os briefs e gravam os achados. | `findings/<watchdog>.json` |
 | **Passo 3 — finalizar** | Valida, deduplica, agrupa e renderiza o relatório. | `houndsman --finalize` → `review.md`, `review-resume.md` |
 | **Passo 1.5** | Apelido do Jev dentro do Passo 1. | `candidates.json` |
@@ -46,6 +47,8 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | --- | --- |
 | **branch-slug** | Branch com `/` → `-` e minúscula; identifica a run na URL da UI (`feature/x` → `feature-x`). |
 | **`classification.json`** | Classificação: watchdogs ativados por arquivo, status (A/M/D/R) e churn. |
+| **`ast-summary.json`** | Fatos estruturais e delta por arquivo (símbolos, imports, exports, assinaturas). |
+| **`ast-impact.json`** | Importadores reversos e exports públicos removidos/alterados. |
 | **`brief`** | O documento de instruções do watchdog (escopo, regras, docs, arquivos, candidatos). Renderizado por `renderBrief`. |
 | **`briefs/<id>.md`** | O brief no staging global — o prompt do subagente; também persistido como artefato para auditoria. |
 | **`findings/<id>.json`** | Achados **daquele** watchdog no staging (schema em `OUTPUT-FORMAT.md`). |
@@ -56,8 +59,8 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`review-resume.md`** | Resumo final para leitura humana (≤ 2.5k caracteres): visão de negócio + pontos técnicos diretos. Números (arquivos/churn/domínios) ficam nos cards da UI. Não é lido por watchdogs nem participa de etapas seguintes. |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **registro de review** | Identidade (repo/branch), commit revisado, status (`reviewing`/`review_done`/`fixing`/`fix_done`) e timestamps. |
-| **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 11. |
-| **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 11. |
+| **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 12. |
+| **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 12. |
 | **`context.json`** | Payload bruto da PR via `gh` (ou marcador `available:false`). |
 | **`context-brief.md`** | Instruções para o subagente que resume o contexto (staging + artefato de auditoria). |
 | **`context-summary.json`** | Resumo curto da PR (objetivo/motivação/alterações). |
@@ -92,6 +95,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`classify` / `ClassifyRule`** | Padrão (regex) que decide se o watchdog cobre um arquivo. Sem casamento → `unclassified`. |
 | **`type: "filename"`** (default) | O regex é aplicado ao **caminho** do arquivo. |
 | **`type: "content"`** | O regex é aplicado ao **conteúdo** do arquivo (o motor lê o arquivo). |
+| **`type: "symbol"` / `"import"` / `"export"` / `"decorator"`** | O regex é aplicado aos fatos do AST (nomes de símbolos, fontes/nomes de imports, exports e decorators). Sem grammar, a regra não casa. |
 | **`scope`** | Descrição textual do território do watchdog (contexto/documentação; **não** contém regra). |
 | **`reviewFocus`** | Prioridade de leitura — **paths** que o watchdog olha primeiro (não contém regra). |
 | **`exclude`** | O que o watchdog **nunca** deve carregar. |
@@ -114,7 +118,18 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **cobertura (coverage)** | Tabela `revisados / esperados` por watchdog — mostra o que faltou. |
 | **`registry-check` / `doctor`** | Validações anti-drift da config (ids, `classify`, specs Jev, polaridade). |
 
-## 7. Jev (pré-análise, Passo 1.5)
+## 7. AST (determinístico, TS/JS)
+
+| Termo | Significado |
+| --- | --- |
+| **grammar** | Parser wasm de uma linguagem (`typescript`, `tsx`, `javascript`) em `assets/grammars/`; carregado sob demanda. |
+| **fatos (`AstFacts`)** | Símbolos, imports, exports, decorators e assinaturas extraídos de um arquivo. |
+| **delta** | Diferença entre a versão base e a atual: símbolos adicionados/removidos/alterados, assinaturas, imports e exports. |
+| **impacto** | Mapa reverso `arquivo alterado → importadores`, obtido por `git grep` + resolução de imports relativos/aliases. |
+| **export público alterado** | Export removido ou com assinatura modificada — candidato a breaking change, **não** achado automático. |
+| **fail-open** | Sem grammar/ABI/arquivo legível, o AST devolve vazio e a revisão segue pelo regex. |
+
+## 8. Jev (pré-análise, Passo 1.5)
 
 | Termo | Significado |
 | --- | --- |
@@ -126,10 +141,10 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`threshold`** | Confiança mínima (**0.6**) para um indício virar candidato. |
 | **`questionKey`** | Chave estável da pergunta: `<watchdogId>::rule-<índice>`. |
 | **falha-aberto (fail-open)** | Sem chave / erro / timeout → `available:false`; a revisão segue idêntica. |
-| **`TYPESAFE_API_KEY`** | Variável de ambiente que liga o Jev. O `doctor` valida a credencial com uma chamada mínima. |
+| **`HOUNDSMAN_TYPE_SAFE_API_KEY`** | Variável de ambiente que liga o Jev. O `doctor` valida a credencial com uma chamada mínima. |
 | **`--no-jev`** | Desliga o Jev na execução. |
 
-## 8. Diff, churn e orçamento
+## 9. Diff, churn e orçamento
 
 | Termo | Significado |
 | --- | --- |
@@ -145,7 +160,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`concurrency.jev`** | Nº de chamadas Jev simultâneas (default **5**). |
 | **onda (wave)** | Lote de subagentes despachados juntos (ex.: até 8) para não estourar rate limit. |
 
-## 9. Camadas do código e da camada do projeto
+## 10. Camadas do código e da camada do projeto
 
 | Termo | Significado |
 | --- | --- |
@@ -157,7 +172,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`defineWatchdog` / `defineHoundsmanConfig`** | Helpers de autoria (tipagem). O segundo **deriva** `watchdogIds` das chaves de `watchdogs`. |
 | **auto-gerado vs usuário** | `setup` separa o que o `update` reescreve (`core/**`, `.gitignore`, ponteiros de skill) do que **nunca** toca (`watchdogs/`, `exclusions.ts`, `doc-mappings.ts`, `houndsman.config.ts`). |
 
-## 10. Comandos e flags
+## 11. Comandos e flags
 
 | Termo | Significado |
 | --- | --- |
@@ -176,7 +191,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
 | **`--fail-on-blocking`** | Exit `1` se houver `blocking` no `--finalize`. |
 | **`--config <path>`** | Sobrepõe a descoberta do `houndsman.config.*`. |
 
-## 11. Triagem e servidor (UI)
+## 12. Triagem e servidor (UI)
 
 | Termo | Significado |
 | --- | --- |

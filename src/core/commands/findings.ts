@@ -11,6 +11,7 @@
  */
 
 import { type HoundsmanConfig, resolveJevConcurrency } from "../config";
+import { ENV_NAMES } from "../env";
 import {
 	applyFindingUpdate,
 	FINDING_DECISIONS,
@@ -510,7 +511,7 @@ async function executeVerify(
 		if (parsed.bools.has("--no-jev")) {
 			jevReason = "desativado (--no-jev)";
 		} else if (!jevVerifier.isConfigured()) {
-			jevReason = "TYPESAFE_API_KEY não configurada";
+			jevReason = `${ENV_NAMES.typeSafeApiKey} não configurada`;
 		} else {
 			const byId = new Map(findings.map((finding) => [finding.id, finding]));
 			const outcome = await jevVerifier.verify(

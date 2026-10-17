@@ -92,6 +92,8 @@ export type ArtifactKind =
 	| "resume"
 	| "domain-review"
 	| "verify"
+	| "ast"
+	| "ast-impact"
 	| "other";
 
 /** Artefato persistido de uma review. */

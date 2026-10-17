@@ -8,14 +8,22 @@
  *   ├── .gitignore          AUTO — ignora core/ (gerado)
  *   ├── core/types.ts       AUTO — snapshot dos tipos + helpers
  *   ├── core/skill/*.md     AUTO — docs do skill (com {{projectName}} resolvido)
+ *   ├── core/grammars/*.wasm AUTO — runtime + grammars do AST
  *   ├── watchdogs/*.ts      USUÁRIO
  *   ├── doc-mappings.ts     USUÁRIO
  *   └── exclusions.ts       USUÁRIO
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
-import { SKILL_DIR, SKILL_FILE } from "../assets";
+import { GRAMMAR_FILES, grammarPath, SKILL_DIR, SKILL_FILE } from "../assets";
 import { CORE_DIR, CORE_SKILL_DIR, OUTPUT_FORMAT_PATH, PROJECT_DIR } from "../paths";
 
 export type Harness = "agents" | "claude";
@@ -127,7 +135,7 @@ export type Rule = {
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
 export type ClassifyRule = {
-	type?: "filename" | "content";
+	type?: "filename" | "content" | "symbol" | "import" | "export" | "decorator";
 	value: string;
 };
 
@@ -182,6 +190,18 @@ export type HoundsmanStorage = {
 	path?: string;
 };
 
+/** Linguagens suportadas pelo AST na primeira fase. */
+export type AstLanguage = "typescript" | "tsx" | "javascript";
+
+/** Configuração do AST determinístico (classificação estrutural, brief e impacto). */
+export type HoundsmanAst = {
+	enabled?: boolean;
+	maxFileBytes?: number;
+	maxImpactFiles?: number;
+	languages?: Record<string, AstLanguage>;
+	aliases?: Record<string, string>;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -193,6 +213,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	alwaysIncludeDocs?: readonly string[];
 	budgets?: HoundsmanBudgets;
 	concurrency?: HoundsmanConcurrency;
+	ast?: HoundsmanAst;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
@@ -212,7 +233,8 @@ const WATCHDOG_EXAMPLE = `import { defineWatchdog } from "../core/types";
 
 /**
  * Watchdog de exemplo — substitua pelas regras reais do projeto.
- * Um watchdog declara seus arquivos via \`classify\` (regex de path ou conteúdo).
+ * Um watchdog declara seus arquivos via \`classify\` (regex de path, conteúdo ou
+ * fatos AST: \`symbol\`/\`import\`/\`export\`/\`decorator\`).
  * O texto de cada regra começa com a polaridade: \`Promover:\` (DEVE acontecer)
  * ou \`Evitar:\`/\`Não\`/\`Nunca\` (NÃO DEVE acontecer).
  */
@@ -267,9 +289,10 @@ export function isExcluded(filePath: string): boolean {
 const DOC_MAPPINGS_TEMPLATE = `/**
  * Mapeamento de padrões nos paths → documentação relevante.
  * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
- */\`core/\` é regenerado por \`houndsman update\`.
-# Runs, findings e artefatos vivem no storage global (fora do projeto).
-core
+ *
+ * Exemplo: [/^src\\//, ["README.md"]]
+ */
+export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [];
 `;
 
 const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`
@@ -415,6 +438,7 @@ export class ProjectScaffolder {
 		const context = this.context();
 		this.writeGeneratedFile(new TypesTemplate(), context);
 		this.writeGeneratedFile(new GitignoreTemplate(), context);
+		this.syncGrammars();
 
 		// Docs do skill vão para `.houndsman/core/skill/`. O `SKILL.md` é o entry
 		// point dos harnesses, não um doc da camada.
@@ -426,6 +450,19 @@ export class ProjectScaffolder {
 		for (const harness of this.ctx.harnesses) {
 			this.writeGeneratedFile(new HarnessPointerTemplate(harness), context);
 		}
+	}
+
+	/**
+	 * Copia as grammars wasm para a camada. O consumidor não precisa rodar nada:
+	 * `setup` e `update` sincronizam os binários junto dos demais auto-gerados.
+	 */
+	private syncGrammars(): void {
+		const directory = join(this.ctx.cwd, CORE_DIR, "grammars");
+		mkdirSync(directory, { recursive: true });
+		for (const name of GRAMMAR_FILES) {
+			copyFileSync(grammarPath(name), join(directory, name));
+		}
+		this.ctx.generated.push(join(CORE_DIR, "grammars", "*.wasm"));
 	}
 
 	private context(): TemplateContext {

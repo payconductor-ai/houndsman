@@ -111,12 +111,12 @@ function makeRepo(): Repo {
 // ---------------------------------------------------------------------------
 
 describe("ReviewScopeResolver", () => {
-	test("mesmo commit revisado vira no-op (sem tocar no git)", () => {
+	test("mesmo commit revisado vira no-op (sem tocar no git)", async () => {
 		const sha = "a".repeat(40);
-		const scope = new ReviewScopeResolver(options(), fakeHoundsmanConfig).resolve(
-			stateWith(sha),
-			sha,
-		);
+		const scope = await new ReviewScopeResolver(
+			options(),
+			fakeHoundsmanConfig,
+		).resolve(stateWith(sha), sha);
 
 		expect(scope.kind).toBe("noop");
 		if (scope.kind !== "noop") throw new Error("esperava noop");
@@ -124,12 +124,12 @@ describe("ReviewScopeResolver", () => {
 		expect(scope.headSha).toBe(sha);
 	});
 
-	test("`--full` re-revisa o mesmo commit", () => {
+	test("`--full` re-revisa o mesmo commit", async () => {
 		const repo = makeRepo();
 		const originalCwd = process.cwd();
 		try {
 			process.chdir(repo.cwd);
-			const scope = new ReviewScopeResolver(
+			const scope = await new ReviewScopeResolver(
 				options({ base: repo.base, full: true }),
 				fakeHoundsmanConfig,
 			).resolve(stateWith(repo.head), repo.head);
@@ -144,7 +144,7 @@ describe("ReviewScopeResolver", () => {
 		}
 	});
 
-	test("delta revisa só os arquivos alterados e carrega o resto", () => {
+	test("delta revisa só os arquivos alterados e carrega o resto", async () => {
 		const repo = makeRepo();
 		const originalCwd = process.cwd();
 		try {
@@ -153,7 +153,7 @@ describe("ReviewScopeResolver", () => {
 				abcdef1234: findingState({ file: "src/alpha/keep.ts" }),
 				fedcba4321: findingState({ file: "src/alpha/a.ts" }),
 			});
-			const scope = new ReviewScopeResolver(
+			const scope = await new ReviewScopeResolver(
 				options({ base: repo.base }),
 				fakeHoundsmanConfig,
 			).resolve(previous, repo.head);
@@ -172,13 +172,13 @@ describe("ReviewScopeResolver", () => {
 		}
 	});
 
-	test("histórico reescrito (HEAD sem ancestrais comuns) cai no completo", () => {
+	test("histórico reescrito (HEAD sem ancestrais comuns) cai no completo", async () => {
 		const repo = makeRepo();
 		const originalCwd = process.cwd();
 		try {
 			process.chdir(repo.cwd);
 			// `repo.head` não é ancestral de `repo.base` → revisão completa.
-			const scope = new ReviewScopeResolver(
+			const scope = await new ReviewScopeResolver(
 				options({ base: repo.base }),
 				fakeHoundsmanConfig,
 			).resolve(stateWith(repo.head), repo.base);

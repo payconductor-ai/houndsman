@@ -18,3 +18,9 @@ export const DEFAULT_MAX_FILES_PER_BRIEF = 40;
 
 /** Concorrência default das chamadas simultâneas ao Jev. */
 export const DEFAULT_JEV_CONCURRENCY = 5;
+
+/** Teto default de bytes por arquivo no AST (evita bundles/minificados). */
+export const DEFAULT_AST_MAX_FILE_BYTES = 512_000;
+
+/** Teto default de arquivos candidatos na análise de impacto. */
+export const DEFAULT_AST_MAX_IMPACT_FILES = 200;

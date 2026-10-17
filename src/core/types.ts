@@ -6,6 +6,7 @@
  * `Rule` e `WatchdogMeta` descrevem as regras consumidas pela renderização.
  */
 
+import type { AstFileBrief } from "./ast/types";
 import type { JevRuleSpec } from "./jev/jev-types";
 
 /** Severidade de um achado. `blocking` bloqueia o merge. */
@@ -48,9 +49,15 @@ export type Rule = {
  *
  * - `filename` (padrão) → padrão aplicado ao caminho do arquivo.
  * - `content`           → padrão aplicado ao conteúdo do arquivo.
+ * - `symbol`            → padrão aplicado aos nomes de símbolos (AST).
+ * - `import`            → padrão aplicado às fontes/nomes de imports (AST).
+ * - `export`            → padrão aplicado aos nomes exportados (AST).
+ * - `decorator`         → padrão aplicado aos decorators (AST).
+ *
+ * Regras AST exigem grammar disponível; sem ela, a regra simplesmente não casa.
  */
 export type ClassifyRule = {
-	type?: "filename" | "content";
+	type?: "filename" | "content" | "symbol" | "import" | "export" | "decorator";
 	value: string;
 };
 
@@ -116,6 +123,8 @@ export type WatchdogRenderArgs = {
 	docs: readonly string[];
 	context?: WatchdogRenderContext | null;
 	candidates?: readonly WatchdogRenderCandidate[];
+	/** Estrutura/delta dos arquivos selecionados (AST). */
+	ast?: readonly AstFileBrief[];
 };
 
 /** Definição completa de um watchdog — 1 por arquivo em `project/watchdogs/`. */

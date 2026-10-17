@@ -7,8 +7,9 @@ no seu projeto é **autocontida** — não exige nenhuma dependência local do p
 
 - **Bun** — o CLI e o motor usam a runtime Bun (execução de TS, `Bun.spawnSync`).
 - **git** — o diff usa `git diff <base>...<head> --name-status`.
-- Opcional: **`gh`** (contexto da PR) e **`TYPESAFE_API_KEY`** (pré-análise Jev). O pipeline
-  segue normalmente sem eles.
+- **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
+- **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo.
 
 ## Instalação (global)
 
@@ -87,6 +88,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 | `alwaysIncludeDocs` | Docs sempre presentes nos briefs (default `["AGENTS.md"]`). |
 | `budgets` | **Opcional** — teto de arquivos por brief (`maxFilesPerBrief`, default `40`); o excedente vira "fora do orçamento" (registrar em `skipped`). |
 | `concurrency` | **Opcional** — chamadas Jev simultâneas (`jev`, default `5`). |
+| `ast` | **Opcional** — AST determinístico para TS/JS (`enabled`, `maxFileBytes`, `maxImpactFiles`, `languages`, `aliases`). Default: ligado; falhas são fail-open. |
 
 > O motor **não contém** ids, paths ou regras do projeto — tudo chega por `HoundsmanConfig`,
 > carregado em runtime a partir de `houndsman.config.ts` (ou `--config <path>`).

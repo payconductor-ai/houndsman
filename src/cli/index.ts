@@ -24,7 +24,7 @@
  *   watchdog <id>        Contexto de um watchdog (`--rules`, `--json`)
  *
  * Flags: `--base <b>` · `--head <ref>` · `--branch <b>` · `--config <path>` ·
- *   `--clean` · `--full` · `--no-jev` · `--fail-on-blocking`.
+ *   `--clean` · `--full` · `--no-jev` · `--no-ast` · `--fail-on-blocking`.
  */
 
 import { loadConfig } from "../core/config-loader";

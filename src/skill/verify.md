@@ -24,7 +24,7 @@ altera regras.
    - **âncora sumida** (`stale`) → provável **resolvido** — mas o trecho pode ter sido reescrito;
    - **arquivo ausente** → fora da verificação (deletado/movido).
 
-2. **Tier Jev (opcional, só nos ambíguos).** Com `TYPESAFE_API_KEY`, os casos `stale` / sem
+2. **Tier Jev (opcional, só nos ambíguos).** Com `HOUNDSMAN_TYPE_SAFE_API_KEY`, os casos `stale` / sem
    âncora são confirmados pelo LLM sobre um **diff focado** do arquivo (`foundAtSha..HEAD`), uma
    pergunta `noul` por finding. Falha-aberto: sem chave/erro → vale o resultado local.
 

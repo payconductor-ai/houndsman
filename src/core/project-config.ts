@@ -6,9 +6,11 @@
  * O contrato do consumidor (`houndsman.config.ts`) não muda.
  */
 
-import type { HoundsmanConfig, HoundsmanStorage } from "./config";
+import type { HoundsmanAst, HoundsmanConfig, HoundsmanStorage } from "./config";
 import {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
+	DEFAULT_AST_MAX_FILE_BYTES,
+	DEFAULT_AST_MAX_IMPACT_FILES,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 } from "./defaults";
@@ -30,6 +32,26 @@ export class ProjectConfig<TId extends string = string> {
 
 	get storage(): HoundsmanStorage {
 		return this.raw.storage ?? {};
+	}
+
+	/** Config do AST (objeto vazio quando ausente). */
+	get ast(): HoundsmanAst {
+		return this.raw.ast ?? {};
+	}
+
+	/** AST habilitado (default: ligado; falhas de grammar são fail-open). */
+	get astEnabled(): boolean {
+		return this.ast.enabled !== false;
+	}
+
+	get astMaxFileBytes(): number {
+		const value = this.ast.maxFileBytes;
+		return value !== undefined && value > 0 ? value : DEFAULT_AST_MAX_FILE_BYTES;
+	}
+
+	get astMaxImpactFiles(): number {
+		const value = this.ast.maxImpactFiles;
+		return value !== undefined && value >= 0 ? value : DEFAULT_AST_MAX_IMPACT_FILES;
 	}
 
 	get maxFilesPerBrief(): number {

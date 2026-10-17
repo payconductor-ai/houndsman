@@ -64,6 +64,8 @@ export type ArtifactKind =
 	| "resume"
 	| "domain-review"
 	| "verify"
+	| "ast"
+	| "ast-impact"
 	| "other";
 
 /** Metadados de artefato retornados pela API (sem conteúdo). */

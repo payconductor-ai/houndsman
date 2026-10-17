@@ -5,6 +5,7 @@
  * específico do domínio vive nas regras do watchdog (`rules`).
  */
 
+import type { AstDelta } from "./ast/types";
 import {
 	type Rule,
 	SEVERITY_EMOJI,
@@ -117,6 +118,86 @@ function deletedSection(args: WatchdogRenderArgs, def: WatchdogDefinition): stri
 	];
 }
 
+/** Escapa um valor para uso em code-span (evita quebrar o markdown). */
+function inlineCode(value: string): string {
+	return `\`${value.replace(/`/g, "'")}\``;
+}
+
+/** Trunca um texto longo (assinatura) para o brief. */
+function shorten(value: string, max = 120): string {
+	const normalized = value.replace(/\s+/g, " ").trim();
+	return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized;
+}
+
+/** Linhas de um delta estrutural (compactas e determinísticas). */
+function deltaLines(delta: AstDelta): string[] {
+	const lines: string[] = [];
+	for (const symbol of delta.addedSymbols.slice(0, 4)) {
+		lines.push(`+ ${inlineCode(symbol.name)} (${symbol.kind})`);
+	}
+	for (const symbol of delta.removedSymbols.slice(0, 4)) {
+		lines.push(`− ${inlineCode(symbol.name)} (${symbol.kind})`);
+	}
+	for (const symbol of delta.modifiedSymbols.slice(0, 4)) {
+		lines.push(`~ ${inlineCode(symbol.name)} (${symbol.kind})`);
+	}
+	for (const change of delta.changedSignatures.slice(0, 3)) {
+		lines.push(
+			`assinatura ${inlineCode(change.name)}: ${inlineCode(shorten(change.before) || "—")} → ${inlineCode(shorten(change.after) || "—")}`,
+		);
+	}
+	if (delta.addedImports.length > 0) {
+		lines.push(
+			`imports + ${delta.addedImports.slice(0, 4).map(inlineCode).join(", ")}`,
+		);
+	}
+	if (delta.removedImports.length > 0) {
+		lines.push(
+			`imports − ${delta.removedImports.slice(0, 4).map(inlineCode).join(", ")}`,
+		);
+	}
+	return lines;
+}
+
+/**
+ * Estrutura/delta dos arquivos do watchdog (AST). É um mapa para orientar a
+ * leitura — o watchdog confirma no código e não trata como achado.
+ */
+function astSection(args: WatchdogRenderArgs): string[] {
+	const entries = args.ast ?? [];
+	if (entries.length === 0) return [];
+	const lines: string[] = [
+		"## Estrutura (AST)",
+		"",
+		"> Delta estrutural dos arquivos do seu domínio. Use como mapa para",
+		"> priorizar a leitura; **não** é achado por si só.",
+		"",
+	];
+	let rendered = 0;
+	for (const entry of entries) {
+		const parts = deltaLines(entry.delta);
+		if (entry.importers && entry.importers.length > 0) {
+			parts.push(
+				`impacto: ${entry.importers.slice(0, 5).map(inlineCode).join(", ")}` +
+					(entry.importers.length > 5
+						? ` (+${entry.importers.length - 5})`
+						: ""),
+			);
+		}
+		if (parts.length === 0) continue;
+		lines.push(
+			`### ${inlineCode(entry.file)}`,
+			"",
+			...parts.map((part) => `- ${part}`),
+			"",
+		);
+		rendered++;
+		if (rendered >= 12) break;
+	}
+	if (rendered === 0) return [];
+	return lines;
+}
+
 /**
  * Render padrão do brief de um watchdog (ordem estável).
  * `def` é a definição do próprio watchdog (evita ciclo com o registry).
@@ -139,6 +220,7 @@ export function defaultRenderBrief(
 
 	if (args.context) lines.push(...renderBriefContext(args.context));
 
+	lines.push(...astSection(args));
 	lines.push(...optionalList("Prioridade de leitura", def.reviewFocus));
 	lines.push(
 		"## Regras (por severidade)",

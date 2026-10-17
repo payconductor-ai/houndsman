@@ -1,5 +1,6 @@
 /** Comando `doctor` (alias `check`) — valida config, ambiente e credencial Jev. */
 
+import { ENV_NAMES, env } from "../../core/env";
 import { checkRegistry } from "../../core/registry-check";
 import { storageLocation } from "../../core/storage/paths";
 import type { CliContext, Command } from "./command";
@@ -29,6 +30,11 @@ export class DoctorCommand implements Command {
 		context.out("\n→ Ambiente:");
 		context.out(`  ${Bun.which("git") ? "✅" : "❌"} git`);
 		context.out(`  ${Bun.which("gh") ? "✅" : "⚠️ "} gh (opcional — contexto da PR)`);
+		const ast = await engine.ast.check();
+		context.out(`  ${ast.ok ? "✅" : "⚠️ "} AST: ${ast.detail}`);
+		context.out(
+			`  ${env.deepSeekApiKey ? "✅" : "⚠️ "} ${ENV_NAMES.deepSeekApiKey} (opcional — IA do hunt nativo)`,
+		);
 		context.out("\n→ Persistência:");
 		context.out(`  provider: ${engine.storage.kind}`);
 		context.out(`  ${storageLocation(engine.config)}`);
@@ -45,7 +51,7 @@ export class DoctorCommand implements Command {
 		const { JevClient } = await import("../../core/jev");
 		const client = new JevClient();
 		if (!client.isConfigured()) {
-			context.out("  ⚠️  TYPESAFE_API_KEY (opcional — pré-análise Jev)");
+			context.out(`  ⚠️  ${ENV_NAMES.typeSafeApiKey} (opcional — pré-análise Jev)`);
 			return;
 		}
 		const check = await client.validateCredential();

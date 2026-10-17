@@ -172,6 +172,10 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1
   ".agents/skills/houndsman/SKILL.md",
   ".claude/skills/houndsman/SKILL.md",
   ".houndsman/.gitignore",
+  ".houndsman/core/grammars/tree-sitter-javascript.wasm",
+  ".houndsman/core/grammars/tree-sitter-tsx.wasm",
+  ".houndsman/core/grammars/tree-sitter-typescript.wasm",
+  ".houndsman/core/grammars/web-tree-sitter.wasm",
   ".houndsman/core/skill/AUDIT-PROTOCOL.md",
   ".houndsman/core/skill/OUTPUT-FORMAT.md",
   ".houndsman/core/skill/README.md",
@@ -334,7 +338,7 @@ export type Rule = {
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
 export type ClassifyRule = {
-	type?: "filename" | "content";
+	type?: "filename" | "content" | "symbol" | "import" | "export" | "decorator";
 	value: string;
 };
 
@@ -389,6 +393,18 @@ export type HoundsmanStorage = {
 	path?: string;
 };
 
+/** Linguagens suportadas pelo AST na primeira fase. */
+export type AstLanguage = "typescript" | "tsx" | "javascript";
+
+/** Configuração do AST determinístico (classificação estrutural, brief e impacto). */
+export type HoundsmanAst = {
+	enabled?: boolean;
+	maxFileBytes?: number;
+	maxImpactFiles?: number;
+	languages?: Record<string, AstLanguage>;
+	aliases?: Record<string, string>;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -400,6 +416,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	alwaysIncludeDocs?: readonly string[];
 	budgets?: HoundsmanBudgets;
 	concurrency?: HoundsmanConcurrency;
+	ast?: HoundsmanAst;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
@@ -419,9 +436,10 @@ export function defineHoundsmanConfig<TId extends string>(
 "/**
  * Mapeamento de padrões nos paths → documentação relevante.
  * Consumido pelo motor via \`HoundsmanConfig.docMappings\`.
- */\`core/\` é regenerado por \`houndsman update\`.
-# Runs, findings e artefatos vivem no storage global (fora do projeto).
-core
+ *
+ * Exemplo: [/^src\\//, ["README.md"]]
+ */
+export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [];
 "
 ,
   ".houndsman/exclusions.ts": 
@@ -444,7 +462,8 @@ export function isExcluded(filePath: string): boolean {
 
 /**
  * Watchdog de exemplo — substitua pelas regras reais do projeto.
- * Um watchdog declara seus arquivos via \`classify\` (regex de path ou conteúdo).
+ * Um watchdog declara seus arquivos via \`classify\` (regex de path, conteúdo ou
+ * fatos AST: \`symbol\`/\`import\`/\`export\`/\`decorator\`).
  * O texto de cada regra começa com a polaridade: \`Promover:\` (DEVE acontecer)
  * ou \`Evitar:\`/\`Não\`/\`Nunca\` (NÃO DEVE acontecer).
  */
@@ -525,7 +544,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "7ce23b97d9609ac2",
+    "sha256": "c8b680c9b35e9b97",
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
@@ -537,7 +556,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "c978287603f4e088",
+    "sha256": "430570cba2b90699",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -545,7 +564,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/verify.md",
-    "sha256": "29bfdeb7def2298e",
+    "sha256": "780f4b078daa104b",
   },
 ]
 `;
@@ -555,6 +574,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
 Jev: pulado (desativado (--no-jev)).
+AST: desabilitado ou sem grammar compatível.
 Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
 
 Próximo passo: despachar os sub-agentes (um por brief em <cwd>/.home/work/<uuid>/briefs/).
@@ -603,8 +623,6 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
     "alpha": 2
   },
   "excludedCount": 0,
-  "base": "<sha>",
-  "head": "HEAD",
   "headSha": "<sha>",
   "mode": "full"
 }
@@ -649,6 +667,16 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
   "jev": {
     "available": false,
     "reason": "desativado (--no-jev)"
+  },
+  "ast": {
+    "enabled": false,
+    "languages": [],
+    "files": 0,
+    "impact": {
+      "affectedFiles": 0,
+      "importers": 0,
+      "exportedChanges": 0
+    }
   },
   "deleted": [
     "src/alpha/old.ts"

@@ -21,7 +21,7 @@ está **fora da missão** — mesmo que pareça uma boa ideia.
 3. **Separação de camadas.** `cli/` = imperativo com efeitos (`process.argv`/`exit`);
    `core/` = funções/classes reutilizáveis (sem efeito no import); `skill/` = markdown
    embarcado; `tests/` = suíte.
-4. **Jev opcional e falha-aberto.** Sem `TYPESAFE_API_KEY` (ou com `--no-jev`), a revisão roda
+4. **Jev opcional e falha-aberto.** Sem `HOUNDSMAN_TYPE_SAFE_API_KEY` (ou com `--no-jev`), a revisão roda
    idêntica, sem chamadas de rede. **Nunca** torne o Jev obrigatório.
 5. **Assets por `import.meta.dir`.** `src/skill/*.md` são resolvidos por `core/assets.ts` —
    nunca por caminho relativo ao cwd.
@@ -40,6 +40,7 @@ src/
 ├── index.ts          # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
 ├── cli/index.ts      # ÚNICO executável (bin `houndsman`)
 ├── core/             # bibliotecas genéricas
+│   ├── ast/                 # AST determinístico: parser wasm, símbolos, delta e impacto
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
 │   ├── assets.ts            # assets embarcados (src/skill/) — geram a camada
@@ -91,10 +92,11 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 - **Passo 0** — `context` coleta a PR via `gh`. Ausente/sem login/sem PR → `available:false`
   e exit 0 (a revisão segue sem a seção de contexto).
 - **Passo 1** — coleta o diff **uma única vez** (`diff-source`: `git diff` + `--numstat`),
-  classifica conforme o `classify` de cada watchdog, aplica exclusões, roda a pré-análise Jev
-  (se houver chave) e gera um brief por watchdog. Cada brief é **priorizado por churn** e
-  limitado pelo **orçamento** (`budgets.maxFilesPerBrief`, default 40); o excedente vira
-  "fora do orçamento" e deve ser registrado em `skipped`.
+  roda o **AST** (TS/JS; fail-open) para enriquecer classificação, brief e impacto, classifica
+  conforme o `classify` de cada watchdog, aplica exclusões, roda a pré-análise Jev (se houver
+  chave) e gera um brief por watchdog. Cada brief é **priorizado por churn** e limitado pelo
+  **orçamento** (`budgets.maxFilesPerBrief`, default 40); o excedente vira "fora do orçamento"
+  e deve ser registrado em `skipped`.
 - **Passo 2** — um subagente por brief (despachados em **ondas**) grava
   `findings/<watchdog>.json` (schema em `src/skill/OUTPUT-FORMAT.md`).
 - **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, agrupa por severidade
@@ -144,6 +146,7 @@ bun run typecheck # tsc -b
 bun run lint      # biome check .
 bun run format    # biome format --write .
 bun run build     # bun build → dist/ (bundle único)
+bun run grammars:sync         # (dev) atualiza assets/grammars; update copia p/ a camada
 bun run houndsman -- <args>   # executa o CLI localmente
 bun publish --dry-run         # confere o tarball
 ```

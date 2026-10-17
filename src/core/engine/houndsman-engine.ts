@@ -6,6 +6,7 @@
  * de instanciar/importar tudo diretamente.
  */
 
+import { AstService } from "../ast/service";
 import type { HoundsmanConfig } from "../config";
 import type { ReviewOptions } from "../orchestrator";
 import { ProjectConfig } from "../project-config";
@@ -26,6 +27,7 @@ export type EngineDeps = {
 	fixBatch?: FixBatchBuilder;
 	storage?: StorageProvider;
 	repo?: RepoIdentity;
+	ast?: AstService;
 };
 
 /** Composition root do motor. */
@@ -37,6 +39,7 @@ export class HoundsmanEngine {
 	readonly fixBatch: FixBatchBuilder;
 	readonly storage: StorageProvider;
 	readonly repo: RepoIdentity;
+	readonly ast: AstService;
 
 	constructor(raw: HoundsmanConfig, deps: EngineDeps = {}) {
 		this.project = new ProjectConfig(raw);
@@ -46,6 +49,7 @@ export class HoundsmanEngine {
 		this.fixBatch = deps.fixBatch ?? new FixBatchBuilder();
 		this.storage = deps.storage ?? createStorage(raw);
 		this.repo = deps.repo ?? resolveRepoIdentity(this.git);
+		this.ast = deps.ast ?? new AstService(raw, this.git);
 	}
 
 	/** Configuração crua (contrato do consumidor). */
@@ -55,7 +59,13 @@ export class HoundsmanEngine {
 
 	/** Abre uma sessão de revisão (prepare/finalize). */
 	session(options: ReviewOptions): ReviewSession {
-		return ReviewSession.from(this.config, options, this.storage, this.repo);
+		return ReviewSession.from(
+			this.config,
+			options,
+			this.storage,
+			this.repo,
+			this.ast,
+		);
 	}
 
 	/** Libera o provider (fecha o SQLite e faz checkpoint do WAL). */

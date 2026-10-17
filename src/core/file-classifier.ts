@@ -6,6 +6,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import type { AstFacts } from "./ast/types";
 import type { HoundsmanConfig } from "./config";
 import { churnToRecord, collectChurn, type DiffSource } from "./diff-source";
 import { matchesClassifyRule } from "./domain/watchdog";
@@ -69,12 +70,13 @@ export function matchWatchdogs<TId extends string>(
 	watchdogs: Record<TId, WatchdogDefinition>,
 	watchdogIds: readonly TId[],
 	content?: string,
+	facts?: AstFacts,
 ): TId[] {
 	const ids: TId[] = [];
 	for (const id of watchdogIds) {
 		if (
 			watchdogs[id]?.classify?.some((rule) =>
-				matchesClassifyRule(filePath, rule, content),
+				matchesClassifyRule(filePath, rule, content, facts),
 			)
 		) {
 			ids.push(id);
@@ -142,6 +144,7 @@ export function classifyEntries<TId extends string>(
 	entries: FileEntry[],
 	config: HoundsmanConfig<TId>,
 	churn: ChurnMap = {},
+	astFacts?: ReadonlyMap<string, AstFacts>,
 ): ClassificationResult {
 	const watchdogFiles: Record<string, string[]> = {};
 	const files: ClassificationResult["files"] = {};
@@ -167,11 +170,13 @@ export function classifyEntries<TId extends string>(
 		}
 
 		const content = needsContent ? readFileContent(path) : undefined;
+		const facts = astFacts?.get(path);
 		const ids: string[] = matchWatchdogs(
 			path,
 			config.watchdogs,
 			config.watchdogIds,
 			content,
+			facts,
 		);
 
 		if (ids.length === 0) {
@@ -218,10 +223,11 @@ export function classifyRange<TId extends string>(
 	head: string,
 	config: HoundsmanConfig<TId>,
 	diff?: DiffSource,
+	astFacts?: ReadonlyMap<string, AstFacts>,
 ): ClassificationResult {
 	const entries = parseEntries(runGit(["diff", `${base}...${head}`, "--name-status"]));
 	const churn = diff?.churn ?? collectChurn(base, head);
-	const result = classifyEntries(entries, config, churnToRecord(churn));
+	const result = classifyEntries(entries, config, churnToRecord(churn), astFacts);
 	result.base = base;
 	result.head = head;
 	return result;

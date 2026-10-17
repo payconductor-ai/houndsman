@@ -5,13 +5,14 @@
  * pipeline de review sem dependências novas de SDK e com tipagem explícita
  * do request/response (`./jev-types`).
  *
- * Config: apenas `TYPESAFE_API_KEY` (via env). Origem e modelo da API são
- * fixos no código (constantes abaixo).
+ * Config: apenas `HOUNDSMAN_TYPE_SAFE_API_KEY` (via `core/env.ts`). Origem e
+ * modelo da API são fixos no código (constantes abaixo).
  *
  * Erros são normalizados em `JevError` — o chamador decide falhar-aberto.
  */
 
 import axios, { type AxiosInstance, isAxiosError } from "axios";
+import { ENV_NAMES, env } from "../env";
 import type { JevEvaluateRequest, JevEvaluateResponse } from "./jev-types";
 
 const DEFAULT_BASE_URL = "https://api.typesafe.ai";
@@ -19,7 +20,7 @@ const DEFAULT_MODEL = "jev-latest";
 const DEFAULT_TIMEOUT_MS = 20_000;
 /** Timeout da verificação de credencial do `doctor` (mais curto que o de review). */
 const DEFAULT_PING_TIMEOUT_MS = 10_000;
-/** Caminho fixo do endpoinft System One. */
+/** Caminho fixo do endpoint System One. */
 const JEV_PATH = "/v1/systemone";
 
 export class JevError extends Error {
@@ -39,7 +40,7 @@ export type JevCredentialCheck =
 	| { ok: false; kind: "invalid" | "unreachable"; detail: string };
 
 export type JevClientOptions = {
-	/** Chave de API (default: `process.env.TYPESAFE_API_KEY`). */
+	/** Chave de API (default: `env.typeSafeApiKey`). */
 	apiKey?: string;
 	/** Sobreposição da origem da API (default: constante `DEFAULT_BASE_URL`). */
 	baseURL?: string;
@@ -57,7 +58,7 @@ export class JevClient {
 	readonly model: string;
 
 	constructor(options: JevClientOptions = {}) {
-		this.apiKey = options.apiKey ?? process.env.TYPESAFE_API_KEY;
+		this.apiKey = options.apiKey ?? env.typeSafeApiKey;
 		this.model = options.model ?? DEFAULT_MODEL;
 		const baseURL = options.baseURL ?? DEFAULT_BASE_URL;
 		this.http =
@@ -79,7 +80,7 @@ export class JevClient {
 	 */
 	async evaluate(request: JevEvaluateRequest): Promise<JevEvaluateResponse> {
 		if (!this.apiKey) {
-			throw new JevError("TYPESAFE_API_KEY não configurada.");
+			throw new JevError(`${ENV_NAMES.typeSafeApiKey} não configurada.`);
 		}
 		try {
 			const { data } = await this.http.post<JevEvaluateResponse>(
@@ -105,7 +106,7 @@ export class JevClient {
 			return {
 				ok: false,
 				kind: "unreachable",
-				detail: "TYPESAFE_API_KEY não configurada.",
+				detail: `${ENV_NAMES.typeSafeApiKey} não configurada.`,
 			};
 		}
 		const request: JevEvaluateRequest = {

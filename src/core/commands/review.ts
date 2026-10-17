@@ -28,6 +28,7 @@ export function parseReviewArgs(args: string[]): ReviewOptions {
 	if (parser.has("--fail-on-blocking")) opts.failOnBlocking = true;
 	if (parser.has("--clean")) opts.clean = true;
 	if (parser.has("--no-jev")) opts.noJev = true;
+	if (parser.has("--no-ast")) opts.noAst = true;
 	if (parser.has("--full")) opts.full = true;
 
 	return opts;

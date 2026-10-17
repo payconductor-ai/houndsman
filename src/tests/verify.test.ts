@@ -158,7 +158,7 @@ describe("JevVerifier", () => {
 		]);
 		expect(outcome.checked).toBe(0);
 		expect(outcome.skipped).toBe(1);
-		expect(outcome.reason).toContain("TYPESAFE_API_KEY");
+		expect(outcome.reason).toContain("HOUNDSMAN_TYPE_SAFE_API_KEY");
 	});
 
 	test("sem casos ⇒ vazio", async () => {

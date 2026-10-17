@@ -55,8 +55,10 @@ flowchart TD
    (nada de script manual).
 2. **Diff → classificação.** O CLI coleta o diff **uma única vez** (`git diff` + `--numstat`) —
    o custo não cresce com o nº de arquivos —, aplica as exclusions e classifica cada arquivo
-   pelo `classify` (regex de path ou de conteúdo) que cada watchdog declara. Cada arquivo ganha
-   também o **churn** (linhas adicionadas/removidas). Arquivo sem dono fica `unclassified`.
+   pelo `classify` que cada watchdog declara. Além de `filename`/`content`, regras podem usar
+   fatos do **AST** (`symbol`, `import`, `export`, `decorator`) quando a grammar está disponível.
+   Cada arquivo ganha também o **churn** (linhas adicionadas/removidas). Arquivo sem dono fica
+   `unclassified`.
 3. **Briefs determinísticos.** Para cada watchdog ativado, o CLI renderiza um brief com **só**
    os arquivos do domínio dele + **só** as regras daquele domínio. Nunca o diff completo. Os
    arquivos entram **priorizados por churn** e limitados pelo **orçamento** (ver abaixo).
@@ -107,7 +109,7 @@ flowchart LR
     JV --> E["Briefs por watchdog"]
 ```
 
-- **O que faz:** se `TYPESAFE_API_KEY` existir, o Jev avalia cada arquivo contra as regras
+- **O que faz:** se `HOUNDSMAN_TYPE_SAFE_API_KEY` existir, o Jev avalia cada arquivo contra as regras
   *atômicas* dos watchdogs que o cobrem. Respostas acima do limiar de confiança viram
   **candidatos** (`candidates.json`).
 - **O que muda:** os candidatos entram no brief como *warm start* — **não são achados**. O
@@ -117,6 +119,36 @@ flowchart LR
   **pré-análise, nunca gate**. Para desligar: `houndsman --no-jev`.
 
 Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consolida.**
+
+### AST determinístico (TS/JS)
+
+O AST roda **antes** dos briefs e **sem LLM**: `web-tree-sitter` (wasm embarcado) parseia os
+arquivos alterados e produz fatos estruturais, delta e impacto. É a camada que dá “inteligência”
+barata à classificação e ao contexto.
+
+- **Fatos por arquivo:** símbolos (função/classe/método/interface/tipo/enum/variável), imports,
+  exports, decorators e assinaturas.
+- **Delta:** compara a versão base com a atual e o patch do arquivo — símbolos adicionados,
+  removidos e alterados, mudanças de assinatura, imports e exports.
+- **Impacto reverso:** usa `git grep` pelo nome do módulo e confirma o import resolvido
+  (relativo ou alias) — devolve quem importa os arquivos alterados e quais exports públicos
+  mudaram.
+- **Brief:** a seção `Estrutura (AST)` entra no brief como **mapa de leitura**, nunca como
+  achado. O watchdog confirma no código.
+- **Artefatos:** `ast-summary.json` e `ast-impact.json` ficam no storage para auditoria.
+- **Fail-open:** grammar ausente, ABI incompatível, arquivo grande/binário ou erro de git
+  desligam o AST naquela run. O regex continua sendo o fallback e `unclassified` continua
+  existindo. Desligar: `--no-ast` ou `ast: { enabled: false }`.
+
+Config opcional no `houndsman.config.ts`:
+
+```ts
+ast: {
+	aliases: { "@/*": "src/*" },
+	maxFileBytes: 512_000,
+	maxImpactFiles: 200,
+},
+```
 
 ### Review incremental e `verify`
 
@@ -147,7 +179,7 @@ Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consol
 
 Flags: `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
 `--branch <nome>` · `--config <path>` · `--clean` · `--full` · `--no-jev` ·
-`--fail-on-blocking` (com `--finalize`).
+`--no-ast` · `--fail-on-blocking` (com `--finalize`).
 
 ---
 

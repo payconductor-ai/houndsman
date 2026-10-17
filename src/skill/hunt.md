@@ -76,6 +76,8 @@ staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 | Artefato | Conteúdo |
 |---|---|
 | `classification.json` | Watchdogs ativados por arquivo + status (A/M/D/R) + churn (storage) |
+| `ast-summary.json` | Fatos estruturais + delta por arquivo (AST TS/JS) (storage) |
+| `ast-impact.json` | Importadores reversos e exports públicos alterados (storage) |
 | `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) (storage) |
 | `briefs/<watchdog>.md` | Instruções prontas para cada subagente (staging + storage, para auditoria) |
 | `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento (storage) |
@@ -83,6 +85,11 @@ staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 > O prepare imprime o caminho absoluto do diretório de briefs e cada brief traz o
 > `outputPath` do JSON que o subagente deve gravar. Briefs e contexto também ficam
 > persistidos no storage para auditoria; o staging é limpo após o `--finalize`.
+>
+> **AST (TS/JS, ligado por padrão):** cada brief ganha a seção `Estrutura (AST)` com
+> símbolos adicionados/removidos/alterados, assinaturas e imports; o impacto reverso
+> (quem importa os arquivos alterados) aparece como mapa de leitura. É fail-open:
+> sem grammar/ABI, a revisão segue só com regex. Desative com `--no-ast`.
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).
@@ -106,7 +113,7 @@ arquivos da PR. Cada brief recebe no máximo `budgets.maxFilesPerBrief` arquivos
 
 ### Pré-análise Jev (Passo 1.5, opcional)
 
-Se `TYPESAFE_API_KEY` estiver definida, cada arquivo é avaliado pelo modelo **Jev** contra
+Se `HOUNDSMAN_TYPE_SAFE_API_KEY` estiver definida, cada arquivo é avaliado pelo modelo **Jev** contra
 as regras atômicas dos watchdogs. Respostas acima do limiar viram **candidatos** em
 `candidates.json` e entram no brief como *warm start* — o subagente **confirma ou refuta**.
 
@@ -264,7 +271,7 @@ Se a branch não for informada, detecta com `git branch --show-current`. Base do
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 
 Flags do review: `--base` · `--head` · `--branch` · `--clean` · `--full` (força
-completo) · `--no-jev` · `--fail-on-blocking` (com `--finalize`).
+completo) · `--no-jev` · `--no-ast` · `--fail-on-blocking` (com `--finalize`).
 
 > Persistência: SQLite global em `<HOUNDSMAN_HOME>/houndsman.db`. O staging dos subagentes
 > (`briefs/`, `findings/`, contexto) vive em `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo

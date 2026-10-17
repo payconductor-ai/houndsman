@@ -5,6 +5,7 @@
  * pública e os testes; a classe devolve `Classification` (domínio).
  */
 
+import type { AstFacts } from "../ast/types";
 import type { HoundsmanConfig } from "../config";
 import type { DiffSource } from "../diff-source";
 import { Classification } from "../domain/classification";
@@ -23,12 +24,18 @@ export class FileClassifier {
 	classify(
 		entries: ReturnType<typeof parseEntries>,
 		churn: ChurnMap = {},
+		astFacts?: ReadonlyMap<string, AstFacts>,
 	): Classification {
-		return new Classification(classifyEntries(entries, this.config, churn));
+		return new Classification(classifyEntries(entries, this.config, churn, astFacts));
 	}
 
 	/** Executa o diff e classifica os arquivos entre `base` e `head`. */
-	classifyRange(base: string, head: string, diff?: DiffSource): Classification {
-		return new Classification(classifyRange(base, head, this.config, diff));
+	classifyRange(
+		base: string,
+		head: string,
+		diff?: DiffSource,
+		astFacts?: ReadonlyMap<string, AstFacts>,
+	): Classification {
+		return new Classification(classifyRange(base, head, this.config, diff, astFacts));
 	}
 }
