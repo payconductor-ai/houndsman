@@ -16,8 +16,8 @@ const project = new ProjectConfig(fakeHoundsmanConfig);
 
 describe("config de IA", () => {
 	test("modelo default do DeepSeek é 4.1 flash", () => {
-		expect(DEFAULT_AI_MODEL).toBe("deepseek-v4.1-flash");
-		expect(project.aiModel).toBe("deepseek-v4.1-flash");
+		expect(DEFAULT_AI_MODEL).toBe("deepseek-v4-pro");
+		expect(project.aiModel).toBe("deepseek-v4-pro");
 	});
 });
 

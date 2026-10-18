@@ -140,7 +140,7 @@ mantêm o nome global por serem convenções do ambiente.
 ```ts
 ai: {
 	provider: "deepseek",
-	model: "deepseek-v4.1-flash",
+	model: "deepseek-v4-pro",
 	concurrency: 2,
 	maxSteps: 12,
 	maxCallsPerReview: 40,
@@ -152,7 +152,7 @@ ai: {
 		preAnalysis: false,
 		verify: false,
 	},
-	watchdogs: { alpha: { model: "deepseek-v4.1-flash", maxSteps: 8 } },
+	watchdogs: { alpha: { model: "deepseek-v4-pro", maxSteps: 8 } },
 },
 ```
 
