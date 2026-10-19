@@ -149,6 +149,8 @@ export type SubmitCandidate = {
 	file: string;
 	line: number | null;
 	severity: Severity;
+	/** Decisão da triagem (`execute` = "a executar"). */
+	decision: Decision;
 	execState: ExecState;
 	rule: string;
 	message: string;

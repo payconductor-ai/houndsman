@@ -2,8 +2,9 @@
  * Modal "Enviar revisão": publica os findings selecionados como comentários na
  * Pull Request (`POST /submit`, via `gh`).
  *
- * Filtra por severidade e estado de execução, mostra uma prévia curta do que
- * será disparado e o resultado (com o link do comentário geral, quando houver).
+ * Filtra por severidade, decisão (a executar) e estado de execução, mostra uma
+ * prévia curta do que será disparado e o resultado (com o link do comentário
+ * geral, quando houver).
  * Fail-open: sem `gh`/PR o servidor devolve `available:false` e o modal só
  * informa — nada é postado.
  */
@@ -11,8 +12,14 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import { GitHub, Send, Spinner } from "./icons";
 import { api } from "./utils/api";
-import { EXEC_STATES, SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
+import {
+	DECISION_LABELS,
+	EXEC_STATES,
+	SEVERITY_LABELS,
+	SEVERITY_ORDER,
+} from "./utils/constants";
 import type {
+	Decision,
 	ExecState,
 	Severity,
 	SubmitOutcome,
@@ -26,6 +33,9 @@ const EXEC_LABELS: Record<ExecState, string> = {
 	done: "Feito",
 	stale: "Stale",
 };
+
+/** Decisões elegíveis ao envio: `ignore` fica de fora por definição. */
+const SUBMIT_DECISIONS: Decision[] = ["execute", "pending"];
 
 export function SubmitModal({
 	slug,
@@ -42,6 +52,7 @@ export function SubmitModal({
 }) {
 	const [preview, setPreview] = useState<SubmitPreview | null>(null);
 	const [severities, setSeverities] = useState<Severity[]>([]);
+	const [decisions, setDecisions] = useState<Decision[]>([]);
 	const [execStates, setExecStates] = useState<ExecState[]>([]);
 	const [includeSent, setIncludeSent] = useState(false);
 	const [loading, setLoading] = useState(false);
@@ -86,6 +97,7 @@ export function SubmitModal({
 		if (open) return;
 		setPreview(null);
 		setSeverities([]);
+		setDecisions([]);
 		setExecStates([]);
 		setIncludeSent(false);
 		setLoading(false);
@@ -106,6 +118,12 @@ export function SubmitModal({
 				? current.filter((item) => item !== value)
 				: [...current, value],
 		);
+	const toggleDecision = (value: Decision) =>
+		setDecisions((current) =>
+			current.includes(value)
+				? current.filter((item) => item !== value)
+				: [...current, value],
+		);
 
 	const selected = useMemo(
 		() =>
@@ -113,9 +131,14 @@ export function SubmitModal({
 				(candidate) =>
 					(severities.length === 0 ||
 						severities.includes(candidate.severity)) &&
+					// Servidor antigo ainda em memória pode não mandar `decision`:
+					// nesse caso não escondemos o candidato do filtro.
+					(decisions.length === 0 ||
+						!candidate.decision ||
+						decisions.includes(candidate.decision)) &&
 					(execStates.length === 0 || execStates.includes(candidate.execState)),
 			),
-		[preview, severities, execStates],
+		[preview, severities, decisions, execStates],
 	);
 
 	const toSend = useMemo(
@@ -140,6 +163,7 @@ export function SubmitModal({
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify({
 					severities: severities.length > 0 ? severities : undefined,
+					decisions: decisions.length > 0 ? decisions : undefined,
 					execStates: execStates.length > 0 ? execStates : undefined,
 					includeSent,
 				}),
@@ -155,7 +179,7 @@ export function SubmitModal({
 		} finally {
 			setPosting(false);
 		}
-	}, [slug, severities, execStates, includeSent, onSubmitted]);
+	}, [slug, severities, decisions, execStates, includeSent, onSubmitted]);
 
 	if (!open) return null;
 
@@ -234,6 +258,38 @@ export function SubmitModal({
 												onClick={() => toggleSeverity(severity)}
 											>
 												{SEVERITY_LABELS[severity]}
+											</button>
+										))}
+									</div>
+								</div>
+
+								<div class="submit-field">
+									<span class="submit-label">Decisão</span>
+									<div class="chips">
+										<button
+											type="button"
+											class={`chip${decisions.length === 0 ? " active" : ""}`}
+											onClick={() => setDecisions([])}
+										>
+											Todas
+										</button>
+										{SUBMIT_DECISIONS.map((decision) => (
+											<button
+												type="button"
+												key={decision}
+												title={
+													decision === "execute"
+														? "Findings marcados como Executar (a executar)"
+														: "Findings ainda não triados"
+												}
+												class={`chip dec-${decision}${
+													decisions.includes(decision)
+														? " active"
+														: ""
+												}`}
+												onClick={() => toggleDecision(decision)}
+											>
+												{DECISION_LABELS[decision]}
 											</button>
 										))}
 									</div>

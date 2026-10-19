@@ -657,11 +657,15 @@ function splitList(raw: string | undefined): string[] {
 		.filter(Boolean);
 }
 
-/** Seleção do envio a partir das flags (`--severity`, `--exec`, `--include-sent`). */
+/** Seleção do envio a partir das flags (`--severity`, `--decision`, `--exec`). */
 function submitSelection(parsed: ParsedArgs): SubmitSelection {
 	const severities = splitList(parsed.values["--severity"]).filter(
 		(value): value is Severity =>
 			(SEVERITY_ORDER as readonly string[]).includes(value),
+	);
+	const decisions = splitList(parsed.values["--decision"]).filter(
+		(value): value is FindingDecision =>
+			(FINDING_DECISIONS as readonly string[]).includes(value),
 	);
 	const execStates = splitList(parsed.values["--exec"]).filter(
 		(value): value is FindingExecState =>
@@ -669,6 +673,7 @@ function submitSelection(parsed: ParsedArgs): SubmitSelection {
 	);
 	return {
 		severities: severities.length > 0 ? severities : undefined,
+		decisions: decisions.length > 0 ? decisions : undefined,
 		execStates: execStates.length > 0 ? execStates : undefined,
 		includeSent: parsed.bools.has("--include-sent"),
 	};

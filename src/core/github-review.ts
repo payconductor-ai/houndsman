@@ -118,6 +118,8 @@ export type SubmitCandidate = {
 	file: string;
 	line: number | null;
 	severity: Severity;
+	/** Decisão da triagem (`execute` = "a executar"/fila de correção). */
+	decision: FindingDecision;
 	execState: FindingExecState;
 	rule: string;
 	message: string;
@@ -159,6 +161,7 @@ export function selectSubmitCandidates(
 				file: finding.file,
 				line: finding.line,
 				severity: finding.severity,
+				decision: finding.decision,
 				execState: finding.execState,
 				rule: finding.rule,
 				message: finding.message,

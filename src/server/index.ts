@@ -119,6 +119,7 @@ async function route(
 		const body = (await request.json().catch(() => ({}))) as SubmitSelection;
 		const selection: SubmitSelection = {
 			severities: body.severities,
+			decisions: body.decisions,
 			execStates: body.execStates,
 			includeSent: body.includeSent,
 		};

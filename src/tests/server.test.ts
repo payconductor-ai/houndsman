@@ -220,11 +220,12 @@ describe("server API", () => {
 			const body = (await res.json()) as {
 				available: boolean;
 				target: { number: number };
-				candidates: unknown[];
+				candidates: { decision: string }[];
 			};
 			expect(body.available).toBe(true);
 			expect(body.target.number).toBe(12);
 			expect(body.candidates).toHaveLength(1);
+			expect(body.candidates[0].decision).toBe("pending");
 		} finally {
 			env.cleanup();
 		}

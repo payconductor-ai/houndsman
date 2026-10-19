@@ -294,6 +294,15 @@ describe("selectSubmitCandidates", () => {
 		expect(selectSubmitCandidates(state, { execStates: ["done"] })).toEqual([]);
 	});
 
+	test("filtra pela decisão (a executar vs ainda pendente)", () => {
+		const execute = selectSubmitCandidates(state, { decisions: ["execute"] });
+		expect(execute.map((c) => c.id)).toEqual(["a"]);
+		expect(execute[0].decision).toBe("execute");
+		expect(
+			selectSubmitCandidates(state, { decisions: ["pending"] }).map((c) => c.id),
+		).toEqual(["c"]);
+	});
+
 	test("marca sent/skip e respeita includeSent", () => {
 		const sent = stateWith([finding({ id: "a", commentId: 99 })]);
 		const [only] = selectSubmitCandidates(sent);

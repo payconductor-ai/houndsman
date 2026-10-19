@@ -152,6 +152,39 @@ describe("cli smoke — imports dinâmicos", () => {
 		}
 	});
 
+	test("findings submit filtra pela decisão (a executar)", () => {
+		const project = makeProject();
+		try {
+			const pending = runCli(project.cwd, [
+				"findings",
+				"submit",
+				"--dry-run",
+				"--json",
+				"--branch",
+				"main",
+				"--decision",
+				"pending",
+			]);
+			expect(pending.code).toBe(0);
+			expect(JSON.parse(pending.stdout).totals.candidates).toBe(1);
+
+			const execute = runCli(project.cwd, [
+				"findings",
+				"submit",
+				"--dry-run",
+				"--json",
+				"--branch",
+				"main",
+				"--decision",
+				"execute",
+			]);
+			expect(execute.code).toBe(0);
+			expect(JSON.parse(execute.stdout).totals.candidates).toBe(0);
+		} finally {
+			project.cleanup();
+		}
+	});
+
 	test("doctor valida a config (import lazy de registry-check)", () => {
 		const project = makeProject();
 		try {
