@@ -6,15 +6,17 @@ import { useMemo } from "preact/hooks";
 import { FindingCard } from "./FindingCard";
 import { Alert } from "./icons";
 import { SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
-import type { Finding, Severity } from "./utils/types";
+import type { EditorContext, Finding, Severity } from "./utils/types";
 
 export function FindingsList({
 	slug,
 	findings,
+	editor,
 	onUpdated,
 }: {
 	slug: string;
 	findings: Finding[];
+	editor: EditorContext;
 	onUpdated: (finding: Finding) => void;
 }) {
 	const grouped = useMemo(() => {
@@ -45,6 +47,7 @@ export function FindingsList({
 								key={finding.id}
 								slug={slug}
 								finding={finding}
+								editor={editor}
 								onUpdated={onUpdated}
 							/>
 						))}

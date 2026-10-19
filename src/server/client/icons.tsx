@@ -158,3 +158,22 @@ export const Send = (p: IconProps) => (
 		<path d="M22 2 15 22l-4-9-9-4z" />
 	</Svg>
 );
+
+/** Pull request — aba de PRs da sidebar. */
+export const GitPullRequest = (p: IconProps) => (
+	<Svg {...p}>
+		<circle cx="6" cy="6" r="2.4" />
+		<circle cx="6" cy="18" r="2.4" />
+		<circle cx="18" cy="18" r="2.4" />
+		<path d="M6 8.4v7.2" />
+		<path d="M18 15.6V12a4 4 0 0 0-4-4h-2.5" />
+		<path d="m13.5 5.5-2.5 2.5 2.5 2.5" />
+	</Svg>
+);
+
+/** Balão de conversa — aba de comentários. */
+export const MessageSquare = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M21 15a3 3 0 0 1-3 3H8l-5 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3z" />
+	</Svg>
+);

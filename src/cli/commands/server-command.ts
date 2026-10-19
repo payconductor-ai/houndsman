@@ -26,9 +26,15 @@ export class ServerCommand implements Command {
 		const parser = ArgParser.from(args);
 		const port = Number(parser.value("--port")) || 7331;
 		const host = parser.value("--host") ?? "127.0.0.1";
+		const editorPreference = parser.value("--editor");
 
 		const { startServer } = await import("../../server");
-		const { url } = startServer({ config: engine.config, port, host });
+		const { url } = startServer({
+			config: engine.config,
+			port,
+			host,
+			editorPreference,
+		});
 		context.out(`[houndsman] servidor em ${url}`);
 		context.out("[houndsman] Ctrl+C para encerrar.");
 		if (parser.has("--open")) openBrowser(url);

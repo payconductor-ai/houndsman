@@ -245,4 +245,6 @@ export const TAB_CAPTIONS = {
 		"Triagem dos achados da revisão: decida Executar, Ignorar ou deixe Pendente — o comentário orienta o auto-fix. Agente: houndsman findings list --decision pending --json · findings done <id>.",
 	artifacts:
 		"Artefatos persistidos da run: relatórios, briefs de auditoria, manifesto, classificação, Jev, contexto da PR e verificação. JSON com destaque de sintaxe; markdown renderizado com highlight de código.",
+	comments:
+		"Comentários da PR vinculada à branch: threads de revisão agrupadas por arquivo e comentários gerais. Carregados sob demanda ao abrir esta aba.",
 } as const;

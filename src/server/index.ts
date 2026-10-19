@@ -9,16 +9,20 @@
 import { mediaPath } from "../core/assets";
 import type { HoundsmanConfig } from "../core/config";
 import type { FindingUpdate } from "../core/findings-state";
+import { createGitRunner, type GitRunner } from "../core/git-runner";
 import {
 	defaultGhRunner,
 	type GhRunner,
 	type SubmitSelection,
 } from "../core/github-review";
 import { logger } from "../core/logging";
+import { GitRepository } from "../core/services/git-repository";
 import { createStorage } from "../core/storage/factory";
 import { resolveRepoIdentity } from "../core/storage/repo-identity";
 import type { RepoIdentity, StorageProvider } from "../core/storage/types";
 import { buildClientBundle } from "./client-build";
+import { type EditorContext, resolveEditor } from "./editor";
+import { PrInbox } from "./pr-inbox";
 import { RunRepository } from "./run-repository";
 
 type BunServer = ReturnType<typeof Bun.serve>;
@@ -59,8 +63,13 @@ function notFound(detail = "não encontrado"): Response {
 /** Repositório das runs (dados) — ver `run-repository.ts`. */
 type ServerDeps = {
 	ghRunner?: GhRunner;
+	gitRunner?: GitRunner;
 	storage?: StorageProvider;
 	repo?: RepoIdentity;
+	/** Contexto do editor injetado (testes). */
+	editor?: EditorContext;
+	/** Preferência do `--editor` (CLI). */
+	editorPreference?: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -83,6 +92,8 @@ async function route(
 	request: Request,
 	runs: RunRepository,
 	ghRunner: GhRunner,
+	prs: PrInbox,
+	editor: EditorContext,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const path = url.pathname;
@@ -95,6 +106,21 @@ async function route(
 	}
 	if (path === `/assets/${LOGO_FILE}`) return serveLogo();
 	if (path === "/api/health") return json({ ok: true });
+	if (path === "/api/editor" && request.method === "GET") return json(editor);
+	if (path === "/api/prs" && request.method === "GET") {
+		return json(prs.list(runs.branchIndex()));
+	}
+	if (path === "/api/prs/checkout" && request.method === "POST") {
+		const body = (await request.json().catch(() => ({}))) as { number?: unknown };
+		const number = Number(body.number);
+		if (!Number.isInteger(number) || number <= 0) {
+			return json(
+				{ ok: false, reason: "invalid", detail: "Número de PR inválido." },
+				400,
+			);
+		}
+		return json(prs.checkout(number));
+	}
 
 	if (path === "/api/runs" && request.method === "GET") {
 		return json({ runs: runs.list() });
@@ -108,6 +134,11 @@ async function route(
 
 	if (rest === "" || rest === "/") return json(runs.detail(slug));
 
+	if (rest === "/comments" && request.method === "GET") {
+		return json(
+			runs.comments(slug, { refresh: url.searchParams.get("refresh") === "1" }),
+		);
+	}
 	if (rest === "/findings" && request.method === "GET") {
 		return json(runs.findings(slug, url.searchParams));
 	}
@@ -162,19 +193,27 @@ async function route(
 export class HoundsmanServer {
 	private readonly runs: RunRepository;
 	private readonly ghRunner: GhRunner;
+	private readonly prs: PrInbox;
+	private readonly editor: EditorContext;
 
 	constructor(config: HoundsmanConfig, deps: ServerDeps = {}) {
+		const repo = deps.repo ?? resolveRepoIdentity();
+		this.ghRunner = deps.ghRunner ?? defaultGhRunner;
 		this.runs = new RunRepository(
 			deps.storage ?? createStorage(config),
-			deps.repo ?? resolveRepoIdentity(),
+			repo,
+			this.ghRunner,
 		);
-		this.ghRunner = deps.ghRunner ?? defaultGhRunner;
+		this.editor =
+			deps.editor ?? resolveEditor(deps.editorPreference, process.env, repo.root);
+		const git = new GitRepository(deps.gitRunner ?? createGitRunner(repo.root));
+		this.prs = new PrInbox(this.ghRunner, git);
 	}
 
 	/** Handler de requisições (testável sem abrir porta). */
 	readonly handler = async (request: Request): Promise<Response> => {
 		try {
-			return await route(request, this.runs, this.ghRunner);
+			return await route(request, this.runs, this.ghRunner, this.prs, this.editor);
 		} catch (error) {
 			return json(
 				{ error: error instanceof Error ? error.message : String(error) },
@@ -224,17 +263,26 @@ export type ServerOptions = {
 	host?: string;
 	/** Runner do `gh` (injetável nos testes). */
 	ghRunner?: GhRunner;
+	/** Runner do git (injetável nos testes). */
+	gitRunner?: GitRunner;
 	/** Provider/storage injetável (testes). */
 	storage?: StorageProvider;
 	repo?: RepoIdentity;
+	/** Contexto de editor injetado (testes). */
+	editor?: EditorContext;
+	/** Preferência do `--editor` (auto|vscode|jetbrains|none). */
+	editorPreference?: string;
 };
 
 /** Sobe o servidor e devolve a instância + URL. */
 export function startServer(options: ServerOptions): { server: BunServer; url: string } {
 	return new HoundsmanServer(options.config, {
 		ghRunner: options.ghRunner,
+		gitRunner: options.gitRunner,
 		storage: options.storage,
 		repo: options.repo,
+		editor: options.editor,
+		editorPreference: options.editorPreference,
 	}).start({
 		port: options.port,
 		host: options.host,
@@ -296,6 +344,66 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 .status-review_done { color:var(--suggestion); }
 .status-fix_done { color:var(--success); }
 .status-timeout { color:var(--blocking); }
+.side-tabs { display:flex; gap:4px; padding:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:999px; }
+.side-tab { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; font:inherit; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted);
+  padding:7px 10px; background:transparent; border:1px solid transparent; border-radius:999px; transition:color .15s ease, background .15s ease; }
+.side-tab:hover { color:var(--fg); }
+.side-tab.active { color:#1b1305; background:linear-gradient(180deg, var(--accent-strong), var(--accent)); }
+.side-count { padding:1px 6px; font-family:var(--font-mono); font-size:10px; color:var(--muted); background:rgba(255,255,255,.08); border-radius:999px; }
+.side-tab.active .side-count { color:#1b1305; background:rgba(0,0,0,.14); }
+.icon-btn { display:inline-grid; place-items:center; width:26px; height:26px; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:8px; cursor:pointer; text-decoration:none; }
+.icon-btn:hover { color:var(--fg); border-color:var(--border-strong); }
+.icon-btn:disabled { opacity:.5; cursor:not-allowed; }
+.pr-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.pr-toolbar .section-label { margin:0; }
+.prs { display:flex; flex-direction:column; gap:8px; }
+.pr { display:flex; flex-direction:column; gap:7px; padding:11px 12px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); }
+.pr.current { background:var(--accent-soft); border-color:var(--accent-line); }
+.pr-head { display:flex; align-items:center; gap:7px; font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+.pr-icon { color:var(--muted-2); }
+.pr.current .pr-icon { color:var(--accent); }
+.pr-number { font-weight:600; color:var(--fg); }
+.pr-current { padding:1px 6px; font-size:9px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); background:rgba(240,165,44,.12); border-radius:999px; }
+.pr-title { margin:0; font-size:12.5px; font-weight:600; line-height:1.4; word-break:break-word; }
+.pr-meta { display:flex; flex-wrap:wrap; align-items:center; gap:1px 5px; margin:0; font-family:var(--font-mono); font-size:10.5px; color:var(--muted-2); }
+.pr-branch { color:var(--suggestion); }
+.pr-review { margin:0; font-size:10.5px; font-weight:600; }
+.pr-review-APPROVED { color:var(--success); }
+.pr-review-CHANGES_REQUESTED { color:var(--blocking); }
+.pr-review-REVIEW_REQUIRED { color:var(--attention); }
+.pr-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:2px; }
+.pr-btn { display:inline-flex; align-items:center; gap:5px; font:inherit; font-size:10.5px; font-weight:600; cursor:pointer; padding:4px 9px; color:var(--muted);
+  background:transparent; border:1px solid var(--border-strong); border-radius:999px; text-decoration:none; }
+.pr-btn:hover { color:var(--fg); border-color:var(--accent-line); }
+.pr-btn:disabled { opacity:.45; cursor:not-allowed; }
+.pr-btn.danger { color:var(--accent); background:var(--accent-soft); border-color:var(--accent-line); }
+.pr-warning { margin:0; padding:8px 10px; font-size:11px; line-height:1.5; color:var(--attention);
+  background:rgba(237,161,58,.08); border:1px solid rgba(237,161,58,.24); border-radius:10px; }
+.pr-notice { margin:0; padding:8px 10px; font-size:11px; line-height:1.5; color:var(--success);
+  background:rgba(69,192,122,.08); border:1px solid rgba(69,192,122,.24); border-radius:10px; }
+.pr-current-branch { margin:0; font-family:var(--font-mono); font-size:10.5px; color:var(--muted-2); }
+.pr-current-branch code { color:var(--fg); }
+.comments { display:flex; flex-direction:column; gap:18px; }
+.comments-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.comments-counts { display:flex; flex-wrap:wrap; align-items:center; gap:12px; font-size:11.5px; color:var(--muted); }
+.comments-counts b { font-family:var(--font-mono); font-weight:600; color:var(--fg); }
+.comment-group { display:flex; flex-direction:column; gap:10px; }
+.comment-group-title { margin:0; font-size:11px; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--muted-2); }
+.comment-file-group { display:flex; flex-direction:column; gap:8px; }
+.comment-group-label { display:flex; align-items:center; gap:8px; margin:0; font-family:var(--font-mono); font-size:11.5px; color:var(--suggestion); }
+.comment-thread { display:flex; flex-direction:column; overflow:hidden; background:var(--card); border:1px solid var(--border); border-radius:var(--radius-lg); }
+.comment-thread-head { display:flex; align-items:center; gap:8px; padding:9px 13px; font-family:var(--font-mono); font-size:11px; color:var(--muted);
+  background:var(--surface-2); border-bottom:1px solid var(--border); }
+.comment-file { overflow:hidden; color:var(--fg); text-overflow:ellipsis; white-space:nowrap; }
+.pr-comment { display:flex; flex-direction:column; gap:7px; padding:12px 14px; border-top:1px solid var(--border); }
+.comment-thread .pr-comment:first-of-type { border-top:0; }
+.pr-comment.reply { margin-left:26px; background:rgba(255,255,255,.012); border-left:2px solid var(--accent-line); }
+.pr-comment-head { display:flex; align-items:center; gap:9px; font-size:11px; color:var(--muted-2); }
+.pr-comment-author { font-size:12px; font-weight:600; color:var(--fg); }
+.pr-comment-link { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); text-decoration:none; }
+.pr-comment-link:hover { color:var(--accent); }
+.pr-comment-body { font-size:12.5px; line-height:1.6; color:#f0ece6; }
+.pr-comment-body .md-p, .pr-comment-body .md-list { font-size:12.5px; }
 .main { flex:1; min-width:0; display:flex; flex-direction:column; overflow-y:auto; }
 .topbar { position:sticky; top:0; z-index:10; display:flex; align-items:center; justify-content:space-between; gap:16px;
   padding:13px 24px; border-bottom:1px solid var(--border); background:rgba(16,16,20,.74);

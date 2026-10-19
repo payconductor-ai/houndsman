@@ -21,8 +21,8 @@ import { MarkdownText } from "./MarkdownText";
 import { api } from "./utils/api";
 import { highlightCode, languageFromFile } from "./utils/code-highlight";
 import { DECISION_LABELS, DECISIONS, SEVERITY_LABELS } from "./utils/constants";
-import { vscodeFileLink } from "./utils/format";
-import type { Finding } from "./utils/types";
+import { editorFileLink, editorLabel } from "./utils/format";
+import type { EditorContext, Finding } from "./utils/types";
 
 /** Debounce do auto-save do comentário (ms). */
 const AUTOSAVE_MS = 700;
@@ -32,10 +32,12 @@ const SAVED_VISIBLE_MS = 1800;
 export function FindingCard({
 	slug,
 	finding,
+	editor,
 	onUpdated,
 }: {
 	slug: string;
 	finding: Finding;
+	editor: EditorContext;
 	onUpdated: (finding: Finding) => void;
 }) {
 	const isDone = finding.execState === "done";
@@ -104,7 +106,9 @@ export function FindingCard({
 	}, [comment, patch]);
 
 	const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-	const href = finding.absFile ? vscodeFileLink(finding.absFile, finding.line) : null;
+	const href = finding.absFile
+		? editorFileLink(finding.absFile, finding.line, editor)
+		: null;
 	const highlighted = useMemo(
 		() =>
 			finding.evidence
@@ -132,7 +136,11 @@ export function FindingCard({
 				</button>
 				<span class="sev-badge">{SEVERITY_LABELS[finding.severity]}</span>
 				{href ? (
-					<a class="loc" href={href} title={`Abrir ${location} no VS Code`}>
+					<a
+						class="loc"
+						href={href}
+						title={`Abrir ${location} no ${editorLabel(editor)}`}
+					>
 						<CodeIcon size={13} />
 						{location}
 						<ExternalLink size={12} class="ext" />

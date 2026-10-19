@@ -7,18 +7,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ArtifactsPanel } from "./ArtifactsPanel";
 import { AutoRefresh } from "./AutoRefresh";
+import { CommentsPanel } from "./CommentsPanel";
 import { Filters, type FiltersState } from "./Filters";
 import { FindingsList } from "./FindingsList";
-import { FileText, Layers, ListIcon, Refresh, Send } from "./icons";
+import { FileText, Layers, ListIcon, MessageSquare, Refresh, Send } from "./icons";
 import { ResumePanel } from "./ResumePanel";
-import { RunList } from "./RunList";
+import { Sidebar } from "./Sidebar";
 import { SubmitModal } from "./SubmitModal";
 import { SummaryBar } from "./SummaryBar";
 import { api, computeSummary } from "./utils/api";
 import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./utils/constants";
-import type { Finding, FindingsResponse, RunSummary } from "./utils/types";
+import type { EditorContext, Finding, FindingsResponse, RunSummary } from "./utils/types";
 
-type Tab = "resume" | "findings" | "artifacts";
+type Tab = "resume" | "findings" | "artifacts" | "comments";
 
 const TABS: { id: Tab; label: string; hint: string }[] = [
 	{
@@ -36,7 +37,19 @@ const TABS: { id: Tab; label: string; hint: string }[] = [
 		label: "Artefatos",
 		hint: "Arquivos brutos gerados pela revisão (manifesto, classificação, relatório…)",
 	},
+	{
+		id: "comments",
+		label: "Comentários",
+		hint: "Comentários da PR: threads de revisão e comentários gerais (carregados ao abrir a aba)",
+	},
 ];
+
+function TabIcon({ id }: { id: Tab }) {
+	if (id === "resume") return <FileText size={15} />;
+	if (id === "findings") return <ListIcon size={15} />;
+	if (id === "artifacts") return <Layers size={15} />;
+	return <MessageSquare size={15} />;
+}
 
 export function App() {
 	const [runs, setRuns] = useState<RunSummary[]>([]);
@@ -54,6 +67,8 @@ export function App() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [syncing, setSyncing] = useState(false);
 	const [submitOpen, setSubmitOpen] = useState(false);
+	/** Editor detectado pelo servidor — base dos links de código. */
+	const [editor, setEditor] = useState<EditorContext>({ kind: "vscode" });
 	/** Refs espelhando estado volátil — o polling não deve recriar o intervalo. */
 	const lastSyncRef = useRef(lastSync);
 	const slugRef = useRef<string | null>(null);
@@ -115,6 +130,14 @@ export function App() {
 	useEffect(() => {
 		reloadRuns();
 	}, [reloadRuns]);
+
+	useEffect(() => {
+		api<EditorContext>("/api/editor")
+			.then(setEditor)
+			.catch(() => {
+				// fail-open: mantém o fallback VS Code.
+			});
+	}, []);
 
 	useEffect(() => {
 		if (slug) loadFindings(slug);
@@ -194,7 +217,12 @@ export function App() {
 
 	return (
 		<div class="app">
-			<RunList runs={runs} slug={slug} onSelect={setSlug} />
+			<Sidebar
+				runs={runs}
+				slug={slug}
+				onSelect={setSlug}
+				onRefreshRuns={() => void reloadRuns()}
+			/>
 			<main class="main">
 				<header class="topbar">
 					<div class="segmented">
@@ -206,13 +234,7 @@ export function App() {
 								class={`seg-btn${tab === item.id ? " active" : ""}`}
 								onClick={() => setTab(item.id)}
 							>
-								{item.id === "resume" ? (
-									<FileText size={15} />
-								) : item.id === "findings" ? (
-									<ListIcon size={15} />
-								) : (
-									<Layers size={15} />
-								)}
+								<TabIcon id={item.id} />
 								{item.label}
 							</button>
 						))}
@@ -278,11 +300,15 @@ export function App() {
 							<FindingsList
 								slug={slug}
 								findings={findings}
+								editor={editor}
 								onUpdated={onUpdated}
 							/>
 						</>
 					)}
 					{slug && tab === "artifacts" && <ArtifactsPanel slug={slug} />}
+					{slug && tab === "comments" && (
+						<CommentsPanel slug={slug} editor={editor} />
+					)}
 					{!slug && !error && <p class="empty">Nenhuma execução para triar.</p>}
 				</div>
 				{slug && (

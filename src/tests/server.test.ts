@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { HoundsmanConfig } from "../core/config";
 import { buildStateFromFindings, fileReader } from "../core/findings-state";
 import { dedupeFindings, parseWatchdogReport } from "../core/report-builder";
@@ -10,6 +10,7 @@ import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 import type { RepoIdentity } from "../core/storage/types";
 import { createRequestHandler, startServer } from "../server";
 import { isSlug } from "../server/artifacts";
+import { clearPrCommentsCache } from "../server/pr-comments";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
 
 /** Ambiente fake: banco temporário + review `main` com um finding. */
@@ -442,6 +443,297 @@ describe("startServer", () => {
 			expect(await res.json()).toEqual({ ok: true });
 		} finally {
 			server?.stop(true);
+			env.cleanup();
+		}
+	});
+});
+
+describe("server — editor, PRs e comentários", () => {
+	const gitOk = (stdout = "") => ({ ok: true, code: 0, stdout, stderr: "" });
+
+	test("GET /api/editor devolve o contexto injetado", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				editor: { kind: "jetbrains", project: "app", product: "webstorm" },
+			});
+			const body = await (await get(handler, "/api/editor")).json();
+			expect(body).toEqual({
+				kind: "jetbrains",
+				project: "app",
+				product: "webstorm",
+			});
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("GET /api/prs lista PRs abertas e casa com a run da branch", async () => {
+		const env = makeEnv();
+		try {
+			env.storage.getOrCreateReview({
+				repo: env.repo,
+				branch: "feat/x",
+				slug: "feat-x",
+			});
+			const calls: string[][] = [];
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				gitRunner: (args) => {
+					if (args[0] === "status") return gitOk("");
+					if (args[0] === "branch") return gitOk("main\n");
+					return gitOk("");
+				},
+				ghRunner: (args) => {
+					calls.push(args);
+					return ghJson([
+						{
+							number: 7,
+							title: "Feat X",
+							headRefName: "feat/x",
+							baseRefName: "main",
+							author: { login: "ana" },
+							updatedAt: "2026-01-02T00:00:00Z",
+							isDraft: false,
+							reviewDecision: "APPROVED",
+							url: "https://github.com/acme/app/pull/7",
+						},
+						{
+							number: 8,
+							title: "Outra",
+							headRefName: "feat/y",
+							baseRefName: "main",
+							author: { login: "bia" },
+							updatedAt: "2026-01-03T00:00:00Z",
+							isDraft: true,
+							reviewDecision: "",
+							url: "https://github.com/acme/app/pull/8",
+						},
+					]);
+				},
+			});
+
+			const res = await get(handler, "/api/prs");
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as {
+				available: boolean;
+				currentBranch: string;
+				worktree: { clean: boolean };
+				prs: { number: number; runSlug?: string }[];
+			};
+			expect(body.available).toBe(true);
+			expect(body.currentBranch).toBe("main");
+			expect(body.worktree.clean).toBe(true);
+			expect(body.prs.map((pr) => pr.number)).toEqual([8, 7]);
+			expect(body.prs.find((pr) => pr.number === 7)?.runSlug).toBe("feat-x");
+			expect(calls[0]).toEqual([
+				"pr",
+				"list",
+				"--state",
+				"open",
+				"--limit",
+				"50",
+				"--json",
+				"number,title,headRefName,baseRefName,author,updatedAt,isDraft,reviewDecision,url",
+			]);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("POST /api/prs/checkout bloqueia árvore suja sem chamar gh", async () => {
+		const env = makeEnv();
+		try {
+			let ghCalls = 0;
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				gitRunner: (args) =>
+					args[0] === "status" ? gitOk(" M src/alpha/f.ts\n") : gitOk(""),
+				ghRunner: () => {
+					ghCalls++;
+					return gitOk("");
+				},
+			});
+
+			const res = await handler(
+				new Request("http://localhost/api/prs/checkout", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ number: 7 }),
+				}),
+			);
+			const body = (await res.json()) as {
+				ok: boolean;
+				reason: string;
+				changes?: string[];
+			};
+			expect(body.ok).toBe(false);
+			expect(body.reason).toBe("dirty");
+			expect(body.changes).toEqual([" M src/alpha/f.ts"]);
+			expect(ghCalls).toBe(0);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("POST /api/prs/checkout usa gh pr checkout quando a árvore está limpa", async () => {
+		const env = makeEnv();
+		try {
+			const calls: string[][] = [];
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				gitRunner: (args) => {
+					if (args[0] === "status") return gitOk("");
+					if (args[0] === "branch") return gitOk("feat/x\n");
+					return gitOk("");
+				},
+				ghRunner: (args) => {
+					calls.push(args);
+					return gitOk("");
+				},
+			});
+
+			const res = await handler(
+				new Request("http://localhost/api/prs/checkout", {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ number: 7 }),
+				}),
+			);
+			expect(await res.json()).toEqual({
+				ok: true,
+				number: 7,
+				branch: "feat/x",
+			});
+			expect(calls).toContainEqual(["pr", "checkout", "7"]);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("GET comments agrupa threads, usa cache e respeita ?refresh=1", async () => {
+		const env = makeEnv();
+		try {
+			clearPrCommentsCache();
+			let inlineCalls = 0;
+			let issueCalls = 0;
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				ghRunner: (args) => {
+					if (args[0] === "pr") {
+						return ghJson({
+							number: 12,
+							url: "https://github.com/acme/app/pull/12",
+							headRefOid: "deadbeef",
+						});
+					}
+					const path = args[args.length - 1];
+					if (path === "repos/acme/app/pulls/12/comments") {
+						inlineCalls++;
+						return ghJson([
+							[
+								{
+									id: 1,
+									body: "raiz",
+									path: "src/alpha/f.ts",
+									line: 2,
+									created_at: "2026-01-01T00:00:00Z",
+									html_url:
+										"https://github.com/acme/app/pull/12#discussion_r1",
+									user: { login: "ana", type: "User" },
+								},
+								{
+									id: 2,
+									body: "resposta",
+									path: "src/alpha/f.ts",
+									line: 2,
+									in_reply_to_id: 1,
+									created_at: "2026-01-01T00:01:00Z",
+									user: { login: "bia", type: "User" },
+								},
+							],
+						]);
+					}
+					if (path === "repos/acme/app/issues/12/comments") {
+						issueCalls++;
+						return ghJson([
+							[
+								{
+									id: 3,
+									body: "geral",
+									created_at: "2026-01-01T00:02:00Z",
+									user: { login: "copilot[bot]", type: "Bot" },
+								},
+							],
+						]);
+					}
+					return { ok: false, code: 404, stdout: "", stderr: "not found" };
+				},
+			});
+
+			const first = (await (
+				await get(handler, "/api/runs/main/comments")
+			).json()) as {
+				available: boolean;
+				counts: { threads: number; inline: number; issue: number };
+				threads: {
+					path: string;
+					absFile: string;
+					comments: { author: string }[];
+				}[];
+				issueComments: { authorType: string }[];
+			};
+			expect(first.available).toBe(true);
+			expect(first.counts).toEqual({ threads: 1, inline: 2, issue: 1 });
+			expect(first.threads[0].path).toBe("src/alpha/f.ts");
+			expect(first.threads[0].absFile).toBe(
+				resolve(env.repo.root, "src/alpha/f.ts"),
+			);
+			expect(first.threads[0].comments.map((c) => c.author)).toEqual([
+				"ana",
+				"bia",
+			]);
+			expect(first.issueComments[0].authorType).toBe("Bot");
+
+			await get(handler, "/api/runs/main/comments");
+			expect(inlineCalls).toBe(1);
+			expect(issueCalls).toBe(1);
+
+			await get(handler, "/api/runs/main/comments?refresh=1");
+			expect(inlineCalls).toBe(2);
+			expect(issueCalls).toBe(2);
+		} finally {
+			clearPrCommentsCache();
+			env.cleanup();
+		}
+	});
+
+	test("GET comments é fail-open quando o gh não está disponível", async () => {
+		const env = makeEnv();
+		try {
+			clearPrCommentsCache();
+			const handler = createRequestHandler(env.config, {
+				storage: env.storage,
+				repo: env.repo,
+				ghRunner: () => ({
+					ok: false,
+					code: 127,
+					stdout: "",
+					stderr: "gh: not found",
+				}),
+			});
+			const body = (await (
+				await get(handler, "/api/runs/main/comments")
+			).json()) as { available: boolean; reason: string };
+			expect(body.available).toBe(false);
+			expect(body.reason).toContain("gh");
+		} finally {
 			env.cleanup();
 		}
 	});

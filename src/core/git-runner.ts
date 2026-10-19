@@ -16,20 +16,32 @@ export type GitResult = {
 /** Executa `git` e devolve o resultado cru. Injetável nos testes. */
 export type GitRunner = (args: string[]) => GitResult;
 
-/** Runner padrão: `git -c core.quotepath=false <args>` a partir do cwd. */
-export const defaultGitRunner: GitRunner = (args) => {
-	const result = Bun.spawnSync(["git", "-c", "core.quotepath=false", ...args], {
-		stdout: "pipe",
-		stderr: "pipe",
-	});
-	const code = result.exitCode ?? 1;
-	return {
-		ok: code === 0,
-		code,
-		stdout: new TextDecoder().decode(result.stdout),
-		stderr: new TextDecoder().decode(result.stderr),
+/**
+ * Cria um runner do git com diretório de trabalho fixo.
+ *
+ * O servidor roda a partir da raiz do repositório, mas o checkout pode ser
+ * disparado de outra sessão — o `cwd` garante que os comandos atinjam o repo
+ * certo. Sem `cwd`, herda o diretório do processo (default).
+ */
+export function createGitRunner(cwd?: string): GitRunner {
+	return (args) => {
+		const result = Bun.spawnSync(["git", "-c", "core.quotepath=false", ...args], {
+			cwd,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const code = result.exitCode ?? 1;
+		return {
+			ok: code === 0,
+			code,
+			stdout: new TextDecoder().decode(result.stdout),
+			stderr: new TextDecoder().decode(result.stderr),
+		};
 	};
-};
+}
+
+/** Runner padrão: `git -c core.quotepath=false <args>` a partir do cwd. */
+export const defaultGitRunner: GitRunner = createGitRunner();
 
 /** Executa e devolve o stdout; lança com o stderr quando o git falha. */
 export function runGit(args: string[], runner: GitRunner = defaultGitRunner): string {

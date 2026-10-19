@@ -2,7 +2,7 @@
  * Entry do cliente (Preact): monta o `<App />` no `#app`.
  *
  * Bundle gerado em memória por `Bun.build` (`client-build.ts`). Os componentes
- * vivem em arquivos irmãos nesta pasta (`App.tsx`, `RunList.tsx`, ...).
+ * vivem em arquivos irmãos nesta pasta (`App.tsx`, `Sidebar.tsx`, ...).
  */
 
 import { render } from "preact";

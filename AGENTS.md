@@ -92,10 +92,13 @@ src/
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── server/           # servidor local (Bun.serve) + UI Preact
 │   ├── index.ts             # HoundsmanServer (rotas + shell)
-│   ├── run-repository.ts    # leitura/escrita das runs + findings + submit
+│   ├── run-repository.ts    # leitura/escrita das runs + findings + submit + comentários
+│   ├── pr-inbox.ts          # PRs abertas via gh + checkout com árvore limpa
+│   ├── pr-comments.ts       # threads/comentários da PR (cache de 60s)
+│   ├── editor.ts            # detecção do editor (links vscode:// / jetbrains://)
 │   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
 │   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
-│   └── client/              # app Preact — index.tsx (entry) + App/RunList/...
+│   └── client/              # app Preact — index.tsx (entry) + App/Sidebar/...
 ├── harness/          # NOSSO harness nativo (hunt): tools, investigação, agente
 │   ├── config/              # HarnessConfig (overrides de execução)
 │   ├── hunt/                # HuntHarness, HuntSession, ReviewPlanner, options/result

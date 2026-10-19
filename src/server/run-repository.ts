@@ -34,9 +34,11 @@ import {
 } from "../core/github-review";
 import { pingFindingsStatus } from "../core/run-status";
 import { systemClock } from "../core/services/clock";
+import { defaultGhRunner } from "../core/services/gh-client";
 import type { RepoIdentity, ReviewRecord, StorageProvider } from "../core/storage/types";
 import type { Severity } from "../core/types";
 import { isSlug } from "./artifacts";
+import { fetchPrComments, type PrCommentsResponse } from "./pr-comments";
 
 /** Item da lista de execuções (sidebar) — já ordenado do mais recente ao antigo. */
 export type RunListItem = {
@@ -78,10 +80,16 @@ export type ArtifactListItem = {
 export class RunRepository {
 	private readonly storage: StorageProvider;
 	private readonly repo: RepoIdentity;
+	private readonly ghRunner: GhRunner;
 
-	constructor(storage: StorageProvider, repo: RepoIdentity) {
+	constructor(
+		storage: StorageProvider,
+		repo: RepoIdentity,
+		ghRunner: GhRunner = defaultGhRunner,
+	) {
 		this.storage = storage;
 		this.repo = repo;
+		this.ghRunner = ghRunner;
 	}
 
 	/** `true` se o slug aponta para uma run do repositório atual. */
@@ -103,6 +111,15 @@ export class RunRepository {
 				summary: summarize(state ?? emptyState(review.branch)),
 			};
 		});
+	}
+
+	/** Mapa branch → slug das runs (usado para casar PRs com execuções). */
+	branchIndex(): Map<string, string> {
+		return new Map(
+			this.storage
+				.listReviews(this.repo.key)
+				.map((review) => [review.branch, review.slug]),
+		);
 	}
 
 	/** Detalhe da run (null se o slug for inválido). */
@@ -271,6 +288,21 @@ export class RunRepository {
 		this.storage.writeFindings(review.id, state);
 		pingFindingsStatus(this.storage, review.id, state);
 		return { available: true, target: target.target, outcome };
+	}
+
+	/** Comentários da PR da run (null se o slug for inválido). */
+	comments(
+		slug: string,
+		options: { refresh?: boolean } = {},
+	): PrCommentsResponse | null {
+		const review = this.findBySlug(slug);
+		if (!review) return null;
+		return fetchPrComments({
+			runner: this.ghRunner,
+			branch: review.branch,
+			repoRoot: review.repoRoot,
+			refresh: options.refresh,
+		});
 	}
 
 	/** Lista os artefatos da run (sem conteúdo). */

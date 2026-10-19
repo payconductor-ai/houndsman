@@ -24,7 +24,12 @@ import {
 	type FindingsStateFile,
 } from "./findings-state";
 import { systemClock } from "./services/clock";
-import { defaultGhRunner, type GhResult, type GhRunner } from "./services/gh-client";
+import {
+	defaultGhRunner,
+	describeGhError,
+	type GhResult,
+	type GhRunner,
+} from "./services/gh-client";
 import { SEVERITY_EMOJI, SEVERITY_ORDER, type Severity } from "./types";
 
 export { type GhResult, type GhRunner, defaultGhRunner };
@@ -54,12 +59,7 @@ function repoFromUrl(url: string | undefined): string | null {
 
 /** Mensagem curta para um erro do `gh`. */
 function shortError(result: GhResult): string {
-	if (result.code === 127 || /not found|ENOENT/i.test(result.stderr)) {
-		return "gh não instalado.";
-	}
-	const last = result.stderr.split("\n").filter(Boolean).pop() ?? "";
-	if (/auth|login|logged/i.test(last)) return `gh sem autenticação (${last}).`;
-	return last || `gh saiu com código ${result.code}.`;
+	return describeGhError(result);
 }
 
 /**

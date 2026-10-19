@@ -62,9 +62,12 @@ src/
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── server/           # servidor local (Bun.serve) + UI Preact
 │   ├── index.ts             # rotas da API + shell HTML
+│   ├── pr-inbox.ts          # PRs abertas via gh + checkout com árvore limpa
+│   ├── pr-comments.ts       # threads/comentários da PR (cache de 60s)
+│   ├── editor.ts            # detecção do editor (links de código)
 │   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
 │   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
-│   └── client/              # app Preact — index.tsx (entry) + App/RunList/Filters/FindingCard/...
+│   └── client/              # app Preact — index.tsx (entry) + App/Sidebar/CommentsPanel/...
 ├── skill/*.md        # assets markdown (copiados pelo `setup`)
 └── tests/            # suíte project-agnóstica
 ```
@@ -117,10 +120,13 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
   (`src/server/`) é a UI (Bun.serve + Preact; bundle do cliente em memória por `Bun.build`).
   O `server` faz bind em `127.0.0.1` — ferramenta local, sem autenticação.
 - **Cliente** (`src/server/client/`): CSS num único bloco em `src/server/index.ts` (`STYLES`,
-  tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas e link
-  `vscode://file/...` em `format.ts`. O `absFile` que alimenta o link vem do servidor
-  (o cliente não conhece o cwd). Auto-refresh de 10s (`AutoRefresh.tsx`) e auto-save do
-  comentário (debounce no `FindingCard`) são estados locais — nada disso muda o contrato da API.
+  tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas em `format.ts`.
+  O `absFile` vem do servidor (o cliente não conhece o cwd) e o link de código é montado
+  conforme o editor detectado (`GET /api/editor`: `vscode://` ou `jetbrains://`). A sidebar
+  tem as abas `Execuções`/`PR's` (`Sidebar.tsx`); a aba `Comentários` (`CommentsPanel.tsx`)
+  só busca as threads da PR quando é montada. Auto-refresh de 10s (`AutoRefresh.tsx`) e
+  auto-save do comentário (debounce no `FindingCard`) são estados locais — nada disso muda o
+  contrato da API.
 
 ### Setup / update (camada do projeto)
 

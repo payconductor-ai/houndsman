@@ -8,7 +8,7 @@ Comandos:
   hunt                Revisão nativa com IA (harness próprio): prepare + agentes + finalize
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
-  server              Sobe a UI local de triagem (--port, --host, --open)
+  server              Sobe a UI local de triagem (--port, --host, --open, --editor)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
   doctor              Valida a configuração, o ambiente e a credencial Jev

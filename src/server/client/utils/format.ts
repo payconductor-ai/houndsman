@@ -1,7 +1,9 @@
 /**
- * Helpers de apresentação: data/hora das runs e link para abrir o arquivo no
- * VS Code (`vscode://file/...`).
+ * Helpers de apresentação: data/hora das runs e links para abrir o arquivo no
+ * editor detectado pelo servidor (`vscode://` ou `jetbrains://`).
  */
+
+import type { EditorContext } from "./types";
 
 /** Data/hora curta em pt-BR — ex.: `14 de out., 17:48`. */
 export function formatRunTime(iso?: string): string {
@@ -37,4 +39,47 @@ export function vscodeFileLink(file: string, line?: number | null): string | nul
 		(_, drive) => `${drive.toLowerCase()}:`,
 	);
 	return `vscode://file/${encodeURI(normalized)}${line ? `:${line}` : ""}`;
+}
+
+/**
+ * Link `jetbrains://<produto>/navigate/reference?project=<nome>&path=<arquivo>`.
+ * O IDE espera o caminho absoluto com a linha no fim (`arquivo:linha`).
+ */
+export function jetbrainsFileLink(
+	file: string,
+	line: number | null | undefined,
+	project: string,
+	product: string,
+): string | null {
+	const path = file.replace(/\\/g, "/");
+	if (!/^([a-zA-Z]:\/|\/)/.test(path)) return null;
+	const target = `${path}${line ? `:${line}` : ""}`;
+	return `jetbrains://${product}/navigate/reference?project=${encodeURIComponent(
+		project,
+	)}&path=${encodeURIComponent(target)}`;
+}
+
+/** Monta o link de código conforme o editor detectado (null = sem link). */
+export function editorFileLink(
+	file: string,
+	line: number | null | undefined,
+	editor: EditorContext,
+): string | null {
+	if (editor.kind === "vscode") return vscodeFileLink(file, line);
+	if (editor.kind === "jetbrains") {
+		return jetbrainsFileLink(
+			file,
+			line,
+			editor.project ?? "",
+			editor.product ?? "idea",
+		);
+	}
+	return null;
+}
+
+/** Rótulo do editor para tooltips. */
+export function editorLabel(editor: EditorContext): string {
+	if (editor.kind === "jetbrains") return "JetBrains";
+	if (editor.kind === "vscode") return "VS Code";
+	return "editor";
 }

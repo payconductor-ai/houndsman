@@ -97,6 +97,86 @@ export type FindingsResponse = {
 	summary: Summary;
 };
 
+/** Editor detectado pelo servidor (base dos links de código). */
+export type EditorKind = "vscode" | "jetbrains" | "none";
+
+export type EditorContext = {
+	kind: EditorKind;
+	project?: string;
+	product?: string;
+};
+
+/** Estado da árvore de trabalho (bloqueia o checkout quando suja). */
+export type WorktreeState = {
+	available: boolean;
+	clean: boolean;
+	changes: number;
+	sample: string[];
+};
+
+/** PR aberta exibida na sidebar. */
+export type PrListItem = {
+	number: number;
+	title: string;
+	headRefName: string;
+	baseRefName: string;
+	author: string;
+	updatedAt?: string;
+	isDraft: boolean;
+	reviewDecision?: string;
+	url?: string;
+	runSlug?: string;
+};
+
+export type PrListResponse = {
+	available: boolean;
+	reason?: string;
+	currentBranch: string | null;
+	worktree: WorktreeState;
+	prs: PrListItem[];
+};
+
+export type CheckoutResponse =
+	| { ok: true; number: number; branch: string | null }
+	| {
+			ok: false;
+			reason: "dirty" | "git" | "gh";
+			detail: string;
+			changes?: string[];
+	  };
+
+/** Comentário normalizado da PR (thread ou geral). */
+export type PrCommentView = {
+	id: number;
+	author: string;
+	authorType: string;
+	body: string;
+	createdAt?: string;
+	url?: string;
+	path?: string;
+	line: number | null;
+	absFile?: string;
+	replyTo?: number | null;
+};
+
+export type PrCommentThread = {
+	id: number;
+	path: string;
+	line: number | null;
+	absFile: string;
+	comments: PrCommentView[];
+};
+
+export type PrCommentsResponse = {
+	available: boolean;
+	reason?: string;
+	target?: { number: number; repo: string; url?: string };
+	fetchedAt: string;
+	threads: PrCommentThread[];
+	issueComments: PrCommentView[];
+	counts: { threads: number; inline: number; issue: number };
+};
+
 /** Manifesto da run (subset consumido pela aba de resumo). */
 export type RunManifest = {
 	branch?: string;
