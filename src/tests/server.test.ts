@@ -438,10 +438,17 @@ describe("server API", () => {
 			const shell = await get(handler, "/");
 			const html = await shell.text();
 			expect(html).toContain('id="app"');
+			expect(html).toContain("/assets/styles.css?v=");
+
+			// O CSS vive em `styles.css`, servido como arquivo real.
+			const css = await get(handler, "/assets/styles.css");
+			expect(css.status).toBe(200);
+			expect(css.headers.get("content-type")).toContain("text/css");
+			const styles = await css.text();
 			// Sidebar: rail vertical de seções + painel redimensionável.
-			expect(html).toContain(".side-rail");
-			expect(html).toContain("--side-width");
-			expect(html).not.toContain(".side-tabs");
+			expect(styles).toContain(".side-rail");
+			expect(styles).toContain("--side-width");
+			expect(styles).not.toContain(".side-tabs");
 
 			const bundle = await get(handler, "/assets/app.js");
 			expect(bundle.status).toBe(200);
@@ -463,6 +470,9 @@ describe("server API", () => {
 
 			const bundle = await get(handler, "/assets/app.js");
 			expect(bundle.headers.get("cache-control")).toContain("no-store");
+
+			const css = await get(handler, "/assets/styles.css");
+			expect(css.headers.get("cache-control")).toContain("no-store");
 		} finally {
 			env.cleanup();
 		}

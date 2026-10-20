@@ -24,6 +24,13 @@
 			"recommended": true
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["src/server/styles.css"],
+			"formatter": { "enabled": false },
+			"linter": { "enabled": false }
+		}
+	],
 	"root": true,
 	"vcs": {
 		"clientKind": "git",

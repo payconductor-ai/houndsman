@@ -119,8 +119,8 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
 - `houndsman findings ...` (`commands/findings.ts`) é a interface do agente; `houndsman server`
   (`src/server/`) é a UI (Bun.serve + Preact; bundle do cliente em memória por `Bun.build`).
   O `server` faz bind em `127.0.0.1` — ferramenta local, sem autenticação.
-- **Cliente** (`src/server/client/`): CSS num único bloco em `src/server/index.ts` (`STYLES`,
-  tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas em `format.ts`.
+- **Cliente** (`src/server/client/`): CSS em `src/server/styles.css` (servido em
+  `/assets/styles.css`, tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas em `format.ts`.
   O `absFile` vem do servidor (o cliente não conhece o cwd) e o link de código é montado
   conforme o editor detectado (`GET /api/editor`: `vscode://` ou `jetbrains://`). A sidebar
   usa uma rail vertical de ícones (`Sidebar.tsx`) e as seções ficam registradas em
