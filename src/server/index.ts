@@ -410,6 +410,7 @@ function renderShell(): string {
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="dark" />
 <title>Houndsman — Revisões</title>
+<link rel="icon" type="image/png" href="/assets/${LOGO_FILE}" />
 <!-- Fontes de CDN: se estiver offline, o CSS cai para a pilha de sistema. -->
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

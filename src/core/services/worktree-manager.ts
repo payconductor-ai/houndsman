@@ -4,7 +4,12 @@
  * Um worktree por branch revisada, criado em **detached HEAD** no commit da PR.
  * Detached evita o conflito "branch já checada" com o clone principal e é o
  * modo correto para revisão (somente leitura). Vive fora do projeto, em
- * `<HOUNDSMAN_HOME>/worktrees/<repoSlug>/<branchSlug>`.
+ * `<baseDir>/<repoSlug>/<branchSlug>`.
+ *
+ * Os dois segmentos são `<trecho-legível>-<hash8>`: o trecho legível é
+ * truncado porque o checkout de uma PR herda a profundidade dos arquivos do
+ * projeto, e o Windows (MAX_PATH = 260) estoura "Filename too long" com
+ * repo+branch longos. O hash mantém o nome determinístico e único.
  */
 
 import { createHash } from "node:crypto";
@@ -64,6 +69,22 @@ export type WorktreeManagerOptions = {
 	baseDir?: string;
 };
 
+/** Limite do trecho legível no diretório do repositório. */
+const REPO_SLUG_MAX = 24;
+/** Limite do trecho legível no diretório da branch. */
+const BRANCH_SLUG_MAX = 20;
+
+/**
+ * `<trecho legível truncado>-<hash8>`: curto o bastante para o MAX_PATH do
+ * Windows e estável para o mesmo par (repositório, branch).
+ */
+function hashName(key: string, readable: string, max: number, fallback: string): string {
+	const hash = createHash("sha1").update(key).digest("hex").slice(0, 8);
+	// Ponto/traço no fim do nome é descartado pelo Windows; corte antes do hash.
+	const head = readable.slice(0, max).replace(/[-._]+$/, "");
+	return `${head || fallback}-${hash}`;
+}
+
 /** Slug estável e legível para o diretório do repositório. */
 export function repoSlug(repoKey: string): string {
 	const clean = repoKey
@@ -71,8 +92,12 @@ export function repoSlug(repoKey: string): string {
 		.replace(/[^a-zA-Z0-9._-]+/g, "-")
 		.replace(/^-+|-+$/g, "")
 		.toLowerCase();
-	const hash = createHash("sha1").update(repoKey).digest("hex").slice(0, 8);
-	return `${clean.slice(-60) || "repo"}-${hash}`;
+	return hashName(repoKey, clean.slice(-REPO_SLUG_MAX), REPO_SLUG_MAX, "repo");
+}
+
+/** Slug estável e curto para o diretório de uma branch. */
+export function branchSlug(branch: string): string {
+	return hashName(branch, sanitizeBranch(branch), BRANCH_SLUG_MAX, "branch");
 }
 
 /** Normaliza um path para comparação (Windows é case-insensitive). */
@@ -154,8 +179,7 @@ export class WorktreeManager {
 
 	/** Caminho determinístico do worktree de uma branch. */
 	pathFor(branch: string): string {
-		const slug = sanitizeBranch(branch) || "branch";
-		return join(this.rootDir, slug);
+		return join(this.rootDir, branchSlug(branch));
 	}
 
 	/** Todos os worktrees registrados no repositório. */

@@ -16,7 +16,7 @@ import {
 	writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { parseReviewArgs } from "../core/commands/review";
 import { HoundsmanEngine } from "../core/engine/houndsman-engine";
 import { resolveReviewWorkspace } from "../core/engine/review-workspace";
@@ -148,6 +148,41 @@ describe("parseWorktreeList", () => {
 		expect(entries[0].branch).toBe("refs/heads/main");
 		expect(entries[1].detached).toBe(true);
 		expect(entries[1].head?.startsWith("2222")).toBe(true);
+	});
+});
+
+describe("nomes de diretório do worktree", () => {
+	const manager = new WorktreeManager(
+		new GitRepository(createGitRunner(process.cwd())),
+		{
+			repoKey: "remote:github.com/tradinglabs-io/pay.conductor",
+			repoRoot: process.cwd(),
+			baseDir: join(tmpdir(), "houndsman-worktrees"),
+		},
+	);
+
+	test("repo e branch são slugs curtos com hash", () => {
+		// MAX_PATH do Windows: cada segmento fica limitado a legível + hash8.
+		expect(basename(manager.baseDir).length).toBeLessThanOrEqual(24 + 9);
+		expect(basename(manager.pathFor("main"))).toMatch(/^main-[0-9a-f]{8}$/);
+
+		const long = manager.pathFor("feat/fetch-branch-balance-split-accounts");
+		const name = basename(long);
+		expect(name).toMatch(/^[\w.-]{1,20}-[0-9a-f]{8}$/);
+		expect(name.length).toBeLessThanOrEqual(20 + 9);
+		expect(long.startsWith(manager.baseDir)).toBe(true);
+	});
+
+	test("é determinístico e não colide em prefixos iguais", () => {
+		const branch = "feat/fetch-branch-balance-split-accounts";
+		expect(manager.pathFor(branch)).toBe(manager.pathFor(branch));
+		expect(manager.pathFor(branch)).not.toBe(
+			manager.pathFor("feat/fetch-branch-balance-split-other"),
+		);
+	});
+
+	test("branches só de caracteres inválidos caem no fallback", () => {
+		expect(basename(manager.pathFor("///"))).toMatch(/^branch-[0-9a-f]{8}$/);
 	});
 });
 

@@ -195,6 +195,7 @@ export type {
 	WorktreeManagerOptions,
 } from "./core/services/worktree-manager";
 export {
+	branchSlug,
 	parseWorktreeList,
 	repoSlug,
 	WorktreeManager,

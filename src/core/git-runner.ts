@@ -24,8 +24,15 @@ export type GitRunner = (args: string[]) => GitResult;
  * certo. Sem `cwd`, herda o diretório do processo (default).
  */
 export function createGitRunner(cwd?: string): GitRunner {
+	// `core.longpaths` evita "Filename too long" no checkout de worktrees
+	// dentro de caminhos fundos (MAX_PATH do Windows). O `-c` é propagado aos
+	// subprocessos do git via GIT_CONFIG_PARAMETERS.
+	const config =
+		process.platform === "win32"
+			? ["-c", "core.quotepath=false", "-c", "core.longpaths=true"]
+			: ["-c", "core.quotepath=false"];
 	return (args) => {
-		const result = Bun.spawnSync(["git", "-c", "core.quotepath=false", ...args], {
+		const result = Bun.spawnSync(["git", ...config, ...args], {
 			cwd,
 			stdout: "pipe",
 			stderr: "pipe",

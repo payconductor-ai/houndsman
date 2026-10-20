@@ -189,6 +189,9 @@ de agentes do hunt; `server/` = servidor local; `skill/` = markdown embarcado; `
   `gh`, busca `refs/pull/<n>/head` e cria/reusa o worktree; `--worktree <path>` usa um
   já existente. A identidade da review continua `(repoKey, branch)`; `worktreePath` e
   `prNumber` são metadados persistentes. Remoção é manual (`worktree remove|prune`).
+  Os segmentos `<repoSlug>/<branchSlug>` são `<trecho legível truncado>-<hash8>`:
+  o hash garante unicidade e o truncamento evita `Filename too long` (MAX_PATH 260)
+  no checkout de PRs com paths profundos. Não volte a usar o nome bruto.
 - A persistência é **centralizada** em `core/storage/`. Nenhum módulo grava runs/findings/
   artefatos em disco por conta própria: use o `StorageProvider` (SQLite default; `file` é o
   fallback). O diretório global é `<HOUNDSMAN_HOME>` (OS data dir ou env override).
