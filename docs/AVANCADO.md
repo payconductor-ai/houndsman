@@ -79,9 +79,10 @@ flowchart TD
 8. **Triagem (opcional).** `houndsman server` abre a UI local para marcar cada finding como
    `pending`/`execute`/`ignore` e acompanhar a execução; o agente usa
    `houndsman findings list/set/done/sync` para o auto-fix (as linhas mudam — o motor reancora
-   por conteúdo). A sidebar tem abas **Execuções** e **PR's**: a segunda lista as PRs abertas
-   via `gh`, faz checkout quando a árvore está limpa e abre a run correspondente. A aba
-   **Comentários** carrega, sob demanda, as threads da PR da branch (cache de 60s).
+   por conteúdo). A sidebar tem uma rail vertical de seções — **Execuções** e **PRs** —
+   com painel expansível: a segunda lista as PRs abertas via `gh`, faz checkout quando a
+   árvore está limpa e abre a run correspondente. A aba **Comentários** carrega, sob
+   demanda, as threads da PR da branch (cache de 60s).
 
 ### Orçamento por brief (PRs grandes)
 

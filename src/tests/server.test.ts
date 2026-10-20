@@ -436,7 +436,12 @@ describe("server API", () => {
 		try {
 			const handler = createRequestHandler(env.config, env);
 			const shell = await get(handler, "/");
-			expect(await shell.text()).toContain('id="app"');
+			const html = await shell.text();
+			expect(html).toContain('id="app"');
+			// Sidebar: rail vertical de seções + painel redimensionável.
+			expect(html).toContain(".side-rail");
+			expect(html).toContain("--side-width");
+			expect(html).not.toContain(".side-tabs");
 
 			const bundle = await get(handler, "/assets/app.js");
 			expect(bundle.status).toBe(200);

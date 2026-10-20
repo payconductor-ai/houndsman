@@ -259,11 +259,12 @@ export function App() {
 								type="button"
 								key={item.id}
 								title={item.hint}
+								aria-label={item.label}
 								class={`seg-btn${tab === item.id ? " active" : ""}`}
 								onClick={() => setTab(item.id)}
 							>
 								<TabIcon id={item.id} />
-								{item.label}
+								<span class="seg-label">{item.label}</span>
 							</button>
 						))}
 					</div>

@@ -67,7 +67,7 @@ src/
 │   ├── editor.ts            # detecção do editor (links de código)
 │   ├── artifacts.ts         # descoberta de runs + leitura segura (anti-traversal)
 │   ├── client-build.ts      # bundle do cliente via Bun.build (em memória)
-│   └── client/              # app Preact — index.tsx (entry) + App/Sidebar/CommentsPanel/...
+│   └── client/              # app Preact — index.tsx (entry) + App/Sidebar/PrsSection/...
 ├── skill/*.md        # assets markdown (copiados pelo `setup`)
 └── tests/            # suíte project-agnóstica
 ```
@@ -123,7 +123,10 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
   tema escuro com primária âmbar); ícones SVG inline em `icons.tsx`; datas em `format.ts`.
   O `absFile` vem do servidor (o cliente não conhece o cwd) e o link de código é montado
   conforme o editor detectado (`GET /api/editor`: `vscode://` ou `jetbrains://`). A sidebar
-  tem as abas `Execuções`/`PR's` (`Sidebar.tsx`); a aba `Comentários` (`CommentsPanel.tsx`)
+  usa uma rail vertical de ícones (`Sidebar.tsx`) e as seções ficam registradas em
+  `sidebar-sections.tsx` (`Execuções` em `RunsSection.tsx`, `PRs` em `PrsSection.tsx`);
+  incluir uma seção é adicionar uma entrada no registry. Largura, colapso e seção ativa são
+  preferências locais (`utils/sidebar-prefs.ts`). A aba `Comentários` (`CommentsPanel.tsx`)
   só busca as threads da PR quando é montada. Auto-refresh de 10s (`AutoRefresh.tsx`) e
   auto-save do comentário (debounce no `FindingCard`) são estados locais — nada disso muda o
   contrato da API.

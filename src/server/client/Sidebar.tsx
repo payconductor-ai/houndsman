@@ -1,221 +1,30 @@
 /**
- * Sidebar: logo do houndsman + abas `Execuções` e `PR's`.
+ * Sidebar do servidor: rail vertical de seções (padrão VS Code) + painel
+ * expansível. A navegação vem do registry `sidebar-sections.tsx`; a rail fica
+ * sempre visível, inclusive com o painel recolhido.
  *
- * A aba de execuções mantém a lista de runs (status, data e findings). A aba de
- * PRs lista as PRs abertas via `gh`, permite abrir a run correspondente e faz
- * checkout somente quando a árvore de trabalho está limpa.
+ * Largura, colapso e seção ativa são preferências locais (`sidebar-prefs.ts`).
  */
 
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
+import { ChevronRight } from "./icons";
 import {
-	BranchIcon,
-	Clock,
-	GitHub,
-	GitPullRequest,
-	ListIcon,
-	Refresh,
-	Sparkles,
-	Spinner,
-} from "./icons";
-import { api } from "./utils/api";
-import { describeRunStatus } from "./utils/constants";
-import { formatRunTime } from "./utils/format";
-import type {
-	CheckoutResponse,
-	PrListItem,
-	PrListResponse,
-	PrWorktreeResponse,
-	RunSummary,
-	WorktreeState,
-} from "./utils/types";
+	getSidebarSection,
+	resolveSidebarSectionId,
+	SIDEBAR_SECTIONS,
+	type SidebarSectionContext,
+} from "./sidebar-sections";
+import {
+	clampSidebarWidth,
+	readSidebarPrefs,
+	SIDEBAR_MAX_WIDTH,
+	SIDEBAR_MIN_WIDTH,
+	saveSidebarPrefs,
+} from "./utils/sidebar-prefs";
+import type { RunSummary } from "./utils/types";
 
-type SidebarView = "runs" | "prs";
-
-const REVIEW_LABELS: Record<string, string> = {
-	APPROVED: "aprovada",
-	CHANGES_REQUESTED: "mudanças",
-	REVIEW_REQUIRED: "revisão pendente",
-};
-
-function RunItem({
-	run,
-	active,
-	onSelect,
-}: {
-	run: RunSummary;
-	active: boolean;
-	onSelect: (slug: string) => void;
-}) {
-	const status = describeRunStatus(run);
-	const fixReady = status?.kind === "fix_done";
-	return (
-		<button
-			type="button"
-			title={`Abrir a run da branch ${run.branch}`}
-			class={`run${active ? " active" : ""}`}
-			onClick={() => onSelect(run.slug)}
-		>
-			<span class="run-top">
-				<BranchIcon size={14} class="run-icon" />
-				<span class="run-branch">{run.branch}</span>
-			</span>
-			<span class="run-meta">
-				<span class="run-when">
-					<Clock size={12} />
-					{formatRunTime(run.updatedAt) || "sem data"}
-				</span>
-				<span
-					class="run-count"
-					title={`${run.summary.present} de ${run.summary.total} findings presentes`}
-				>
-					{run.summary.present}/{run.summary.total}
-				</span>
-			</span>
-			{fixReady ? (
-				<span class="run-badge">
-					<Sparkles size={12} /> Correção pronta
-				</span>
-			) : (
-				status && (
-					<span class={`run-status status-${status.kind}`}>{status.label}</span>
-				)
-			)}
-		</button>
-	);
-}
-
-function PrItem({
-	pr,
-	currentBranch,
-	worktree,
-	busy,
-	confirming,
-	worktreeBusy,
-	onConfirm,
-	onCancel,
-	onCheckout,
-	onCreateWorktree,
-	onSelectRun,
-}: {
-	pr: PrListItem;
-	currentBranch: string | null;
-	worktree: WorktreeState;
-	busy: boolean;
-	confirming: boolean;
-	worktreeBusy: boolean;
-	onConfirm: (number: number) => void;
-	onCancel: () => void;
-	onCheckout: (pr: PrListItem) => void;
-	onCreateWorktree: (pr: PrListItem) => void;
-	onSelectRun: (slug: string) => void;
-}) {
-	const isCurrent = currentBranch === pr.headRefName;
-	const runSlug = pr.runSlug;
-	const review = pr.reviewDecision ? REVIEW_LABELS[pr.reviewDecision] : undefined;
-	return (
-		<article class={`pr${isCurrent ? " current" : ""}`}>
-			<div class="pr-head">
-				<GitPullRequest size={14} class="pr-icon" />
-				<span class="pr-number">#{pr.number}</span>
-				{pr.isDraft && <span class="tag">draft</span>}
-				{isCurrent && <span class="pr-current">atual</span>}
-				<span class="spacer" />
-				{pr.updatedAt && (
-					<span class="run-when">
-						<Clock size={12} />
-						{formatRunTime(pr.updatedAt)}
-					</span>
-				)}
-			</div>
-			<p class="pr-title">{pr.title}</p>
-			<p class="pr-meta">
-				<span class="pr-branch">{pr.headRefName}</span>
-				<span class="pr-arrow">→</span>
-				<span>{pr.baseRefName || "—"}</span>
-				<span>· {pr.author}</span>
-			</p>
-			{review && <p class={`pr-review pr-review-${pr.reviewDecision}`}>{review}</p>}
-			{pr.worktreePath && (
-				<p class="pr-worktree" title={pr.worktreePath}>
-					Worktree: <code>{pr.worktreePath}</code>
-				</p>
-			)}
-			<div class="pr-actions">
-				{runSlug && (
-					<button
-						type="button"
-						class="pr-btn"
-						title="Abrir a run local desta branch"
-						onClick={() => onSelectRun(runSlug)}
-					>
-						Abrir run
-					</button>
-				)}
-				{!pr.worktreePath && (
-					<button
-						type="button"
-						class="pr-btn"
-						disabled={busy || worktreeBusy}
-						title={`Criar um worktree dedicado para ${pr.headRefName} (revisão paralela)`}
-						onClick={() => onCreateWorktree(pr)}
-					>
-						{worktreeBusy ? (
-							<Spinner size={12} class="icon spin" />
-						) : (
-							"Worktree"
-						)}
-					</button>
-				)}
-				{pr.url && (
-					<a
-						class="pr-btn"
-						href={pr.url}
-						target="_blank"
-						rel="noreferrer"
-						title="Abrir a PR no GitHub"
-					>
-						<GitHub size={12} /> GitHub
-					</a>
-				)}
-				{confirming ? (
-					<>
-						<button
-							type="button"
-							class="pr-btn danger"
-							disabled={busy}
-							title="Confirmar checkout da PR"
-							onClick={() => onCheckout(pr)}
-						>
-							{busy ? <Spinner size={12} class="icon spin" /> : "Confirmar"}
-						</button>
-						<button
-							type="button"
-							class="pr-btn"
-							disabled={busy}
-							onClick={onCancel}
-						>
-							Cancelar
-						</button>
-					</>
-				) : (
-					<button
-						type="button"
-						class="pr-btn"
-						disabled={!worktree.clean || busy}
-						title={
-							worktree.clean
-								? `Fazer checkout da branch ${pr.headRefName}`
-								: "Há alterações não commitadas — faça commit ou stash antes"
-						}
-						onClick={() => onConfirm(pr.number)}
-					>
-						Checkout
-					</button>
-				)}
-			</div>
-		</article>
-	);
-}
+/** Passo do redimensionamento por teclado (Shift amplia). */
+const KEYBOARD_STEP = 16;
 
 export function Sidebar({
 	runs,
@@ -228,224 +37,173 @@ export function Sidebar({
 	onSelect: (slug: string) => void;
 	onRefreshRuns: () => void;
 }) {
-	const [view, setView] = useState<SidebarView>("runs");
-	const [data, setData] = useState<PrListResponse | null>(null);
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState("");
-	const [notice, setNotice] = useState("");
-	const [busy, setBusy] = useState<number | null>(null);
-	const [worktreeBusy, setWorktreeBusy] = useState<number | null>(null);
-	const [confirming, setConfirming] = useState<number | null>(null);
-	const requested = useRef(false);
+	const [width, setWidth] = useState(() => clampSidebarWidth(readSidebarPrefs().width));
+	const [collapsed, setCollapsed] = useState(() => readSidebarPrefs().collapsed);
+	const [active, setActive] = useState(() =>
+		resolveSidebarSectionId(readSidebarPrefs().section),
+	);
+	const drag = useRef<{
+		startX: number;
+		startWidth: number;
+		pointerId: number;
+	} | null>(null);
 
-	const loadPrs = useCallback(async () => {
-		setLoading(true);
-		setError("");
-		try {
-			setData(await api<PrListResponse>("/api/prs"));
-		} catch (err) {
-			setError(String(err));
-		} finally {
-			setLoading(false);
-		}
+	// Persistência com debounce: arrastar o divisor não escreve a cada pixel.
+	useEffect(() => {
+		const id = setTimeout(
+			() => saveSidebarPrefs({ width, collapsed, section: active }),
+			180,
+		);
+		return () => clearTimeout(id);
+	}, [width, collapsed, active]);
+
+	const selectSection = useCallback((id: string) => {
+		setActive(id);
+		setCollapsed(false);
 	}, []);
 
-	useEffect(() => {
-		if (view !== "prs" || requested.current) return;
-		requested.current = true;
-		void loadPrs();
-	}, [view, loadPrs]);
+	const startResize = useCallback(
+		(event: PointerEvent) => {
+			if (collapsed || event.button !== 0) return;
+			event.preventDefault();
+			const target = event.currentTarget as HTMLElement;
+			target.setPointerCapture?.(event.pointerId);
+			drag.current = {
+				startX: event.clientX,
+				startWidth: width,
+				pointerId: event.pointerId,
+			};
+			document.body.classList.add("resizing-sidebar");
+		},
+		[collapsed, width],
+	);
 
-	const checkout = useCallback(
-		async (pr: PrListItem) => {
-			setBusy(pr.number);
-			setError("");
-			setNotice("");
-			try {
-				const result = await api<CheckoutResponse>("/api/prs/checkout", {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({ number: pr.number }),
-				});
-				if (!result.ok) {
-					if (result.reason === "dirty") {
-						setData((current) =>
-							current
-								? {
-										...current,
-										worktree: {
-											...current.worktree,
-											clean: false,
-											changes:
-												result.changes?.length ??
-												current.worktree.changes,
-											sample:
-												result.changes ?? current.worktree.sample,
-										},
-									}
-								: current,
-						);
-					}
-					setError(
-						result.reason === "dirty"
-							? `Checkout bloqueado: ${result.detail}`
-							: result.detail,
-					);
-					return;
-				}
-				setConfirming(null);
-				setNotice(
-					`Checkout de #${pr.number} concluído${
-						result.branch ? ` — ${result.branch}` : ""
-					}.`,
-				);
-				await loadPrs();
-				onRefreshRuns();
-				if (pr.runSlug) onSelect(pr.runSlug);
-			} catch (err) {
-				setError(String(err));
-			} finally {
-				setBusy(null);
-			}
+	const moveResize = useCallback((event: PointerEvent) => {
+		const state = drag.current;
+		if (!state || event.pointerId !== state.pointerId) return;
+		setWidth(clampSidebarWidth(state.startWidth + event.clientX - state.startX));
+	}, []);
+
+	const endResize = useCallback((event: PointerEvent) => {
+		if (!drag.current) return;
+		drag.current = null;
+		(event.currentTarget as HTMLElement).releasePointerCapture?.(event.pointerId);
+		document.body.classList.remove("resizing-sidebar");
+	}, []);
+
+	const resizeByKeyboard = useCallback(
+		(event: KeyboardEvent) => {
+			const step = event.shiftKey ? KEYBOARD_STEP * 2 : KEYBOARD_STEP;
+			let next: number | null = null;
+			if (event.key === "ArrowLeft") next = width - step;
+			if (event.key === "ArrowRight") next = width + step;
+			if (event.key === "Home") next = SIDEBAR_MIN_WIDTH;
+			if (event.key === "End") next = SIDEBAR_MAX_WIDTH;
+			if (next === null) return;
+			event.preventDefault();
+			setWidth(clampSidebarWidth(next));
 		},
-		[loadPrs, onRefreshRuns, onSelect],
+		[width],
 	);
-	const createWorktree = useCallback(
-		async (pr: PrListItem) => {
-			setWorktreeBusy(pr.number);
-			setError("");
-			setNotice("");
-			try {
-				const result = await api<PrWorktreeResponse>("/api/prs/worktree", {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({ number: pr.number }),
-				});
-				if (!result.ok) {
-					setError(result.detail);
-					return;
-				}
-				setNotice(
-					`Worktree de #${pr.number} em ${result.path}. ` +
-						`Rode \`houndsman --pr ${pr.number}\` para revisar em paralelo.`,
-				);
-				await loadPrs();
-			} catch (err) {
-				setError(String(err));
-			} finally {
-				setWorktreeBusy(null);
-			}
-		},
-		[loadPrs],
-	);
+
+	const section = getSidebarSection(active);
+	const context: SidebarSectionContext = {
+		runs,
+		slug,
+		onSelect,
+		onRefreshRuns,
+		active: false,
+	};
+
 	return (
-		<aside class="sidebar">
-			<div class="brand">
-				<img class="logo" src="/assets/logo.png" alt="" />
-				<div>
-					<h1>Houndsman</h1>
-					<p class="sub">Revisões e triagem</p>
+		<aside
+			class={`sidebar${collapsed ? " collapsed" : ""}`}
+			style={`--side-width:${width}px`}
+		>
+			<nav class="side-rail" aria-label="Seções do Houndsman">
+				{SIDEBAR_SECTIONS.map((item) => {
+					const SectionIcon = item.icon;
+					const count = item.badge?.(context);
+					const isActive = item.id === active;
+					return (
+						<button
+							key={item.id}
+							type="button"
+							class={`rail-btn${isActive ? " active" : ""}`}
+							title={item.label}
+							aria-label={item.label}
+							aria-current={isActive ? "page" : undefined}
+							aria-controls={`side-section-${item.id}`}
+							onClick={() => selectSection(item.id)}
+						>
+							<SectionIcon size={20} />
+							{typeof count === "number" && count > 0 && (
+								<span class="rail-badge">
+									{count > 99 ? "99+" : count}
+								</span>
+							)}
+						</button>
+					);
+				})}
+				<span class="rail-spacer" />
+				<button
+					type="button"
+					class="rail-btn rail-toggle"
+					title={collapsed ? "Expandir painel" : "Recolher painel"}
+					aria-label={collapsed ? "Expandir painel" : "Recolher painel"}
+					aria-expanded={!collapsed}
+					onClick={() => setCollapsed((current) => !current)}
+				>
+					<ChevronRight size={18} class={collapsed ? undefined : "icon flip"} />
+				</button>
+			</nav>
+
+			<div class="side-panel">
+				<header class="side-head">
+					<div class="brand">
+						<img class="logo" src="/assets/logo.png" alt="" />
+						<div>
+							<h1>Houndsman</h1>
+							<p class="sub">Revisões e triagem</p>
+						</div>
+					</div>
+					<div class="side-title">
+						<h2>{section.title}</h2>
+						{section.hint && <p class="side-hint">{section.hint}</p>}
+					</div>
+				</header>
+
+				<div class="side-body">
+					{SIDEBAR_SECTIONS.map((item) => (
+						<section
+							key={item.id}
+							id={`side-section-${item.id}`}
+							class="side-section"
+							hidden={item.id !== active}
+						>
+							<item.Content {...context} active={item.id === active} />
+						</section>
+					))}
 				</div>
 			</div>
 
-			<div class="side-tabs" role="tablist" aria-label="Navegação lateral">
-				<button
-					type="button"
-					role="tab"
-					aria-selected={view === "runs"}
-					class={`side-tab${view === "runs" ? " active" : ""}`}
-					onClick={() => setView("runs")}
-				>
-					<ListIcon size={13} /> Execuções
-					<span class="side-count">{runs.length}</span>
-				</button>
-				<button
-					type="button"
-					role="tab"
-					aria-selected={view === "prs"}
-					class={`side-tab${view === "prs" ? " active" : ""}`}
-					onClick={() => setView("prs")}
-				>
-					<GitPullRequest size={13} /> PR's
-				</button>
-			</div>
-
-			{view === "runs" ? (
-				<nav class="runs" aria-label="Execuções">
-					{runs.length === 0 && <p class="empty">Nenhuma run encontrada.</p>}
-					{runs.map((run) => (
-						<RunItem
-							key={run.slug}
-							run={run}
-							active={run.slug === slug}
-							onSelect={onSelect}
-						/>
-					))}
-				</nav>
-			) : (
-				<>
-					<div class="pr-toolbar">
-						<p class="section-label">PRs abertas</p>
-						<button
-							type="button"
-							class="icon-btn"
-							title="Atualizar lista de PRs"
-							disabled={loading}
-							onClick={() => void loadPrs()}
-						>
-							<Refresh
-								size={13}
-								class={loading ? "icon spin" : undefined}
-							/>
-						</button>
-					</div>
-
-					{error && <p class="error">{error}</p>}
-					{notice && <p class="pr-notice">{notice}</p>}
-					{data && !data.available && (
-						<p class="empty">
-							GitHub indisponível
-							{data.reason ? `: ${data.reason}` : "."}
-						</p>
-					)}
-					{data && !data.worktree.available && (
-						<p class="empty">Não foi possível ler o estado do git.</p>
-					)}
-					{data?.worktree.available && !data.worktree.clean && (
-						<p class="pr-warning">
-							{data.worktree.changes} alteração(ões) não commitada(s) —
-							checkout bloqueado até limpar a árvore.
-						</p>
-					)}
-					{data?.currentBranch && (
-						<p class="pr-current-branch">
-							Branch atual: <code>{data.currentBranch}</code>
-						</p>
-					)}
-
-					<nav class="prs" aria-label="Pull requests abertas">
-						{loading && !data && <p class="empty">Carregando PRs…</p>}
-						{data?.available && data.prs.length === 0 && (
-							<p class="empty">Nenhuma PR aberta.</p>
-						)}
-						{data?.prs.map((pr) => (
-							<PrItem
-								key={pr.number}
-								pr={pr}
-								currentBranch={data.currentBranch}
-								worktree={data.worktree}
-								busy={busy !== null}
-								confirming={confirming === pr.number}
-								worktreeBusy={worktreeBusy === pr.number}
-								onConfirm={setConfirming}
-								onCancel={() => setConfirming(null)}
-								onCheckout={checkout}
-								onCreateWorktree={createWorktree}
-								onSelectRun={onSelect}
-							/>
-						))}
-					</nav>
-				</>
+			{!collapsed && (
+				// biome-ignore lint/a11y/useSemanticElements: divisor arrastável, não conteúdo.
+				<div
+					class="side-resizer"
+					role="separator"
+					aria-orientation="vertical"
+					aria-label="Redimensionar painel lateral"
+					aria-valuemin={SIDEBAR_MIN_WIDTH}
+					aria-valuemax={SIDEBAR_MAX_WIDTH}
+					aria-valuenow={width}
+					tabIndex={0}
+					onPointerDown={startResize}
+					onPointerMove={moveResize}
+					onPointerUp={endResize}
+					onPointerCancel={endResize}
+					onKeyDown={resizeByKeyboard}
+				/>
 			)}
 		</aside>
 	);

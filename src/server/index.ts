@@ -403,8 +403,43 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 ::-webkit-scrollbar-thumb { background:rgba(255,255,255,.1); border:2px solid transparent; border-radius:999px; background-clip:padding-box; }
 ::-webkit-scrollbar-thumb:hover { background:rgba(255,255,255,.18); background-clip:padding-box; }
 .app { position:relative; z-index:1; display:flex; height:100vh; overflow:hidden; }
-.sidebar { width:292px; flex:0 0 292px; display:flex; flex-direction:column; gap:14px; padding:18px 14px;
-  background:var(--surface); border-right:1px solid var(--border); overflow-y:auto; }
+/* Sidebar = rail fixa de seções + painel expansível (largura em --side-width). */
+.sidebar { position:relative; flex:0 0 auto; display:flex; height:100%; overflow:hidden;
+  --rail-w:52px; --side-width:360px;
+  width:calc(var(--rail-w) + var(--side-width));
+  background:var(--surface); border-right:1px solid var(--border); }
+.sidebar.collapsed { width:var(--rail-w); }
+.sidebar.collapsed .side-panel, .sidebar.collapsed .side-resizer { display:none; }
+.side-rail { flex:0 0 var(--rail-w); width:var(--rail-w); display:flex; flex-direction:column; align-items:center; gap:4px;
+  padding:10px 0; background:var(--surface-2); border-right:1px solid var(--border);
+  overflow-x:hidden; overflow-y:auto; }
+.rail-btn { position:relative; flex:none; display:grid; place-items:center; width:40px; height:40px; padding:0;
+  color:var(--muted); background:transparent; border:1px solid transparent; border-radius:11px; cursor:pointer;
+  transition:color .15s ease, background .15s ease, border-color .15s ease; }
+.rail-btn:hover { color:var(--fg); background:rgba(255,255,255,.05); }
+.rail-btn:focus-visible { outline:none; color:var(--fg); border-color:var(--accent-line); }
+.rail-btn.active { color:var(--accent); background:var(--accent-soft); }
+.rail-btn.active::before { content:""; position:absolute; left:-6px; top:9px; bottom:9px; width:2px; border-radius:2px; background:var(--accent); }
+.rail-badge { position:absolute; top:2px; right:0; min-width:16px; padding:0 4px; font-family:var(--font-mono);
+  font-size:9px; font-weight:600; line-height:15px; text-align:center; color:var(--muted); background:var(--surface);
+  border:1px solid var(--border-strong); border-radius:999px; }
+.rail-btn.active .rail-badge { color:var(--accent); border-color:var(--accent-line); }
+.rail-spacer { flex:1; }
+.rail-toggle { color:var(--muted-2); }
+.rail-toggle .icon.flip { transform:rotate(180deg); }
+.side-panel { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.side-head { display:flex; flex-direction:column; gap:12px; padding:16px 14px 12px; border-bottom:1px solid var(--border); }
+.side-title { min-width:0; }
+.side-title h2 { margin:0 0 3px; font-size:13px; font-weight:700; letter-spacing:.01em; }
+.side-hint { margin:0; color:var(--muted-2); font-size:11px; line-height:1.45; }
+.side-body { flex:1; min-height:0; display:flex; flex-direction:column; gap:14px; padding:14px;
+  overflow-x:hidden; overflow-y:auto; }
+.side-section { display:flex; flex-direction:column; gap:14px; min-width:0; }
+.side-section[hidden] { display:none; }
+.side-resizer { position:absolute; top:0; right:-3px; bottom:0; z-index:20; width:7px; background:transparent;
+  cursor:col-resize; touch-action:none; }
+.side-resizer:hover, .side-resizer:focus-visible { background:var(--accent-line); outline:none; }
+body.resizing-sidebar { cursor:col-resize; user-select:none; }
 .brand { display:flex; align-items:center; gap:12px; }
 .brand .logo { width:42px; height:42px; object-fit:contain; border-radius:12px; background:var(--surface-2); border:1px solid var(--border); }
 .sidebar h1 { font-size:15.5px; font-weight:700; letter-spacing:-.01em; margin:0; }
@@ -430,13 +465,6 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
 .status-review_done { color:var(--suggestion); }
 .status-fix_done { color:var(--success); }
 .status-timeout { color:var(--blocking); }
-.side-tabs { display:flex; gap:4px; padding:4px; background:var(--surface-2); border:1px solid var(--border); border-radius:999px; }
-.side-tab { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; font:inherit; font-size:12px; font-weight:600; cursor:pointer; color:var(--muted);
-  padding:7px 10px; background:transparent; border:1px solid transparent; border-radius:999px; transition:color .15s ease, background .15s ease; }
-.side-tab:hover { color:var(--fg); }
-.side-tab.active { color:#1b1305; background:linear-gradient(180deg, var(--accent-strong), var(--accent)); }
-.side-count { padding:1px 6px; font-family:var(--font-mono); font-size:10px; color:var(--muted); background:rgba(255,255,255,.08); border-radius:999px; }
-.side-tab.active .side-count { color:#1b1305; background:rgba(0,0,0,.14); }
 .icon-btn { display:inline-grid; place-items:center; width:26px; height:26px; color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:8px; cursor:pointer; text-decoration:none; }
 .icon-btn:hover { color:var(--fg); border-color:var(--border-strong); }
 .icon-btn:disabled { opacity:.5; cursor:not-allowed; }
@@ -778,8 +806,22 @@ code.md-path { color:#8fc7ff; background:rgba(90,164,240,.1); border-color:rgba(
 @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.8); } }
 @keyframes spin { to { transform:rotate(360deg); } }
 @media (max-width:980px) { .kpis { grid-template-columns:repeat(2, minmax(0,1fr)); } }
+@media (max-width:1100px) {
+  /* Painel largo reduz o espaço do conteúdo: compacta o topo para evitar scroll-x. */
+  .topbar { gap:12px; padding:12px 16px; }
+  .seg-btn { gap:6px; padding:7px 11px; font-size:12px; }
+  .auto-refresh { display:none; }
+}
+@media (max-width:720px) {
+  /* Em telas estreitas as abas viram só ícone (o título do botão explica cada uma). */
+  .seg-btn { padding:8px 10px; }
+  .seg-btn .seg-label { display:none; }
+}
 @media (max-width:820px) {
-  .sidebar { width:232px; flex-basis:232px; }
+  /* Mantém a rail fixa e encolhe o painel para preservar o conteúdo principal. */
+  .sidebar { width:calc(var(--rail-w) + clamp(220px, 35vw, var(--side-width))); }
+  .side-head { padding:14px 12px 10px; }
+  .side-body { padding:12px; }
   .topbar { padding:12px 16px; }
   .content { padding:18px 16px 56px; }
   .auto-refresh { display:none; }
