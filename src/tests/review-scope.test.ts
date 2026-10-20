@@ -300,3 +300,70 @@ describe("prepare/finalize — mesmo commit", () => {
 		}
 	}, 30_000);
 });
+
+// ---------------------------------------------------------------------------
+// Run vazia
+// ---------------------------------------------------------------------------
+
+describe("prepare sem alterações", () => {
+	test("run recém-criada é descartada (sem run vazia na lista)", async () => {
+		const repo = makeRepo();
+		const originalCwd = process.cwd();
+		const originalHome = process.env.HOUNDSMAN_HOME;
+		let storage: SQLiteStorageProvider | null = null;
+
+		try {
+			process.env.HOUNDSMAN_HOME = join(repo.cwd, ".home");
+			process.chdir(repo.cwd);
+
+			storage = new SQLiteStorageProvider(join(repo.cwd, "houndsman.db"));
+			const record = storage.getOrCreateReview({
+				repo: resolveRepoIdentity(),
+				branch: "main",
+				slug: "main",
+			});
+			const opts = {
+				...defaultOptions(),
+				base: repo.head,
+				head: "HEAD",
+				noJev: true,
+			};
+
+			const result = await prepare(
+				opts,
+				"main",
+				fakeHoundsmanConfig,
+				reviewContext(storage, record),
+			);
+			expect(result.messages.join("\n")).toContain("nenhuma run criada");
+			expect(storage.getReview(record.id)).toBeNull();
+			expect(storage.listArtifacts(record.id)).toHaveLength(0);
+
+			// Run com artefatos anteriores (contexto) continua existindo.
+			const kept = storage.getOrCreateReview({
+				repo: resolveRepoIdentity(),
+				branch: "main",
+				slug: "main",
+			});
+			storage.writeArtifact(kept.id, {
+				name: "context.json",
+				kind: "context",
+				content: "{}\n",
+			});
+			await prepare(
+				opts,
+				"main",
+				fakeHoundsmanConfig,
+				reviewContext(storage, kept),
+			);
+			expect(storage.getReview(kept.id)?.status).toBe("review_done");
+			expect(storage.readArtifact(kept.id, "context.json")).not.toBeNull();
+		} finally {
+			storage?.close();
+			process.chdir(originalCwd);
+			if (originalHome === undefined) delete process.env.HOUNDSMAN_HOME;
+			else process.env.HOUNDSMAN_HOME = originalHome;
+			repo.cleanup();
+		}
+	}, 30_000);
+});

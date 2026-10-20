@@ -625,13 +625,30 @@ export async function prepare(
 		return { messages };
 	}
 
+	const { classification, diff } = scope;
+
+	// Run recém-criada e sem nenhum arquivo alterado: não persiste uma "run
+	// vazia" na lista. Acontece quando o comando roda no clone principal sem
+	// `--pr`/`--worktree` (ex.: `houndsman` na `main` logo após revisar uma PR).
+	// Run com artefatos anteriores (contexto, revisão) continua existindo.
+	if (Object.keys(classification.files).length === 0) {
+		const fresh = ctx.storage.listArtifacts(ctx.review.id).length === 0;
+		if (fresh) {
+			ctx.work.clean();
+			ctx.storage.deleteReview(ctx.review.id);
+			messages.push(
+				`Nenhuma alteração entre ${opts.base}...${opts.head} — nenhuma run criada.`,
+			);
+			return { messages };
+		}
+	}
+
 	// Marca o run como "revisando" (reinicia o ciclo) — a UI mostra o status.
 	writeRunStatus(ctx.storage, ctx.review.id, {
 		status: "reviewing",
 		resetStartedAt: true,
 	});
 
-	const { classification, diff } = scope;
 	await applyAiClassification(classification, config, ai, opts);
 	ctx.storage.writeArtifact(ctx.review.id, {
 		name: "classification.json",
