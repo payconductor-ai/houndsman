@@ -148,6 +148,7 @@ ai: {
 	features: {
 		context: true,
 		brief: true,
+		technical: true,
 		classification: false,
 		preAnalysis: false,
 		verify: false,

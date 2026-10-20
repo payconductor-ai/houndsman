@@ -1,21 +1,19 @@
 /**
  * Aba "Resumo" (inicial): visão principal da revisão.
  *
- * O texto narrativo vem do artefato `review-resume.md` (Resumo de negócio); os
- * números viram cards a partir do `classification.json`/`manifest.json` e o
- * card de domínios resume os achados por severidade em cada watchdog — assim a
- * UI mostra os mesmos dados do resumo de forma mais organizada, sem duplicar o
- * texto.
+ * O texto narrativo vem do artefato `review-resume.md` e é exibido por inteiro
+ * (resumo de negócio + pontos técnicos); os números viram cards a partir do
+ * `classification.json`/`manifest.json` e o card de domínios resume os achados
+ * por severidade em cada watchdog.
  */
 
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
 import { ExternalLink, Trash } from "./icons";
-import { MarkdownBlocks } from "./MarkdownText";
+import { MarkdownText } from "./MarkdownText";
 import { api } from "./utils/api";
 import { SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
 import { formatRunTime } from "./utils/format";
-import { sectionBlocks } from "./utils/markdown";
 import type {
 	ClassificationArtifact,
 	Finding,
@@ -126,7 +124,6 @@ export function ResumePanel({
 	}, [slug]);
 
 	const manifest: RunManifest | null = detail?.manifest ?? null;
-	const business = useMemo(() => sectionBlocks(resume, "Resumo de negócio"), [resume]);
 	const status =
 		summary.bySeverity.blocking > 0
 			? STATUS_VIEW.blocking
@@ -295,16 +292,16 @@ export function ResumePanel({
 
 			<div class="resume-grid">
 				<section class="resume-card">
-					<h3 class="resume-card-title">Resumo de negócio</h3>
+					<h3 class="resume-card-title">Resumo da revisão</h3>
 					{loading ? (
 						<p class="empty">Carregando resumo…</p>
-					) : business.length > 0 ? (
+					) : resume.trim().length > 0 ? (
 						<div class="resume-narrative">
-							<MarkdownBlocks blocks={business} />
+							<MarkdownText text={resume} />
 						</div>
 					) : (
 						<p class="empty">
-							O resumo narrativo ainda não foi gerado para esta run. Rode o{" "}
+							O resumo ainda não foi gerado para esta run. Rode o{" "}
 							<code>--finalize</code> para criar{" "}
 							<code>review-resume.md</code>.
 						</p>

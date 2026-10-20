@@ -152,12 +152,13 @@ export class ProjectConfig<TId extends string = string> {
 		return value !== undefined && value > 0 ? value : undefined;
 	}
 
-	/** Features resolvidas com defaults (`context`/`brief` ligadas). */
+	/** Features resolvidas com defaults (`context`/`brief`/`technical` ligadas). */
 	get aiFeatures(): Required<HoundsmanAiFeatures> {
 		const features = this.ai.features ?? {};
 		return {
 			context: features.context !== false,
 			brief: features.brief !== false,
+			technical: features.technical !== false,
 			classification: features.classification === true,
 			preAnalysis: features.preAnalysis === true,
 			verify: features.verify === true,

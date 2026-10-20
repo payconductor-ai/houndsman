@@ -3,19 +3,16 @@
  *
  * Artefato somente-leitura para humanos: não entra em briefs, não é lido pelos
  * watchdogs e não participa de nenhuma etapa seguinte. Une o contexto de
- * negócio da PR aos números técnicos diretos da revisão, com limite de
+ * negócio da PR aos pontos técnicos estruturais da revisão, com limite de
  * `RESUME_MAX_CHARS`.
  */
 
-import type {
-	ContextSummary,
-	MergedFinding,
-	WatchdogNameResolver,
-} from "../report-builder";
+import type { ContextSummary, MergedFinding } from "../report-builder";
 import { systemClock } from "../services/clock";
+import type { TechnicalSummary } from "../technical-summary";
 
 /** Teto de caracteres do artefato (inclui cabeçalho e quebras de linha). */
-export const RESUME_MAX_CHARS = 2500;
+export const RESUME_MAX_CHARS = 5000;
 
 /** Dados de classificação usados no resumo. */
 export type ResumeClassification = {
@@ -30,10 +27,9 @@ export type ReviewResumeInput = {
 	context?: ContextSummary | null;
 	classification: ResumeClassification;
 	findings: readonly MergedFinding[];
-	nameOf?: WatchdogNameResolver;
+	/** Pontos técnicos estruturais (não achados). */
+	technical?: TechnicalSummary | null;
 };
-
-const identityName: WatchdogNameResolver = (id) => id;
 
 const STATUS_BY_SEVERITY: Record<"blocking" | "attention" | "clean", string> = {
 	blocking: "❌ Mudanças necessárias",
@@ -80,36 +76,24 @@ function businessSection(input: ReviewResumeInput): string[] {
 	if (context.objective) lines.push(context.objective, "");
 	if (context.motivation) lines.push(`**Por quê:** ${context.motivation}`, "");
 	if (context.changeSummary && context.changeSummary.length > 0) {
-		for (const item of context.changeSummary.slice(0, 4)) {
-			lines.push(`- ${truncate(item, 180)}`);
+		for (const item of context.changeSummary.slice(0, 6)) {
+			lines.push(`- ${truncate(item, 240)}`);
 		}
 		lines.push("");
 	}
 	return lines;
 }
 
-/** Achados que exigem ação, em formato direto (máximo 5). */
-function technicalSection(
-	findings: readonly MergedFinding[],
-	nameOf: WatchdogNameResolver,
-): string[] {
-	const relevant = findings
-		.filter(
-			(finding) =>
-				finding.severity === "blocking" || finding.severity === "attention",
-		)
-		.slice(0, 5);
+/** Pontos técnicos estruturais (módulos, contratos, impacto) — não achados. */
+function technicalSection(summary: TechnicalSummary | null | undefined): string[] {
 	const lines = ["## Pontos técnicos", ""];
-	if (relevant.length === 0) {
-		lines.push("- Nenhum bloqueio ou ponto de atenção.", "");
+	if (!summary || (!summary.overview && summary.highlights.length === 0)) {
+		lines.push("Sem mudanças estruturais detectadas nesta revisão.", "");
 		return lines;
 	}
-	for (const finding of relevant) {
-		const location = finding.line ? `${finding.file}:${finding.line}` : finding.file;
-		const watchdogs = finding.watchdogs.map((id) => nameOf(id)).join(", ");
-		lines.push(
-			`- \`${location}\` — ${truncate(finding.message, 130)}${watchdogs ? ` _(${watchdogs})_` : ""}`,
-		);
+	if (summary.overview) lines.push(summary.overview, "");
+	for (const highlight of summary.highlights) {
+		lines.push(`- **${highlight.area}** — ${truncate(highlight.detail, 300)}`);
 	}
 	lines.push("");
 	return lines;
@@ -125,10 +109,9 @@ function clamp(markdown: string, max: number): string {
 
 /**
  * Renderiza o resumo final. Determinístico e sem chamadas externas: o texto
- * nasce do contexto já disponível e dos findings consolidados.
+ * nasce do contexto já disponível e dos pontos técnicos persistidos.
  */
 export function renderReviewResume(input: ReviewResumeInput): string {
-	const nameOf = input.nameOf ?? identityName;
 	const blockers = input.findings.filter((f) => f.severity === "blocking").length;
 	const attention = input.findings.filter((f) => f.severity === "attention").length;
 	const status =
@@ -144,7 +127,7 @@ export function renderReviewResume(input: ReviewResumeInput): string {
 		`**Data:** ${input.date ?? systemClock().slice(0, 10)} · **Status:** ${status}`,
 		"",
 		...businessSection(input),
-		...technicalSection(input.findings, nameOf),
+		...technicalSection(input.technical),
 	];
 
 	return clamp(`${lines.join("\n").trimEnd()}\n`, RESUME_MAX_CHARS);

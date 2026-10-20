@@ -72,7 +72,8 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
-| **`review-resume.md`** | Resumo final para leitura humana (≤ 2.5k caracteres): visão de negócio + pontos técnicos diretos. Números (arquivos/churn/domínios) ficam nos cards da UI. Não é lido por watchdogs nem participa de etapas seguintes. |
+| **`review-resume.md`** | Resumo final para leitura humana (≤ 5k caracteres): visão de negócio + pontos técnicos estruturais (módulos, contratos, dependências e impacto) — sem espelhar findings. Números (arquivos/churn/domínios) ficam nos cards da UI. Não é lido por watchdogs nem participa de etapas seguintes. |
+| **`technical-summary.json`** | Pontos técnicos estruturais usados no resumo final: origem (`ai`/`deterministic`), commit coberto e destaques por área. Gerado no prepare e consumido pelo finalize. |
 | **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **registro de review** | Identidade (repo/branch), commit revisado, status (`reviewing`/`review_done`/`fixing`/`fix_done`) e timestamps. |
 | **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 12. |

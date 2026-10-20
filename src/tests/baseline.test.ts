@@ -28,6 +28,7 @@ import {
 import { defineHoundsmanConfig } from "../core/config";
 import { defaultOptions, finalize, prepare, reviewContext } from "../core/orchestrator";
 import { displayPath } from "../core/paths";
+import { RESUME_MAX_CHARS } from "../core/renderers/resume-renderer";
 import {
 	type MergedFinding,
 	renderDomainReport,
@@ -434,7 +435,9 @@ describe("baseline — artefatos de prepare/finalize", () => {
 			}
 			const resume = storage.readArtifact(review.id, "review-resume.md");
 			expect(resume?.kind).toBe("resume");
-			expect((resume?.content ?? "").length).toBeLessThanOrEqual(2500);
+			expect(resume?.content).toContain("## Pontos técnicos");
+			expect(resume?.content).toContain("Remoções");
+			expect((resume?.content ?? "").length).toBeLessThanOrEqual(RESUME_MAX_CHARS);
 			expect(
 				normalize(JSON.stringify(storage.readFindings(review.id), null, 2)),
 			).toMatchSnapshot("state.json");

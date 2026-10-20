@@ -1,6 +1,6 @@
 /**
- * Resumo final (`review-resume.md`) — conteúdo de negócio + pontos técnicos,
- * determinístico e limitado a `RESUME_MAX_CHARS`.
+ * Resumo final (`review-resume.md`) — conteúdo de negócio + pontos técnicos
+ * estruturais, determinístico e limitado a `RESUME_MAX_CHARS`.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -10,6 +10,7 @@ import {
 	renderReviewResume,
 } from "../core/renderers/resume-renderer";
 import type { MergedFinding } from "../core/report-builder";
+import type { TechnicalSummary } from "../core/technical-summary";
 
 function finding(overrides: Partial<MergedFinding> = {}): MergedFinding {
 	return {
@@ -32,8 +33,24 @@ const classification: ResumeClassification = {
 	watchdogs: { alpha: ["src/a.ts"], beta: ["src/b.ts"] },
 };
 
+const technical: TechnicalSummary = {
+	source: "ai",
+	headSha: "abc123",
+	overview: "Novo service `bin-lookup` com provider e repository.",
+	highlights: [
+		{
+			area: "Contratos",
+			detail: "`BinLookupProvider` (src/bin-lookup/provider.ts)",
+		},
+		{
+			area: "Implementações",
+			detail: "`BinLookupService` (src/bin-lookup/service.ts)",
+		},
+	],
+};
+
 describe("renderReviewResume", () => {
-	test("une contexto de negócio e pontos técnicos", () => {
+	test("une contexto de negócio e pontos técnicos estruturais", () => {
 		const md = renderReviewResume({
 			branch: "feat/x",
 			date: "2026-10-17",
@@ -48,7 +65,7 @@ describe("renderReviewResume", () => {
 				finding({ severity: "blocking", message: "quebra o cadastro" }),
 				finding({ severity: "attention", file: "src/b.ts", line: undefined }),
 			],
-			nameOf: (id) => id.toUpperCase(),
+			technical,
 		});
 
 		expect(md).toContain("# Resumo da revisão — feat/x");
@@ -58,8 +75,11 @@ describe("renderReviewResume", () => {
 		expect(md).toContain("**Por quê:** Reduzir o esforço manual.");
 		expect(md).toContain("- Novo fluxo de cadastro.");
 		expect(md).not.toContain("## Números");
-		expect(md).toContain("`src/a.ts:1` — quebra o cadastro _(ALPHA)_");
-		expect(md).toContain("`src/b.ts` — mensagem _(ALPHA)_");
+		expect(md).toContain("## Pontos técnicos");
+		expect(md).toContain("Novo service `bin-lookup`");
+		expect(md).toContain("**Contratos** — `BinLookupProvider`");
+		expect(md).toContain("**Implementações** — `BinLookupService`");
+		expect(md).not.toContain("quebra o cadastro");
 		expect(md.length).toBeLessThanOrEqual(RESUME_MAX_CHARS);
 	});
 
@@ -72,7 +92,7 @@ describe("renderReviewResume", () => {
 
 		expect(md).toContain("Sem resumo de contexto da PR disponível.");
 		expect(md).toContain("✅ Aprovado");
-		expect(md).toContain("- Nenhum bloqueio ou ponto de atenção.");
+		expect(md).toContain("Sem mudanças estruturais detectadas nesta revisão.");
 	});
 
 	test("respeita o teto de caracteres", () => {
@@ -89,10 +109,18 @@ describe("renderReviewResume", () => {
 				available: true,
 				objective: "o".repeat(1000),
 				motivation: "m".repeat(1000),
-				changeSummary: ["a".repeat(200), "b".repeat(200)],
+				changeSummary: ["a".repeat(300), "b".repeat(300)],
 			},
 			classification,
 			findings,
+			technical: {
+				source: "deterministic",
+				overview: "v".repeat(600),
+				highlights: Array.from({ length: 10 }, (_, index) => ({
+					area: `Área ${index}`,
+					detail: "x".repeat(300),
+				})),
+			},
 		});
 
 		expect(md.length).toBeLessThanOrEqual(RESUME_MAX_CHARS);

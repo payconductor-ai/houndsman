@@ -8,6 +8,7 @@ import { AiBriefEnricher } from "../core/ai/features/brief-enricher";
 import { AiClassifier } from "../core/ai/features/classifier";
 import { AiContextSummarizer } from "../core/ai/features/context-summarizer";
 import { AiPreAnalyzer } from "../core/ai/features/pre-analyzer";
+import { AiTechnicalSummarizer } from "../core/ai/features/technical-summarizer";
 import { AiVerifier } from "../core/ai/features/verifier";
 import { briefInstructions, briefPrompt } from "../core/ai/prompts/brief";
 import { renderBrief } from "../core/brief";
@@ -150,6 +151,41 @@ describe("AiClassifier", () => {
 		expect(
 			await classifier.classify(["a.ts"], [{ id: "alpha", name: "A", scope: "x" }]),
 		).toEqual(new Map());
+	});
+});
+
+describe("AiTechnicalSummarizer", () => {
+	test("devolve os destaques estruturais do modelo", async () => {
+		const provider = new FakeModelProvider(() => ({
+			overview: "Novo módulo bin-lookup",
+			highlights: [{ area: "Contratos", detail: "`BinLookupProvider`" }],
+		}));
+		const summarizer = new AiTechnicalSummarizer(new AiClient({ project, provider }));
+		const summary = await summarizer.summarize({
+			branch: "main",
+			classification: {
+				files: { "src/bin-lookup/service.ts": { status: "added" } },
+				churn: { "src/bin-lookup/service.ts": { additions: 3, deletions: 0 } },
+			},
+			headSha: "abc",
+			domains: ["Alpha"],
+		});
+		expect(summary?.source).toBe("ai");
+		expect(summary?.headSha).toBe("abc");
+		expect(summary?.highlights[0].area).toBe("Contratos");
+	});
+
+	test("sem IA o resumo é nulo (fallback no chamador)", async () => {
+		const summarizer = new AiTechnicalSummarizer(
+			new AiClient({ project, provider: null }),
+		);
+		expect(summarizer.enabled).toBe(false);
+		expect(
+			await summarizer.summarize({
+				branch: "main",
+				classification: { files: {}, churn: {} },
+			}),
+		).toBeNull();
 	});
 });
 

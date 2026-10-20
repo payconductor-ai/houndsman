@@ -799,9 +799,9 @@ describe("context-summary", () => {
 				(_, i) => `item ${i} ${"z".repeat(300)}`,
 			),
 		});
-		expect(summary?.objective?.length).toBeLessThanOrEqual(200);
+		expect(summary?.objective?.length).toBeLessThanOrEqual(400);
 		expect(summary?.objective?.endsWith("…")).toBe(true);
-		expect(summary?.changeSummary).toHaveLength(4);
+		expect(summary?.changeSummary).toHaveLength(6);
 	});
 
 	test("renderReport coloca a seção de contexto quando presente", () => {

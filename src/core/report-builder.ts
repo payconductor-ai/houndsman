@@ -63,14 +63,14 @@ export type ContextSummary = {
 const VALID_SEVERITIES = new Set<string>(SEVERITY_ORDER);
 
 /**
- * Limites do resumo da PR: mantém o relatório e os briefs enxutos — evita
- * confundir o watchdog humano e estourar o contexto da IA watchdog.
+ * Limites do resumo da PR: o contexto abre o relatório e o resumo final, mas
+ * não pode inflar os briefs — a injeção nos briefs é recortada em `brief.ts`.
  */
 const CONTEXT_LIMITS = {
-	objective: 200,
-	motivation: 240,
-	changeSummaryItem: 160,
-	changeSummaryItems: 4,
+	objective: 400,
+	motivation: 480,
+	changeSummaryItem: 240,
+	changeSummaryItems: 6,
 } as const;
 
 /** Corta `value` em `max` caracteres, sinalizando com reticências. */

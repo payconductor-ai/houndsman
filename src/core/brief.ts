@@ -27,15 +27,36 @@ export const PROCEDURE: readonly string[] = [
 	'5. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
+/** Limites do contexto injetado em cada brief (o resumo final é maior). */
+const BRIEF_CONTEXT_LIMITS = {
+	objective: 200,
+	motivation: 240,
+	changeSummaryItem: 160,
+	changeSummaryItems: 4,
+} as const;
+
 /** Bloco de contexto da PR, injetado no brief de cada watchdog. */
 export function renderBriefContext(context: WatchdogRenderContext): string[] {
 	const lines = ["## Contexto da PR", ""];
-	if (context.objective) lines.push(`**Objetivo:** ${context.objective}`);
-	if (context.motivation) lines.push(`**Motivação:** ${context.motivation}`);
-	const changeSummary = context.changeSummary ?? [];
+	if (context.objective) {
+		lines.push(
+			`**Objetivo:** ${shorten(context.objective, BRIEF_CONTEXT_LIMITS.objective)}`,
+		);
+	}
+	if (context.motivation) {
+		lines.push(
+			`**Motivação:** ${shorten(context.motivation, BRIEF_CONTEXT_LIMITS.motivation)}`,
+		);
+	}
+	const changeSummary = (context.changeSummary ?? []).slice(
+		0,
+		BRIEF_CONTEXT_LIMITS.changeSummaryItems,
+	);
 	if (changeSummary.length > 0) {
 		lines.push("", "**Resumo das alterações:**", "");
-		for (const item of changeSummary) lines.push(`- ${item}`);
+		for (const item of changeSummary) {
+			lines.push(`- ${shorten(item, BRIEF_CONTEXT_LIMITS.changeSummaryItem)}`);
+		}
 	}
 	lines.push("");
 	return lines;

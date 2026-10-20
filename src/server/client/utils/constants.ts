@@ -85,6 +85,7 @@ export function describeRunStatus(
 const KIND_ORDER: ArtifactKind[] = [
 	"review",
 	"resume",
+	"technical",
 	"domain-review",
 	"verify",
 	"brief",
@@ -109,6 +110,7 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 	{
 		review: { key: "report", label: "Relatórios", order: 0 },
 		resume: { key: "report", label: "Relatórios", order: 0 },
+		technical: { key: "core", label: "Núcleo da revisão", order: 3 },
 		"domain-review": { key: "report", label: "Relatórios", order: 0 },
 		verify: { key: "verify", label: "Verificação", order: 1 },
 		brief: { key: "brief", label: "Briefs (auditoria)", order: 2 },
@@ -132,6 +134,7 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
 	review: "relatório",
 	resume: "resumo",
+	technical: "pontos técnicos",
 	"domain-review": "domínio",
 	verify: "verify",
 	brief: "brief",
@@ -164,7 +167,9 @@ export function describeArtifact(meta: ArtifactMeta): string {
 		case "review":
 			return "Relatório consolidado da revisão — o entregável.";
 		case "resume":
-			return "Resumo final da revisão: visão de negócio e pontos técnicos diretos (leitura humana).";
+			return "Resumo final da revisão: visão de negócio e estrutura técnica (leitura humana).";
+		case "technical":
+			return "Destaques estruturais da mudança (módulos, contratos, dependências) usados no resumo final.";
 		case "domain-review":
 			return "Relatório isolado do domínio: achados daquele watchdog.";
 		case "verify":
@@ -240,7 +245,7 @@ export function groupArtifacts(
 
 /** Legenda única de cada aba (explica o que a aba é; mostrada quando selecionada). */
 export const TAB_CAPTIONS = {
-	resume: "Resumo principal da revisão: o que muda em termos de negócio, números diretos (arquivos, churn, domínios) e os pontos técnicos que exigem ação.",
+	resume: "Resumo principal da revisão: visão de negócio, números diretos (arquivos, churn, domínios) e os pontos técnicos estruturais da mudança.",
 	findings:
 		"Triagem dos achados da revisão: decida Executar, Ignorar ou deixe Pendente — o comentário orienta o auto-fix. Agente: houndsman findings list --decision pending --json · findings done <id>.",
 	artifacts:

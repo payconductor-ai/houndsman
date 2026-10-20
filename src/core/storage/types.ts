@@ -102,6 +102,7 @@ export type ArtifactKind =
 	| "finding-report"
 	| "review"
 	| "resume"
+	| "technical"
 	| "domain-review"
 	| "verify"
 	| "ast"

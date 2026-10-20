@@ -81,6 +81,7 @@ src/
 │   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
 │   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
 │   ├── report-builder.ts    # dedupe/render do relatório (funções puras)
+│   ├── technical-summary.ts # pontos técnicos estruturais do resumo final
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE (funções puras)
 │   ├── verify.ts            # verificação de findings (tier local + Jev)
 │   ├── fix-batch.ts         # agrupamento/paginação do lote (puro)
@@ -95,6 +96,7 @@ src/
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── server/           # servidor local (Bun.serve) + UI Preact
 │   ├── index.ts             # HoundsmanServer (rotas + shell)
+│   ├── styles.css           # CSS da UI (servido em /assets/styles.css)
 │   ├── run-repository.ts    # leitura/escrita das runs + findings + submit + comentários
 │   ├── pr-inbox.ts          # PRs abertas via gh + checkout com árvore limpa
 │   ├── pr-comments.ts       # threads/comentários da PR (cache de 60s)

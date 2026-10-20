@@ -229,13 +229,17 @@ export function renderContextBrief(
 
 	lines.push("## Regras", "");
 	lines.push(
-		"- **Seja curto** — o resumo abre o relatório e entra em **todos** os briefs.",
+		"- O resumo abre o relatório e o resumo final; nos briefs ele é recortado.",
 	);
 	lines.push("- Baseie-se **somente** no `context.json` — não invente intenção.");
-	lines.push("- `objective`: 1 frase (≤ 200 caracteres) sobre o que a PR entrega.");
-	lines.push("- `motivation`: 1 frase (≤ 240 caracteres) sobre o porquê.");
 	lines.push(
-		"- `changeSummary`: no máximo 4 bullets (≤ 160 caracteres cada), focados em comportamento — não liste arquivos.",
+		"- `objective`: até 2 frases (≤ 400 caracteres) sobre o que a PR entrega.",
+	);
+	lines.push(
+		"- `motivation`: até 3 frases (≤ 480 caracteres) sobre o porquê e o impacto.",
+	);
+	lines.push(
+		"- `changeSummary`: no máximo 6 bullets (≤ 240 caracteres cada), focados em comportamento — não liste arquivos.",
 	);
 	lines.push(
 		"- NÃO copie a descrição da PR: sintetize. Copie `source` do contexto bruto.",
@@ -253,7 +257,8 @@ const CONTEXT_SUMMARY_TEMPLATE = {
 		base: "main",
 		head: "feature/x",
 	},
-	objective: "O que a PR entrega, em 1 frase.",
-	motivation: "Por que a mudança é necessária, em 1-2 frases.",
+	objective: "O que a PR entrega, em 1-2 frases.",
+	motivation:
+		"Por que a mudança é necessária, com o problema e o impacto (até 3 frases).",
 	changeSummary: ["Bullet de comportamento 1", "Bullet de comportamento 2"],
 };

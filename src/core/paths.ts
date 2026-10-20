@@ -55,3 +55,6 @@ export const REVIEW_FILE = "review.md";
 
 /** Resumo final da review (artefato `review-resume.md`) — leitura humana apenas. */
 export const REVIEW_RESUME_FILE = "review-resume.md";
+
+/** Pontos técnicos estruturais usados no resumo final (`technical-summary.json`). */
+export const TECHNICAL_SUMMARY_FILE = "technical-summary.json";

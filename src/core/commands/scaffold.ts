@@ -223,6 +223,7 @@ export type AiProviderKind = "deepseek" | "openai" | "anthropic";
 export type HoundsmanAiFeatures = {
 	context?: boolean;
 	brief?: boolean;
+	technical?: boolean;
 	classification?: boolean;
 	preAnalysis?: boolean;
 	verify?: boolean;

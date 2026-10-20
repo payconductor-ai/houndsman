@@ -22,11 +22,27 @@ export const ContextSummarySchema = z.object({
 			head: z.string().optional(),
 		})
 		.optional(),
-	objective: z.string().max(200).optional(),
-	motivation: z.string().max(240).optional(),
-	changeSummary: z.array(z.string().max(160)).max(4).optional(),
+	objective: z.string().max(400).optional(),
+	motivation: z.string().max(480).optional(),
+	changeSummary: z.array(z.string().max(240)).max(6).optional(),
 });
 export type ContextSummaryPlan = z.infer<typeof ContextSummarySchema>;
+
+/** Pontos técnicos estruturais do resumo final (`technical-summary.json`). */
+export const TechnicalSummarySchema = z.object({
+	/** Parágrafo curto de abertura (opcional). */
+	overview: z.string().max(600).optional(),
+	highlights: z
+		.array(
+			z.object({
+				area: z.string().min(1).max(80),
+				detail: z.string().min(1).max(400),
+			}),
+		)
+		.max(8)
+		.default([]),
+});
+export type TechnicalSummaryPlan = z.infer<typeof TechnicalSummarySchema>;
 
 /** Plano de revisão sugerido por IA para um brief. */
 export const BriefPlanSchema = z.object({

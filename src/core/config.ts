@@ -63,6 +63,8 @@ export type HoundsmanAiFeatures = {
 	context?: boolean;
 	/** Enriquece os briefs com um plano de revisão sugerido. */
 	brief?: boolean;
+	/** Gera os pontos técnicos estruturais do resumo final. */
+	technical?: boolean;
 	/** Classifica arquivos que nenhum watchdog casou. */
 	classification?: boolean;
 	/** Gera candidatos de pré-análise (substitui o Jev quando disponível). */

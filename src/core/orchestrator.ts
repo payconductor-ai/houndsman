@@ -23,6 +23,7 @@ import { AiBriefEnricher } from "./ai/features/brief-enricher";
 import { AiClassifier } from "./ai/features/classifier";
 import { AiContextSummarizer } from "./ai/features/context-summarizer";
 import { AiPreAnalyzer } from "./ai/features/pre-analyzer";
+import { AiTechnicalSummarizer } from "./ai/features/technical-summarizer";
 import type { BriefPlan } from "./ai/schemas";
 import { assetPath, OUTPUT_FORMAT_FILE } from "./assets";
 import type { AstService } from "./ast/service";
@@ -56,6 +57,7 @@ import {
 	OUTPUT_FORMAT_PATH,
 	REVIEW_FILE,
 	REVIEW_RESUME_FILE,
+	TECHNICAL_SUMMARY_FILE,
 } from "./paths";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
@@ -79,6 +81,11 @@ import { systemClock } from "./services/clock";
 import { GitRepository } from "./services/git-repository";
 import type { ReviewRecord, StorageProvider } from "./storage/types";
 import { ReviewWorkArea } from "./storage/work-area";
+import {
+	buildTechnicalSummary,
+	parseTechnicalSummary,
+	type TechnicalSummary,
+} from "./technical-summary";
 import type { WatchdogMeta } from "./types";
 import { findWatchdog } from "./watchdog-registry";
 
@@ -484,6 +491,50 @@ async function resolveContextSummary(
 }
 
 /**
+ * Pontos técnicos estruturais: IA quando disponível e, sempre, um fallback
+ * determinístico a partir da classificação/AST. Persistido para auditoria —
+ * o `finalize` apenas o consome.
+ */
+async function resolveTechnicalSummary(
+	ctx: ReviewContext,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+	input: {
+		branch: string;
+		classification: RunClassification;
+		context: ContextSummary | null;
+		ast?: ReadonlyMap<string, AstAnalysis>;
+		impact?: AstImpact;
+		domains: readonly string[];
+	},
+): Promise<TechnicalSummary> {
+	const fallback = buildTechnicalSummary({
+		classification: input.classification,
+		ast: input.ast,
+		impact: input.impact,
+		headSha: input.classification.headSha,
+	});
+	const summary =
+		ai && !opts.noAi
+			? ((await new AiTechnicalSummarizer(ai).summarize({
+					branch: input.branch,
+					context: input.context,
+					classification: input.classification,
+					ast: input.ast,
+					impact: input.impact,
+					headSha: input.classification.headSha,
+					domains: input.domains,
+				})) ?? fallback)
+			: fallback;
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: TECHNICAL_SUMMARY_FILE,
+		kind: "technical",
+		content: `${JSON.stringify(summary, null, 2)}\n`,
+	});
+	return summary;
+}
+
+/**
  * Planos de revisão por watchdog (uma chamada por brief, concorrência
  * limitada). Sem IA/chave/feature, devolve mapa vazio e o brief fica igual.
  */
@@ -645,6 +696,14 @@ export async function prepare(
 
 	persistContext(ctx);
 	const context = await resolveContextSummary(ctx, ai, opts);
+	await resolveTechnicalSummary(ctx, ai, opts, {
+		branch,
+		classification,
+		context,
+		ast: astAnalyses,
+		impact: astImpact,
+		domains: activeIds.map((id) => findWatchdog(config, id)?.name ?? id),
+	});
 
 	const manifestAst: ManifestAst | undefined = astAnalyses
 		? {
@@ -853,6 +912,40 @@ function readPersistedContextSummary(ctx: ReviewContext): ContextSummary | null 
 	}
 }
 
+/** JSON persistido, ou `null` quando ausente/inválido. */
+function readArtifactJson<T>(ctx: ReviewContext, name: string): T | null {
+	const artifact = ctx.storage.readArtifact(ctx.review.id, name);
+	if (!artifact) return null;
+	try {
+		return JSON.parse(artifact.content) as T;
+	} catch {
+		return null;
+	}
+}
+
+/** Pontos técnicos persistidos pelo `prepare`; `null` quando ausentes. */
+function readPersistedTechnicalSummary(ctx: ReviewContext): TechnicalSummary | null {
+	const raw = readArtifactJson<unknown>(ctx, TECHNICAL_SUMMARY_FILE);
+	return raw ? parseTechnicalSummary(raw) : null;
+}
+
+/** Fallback para runs antigas: reconstrói os destaques dos artefatos de AST. */
+function buildTechnicalFallback(
+	ctx: ReviewContext,
+	classification: RunClassification,
+): TechnicalSummary {
+	const ast = readArtifactJson<{ files?: Record<string, AstAnalysis> }>(
+		ctx,
+		"ast-summary.json",
+	);
+	return buildTechnicalSummary({
+		classification,
+		ast: ast?.files ? new Map(Object.entries(ast.files)) : undefined,
+		impact: readArtifactJson<AstImpact>(ctx, "ast-impact.json") ?? undefined,
+		headSha: classification.headSha,
+	});
+}
+
 /**
  * Grava um `review.<watchdog>.md` por watchdog com achados e devolve o índice.
  * Mantém o `review.md` consolidado navegável em PRs grandes (centenas de achados).
@@ -1028,6 +1121,8 @@ export function finalize(
 
 	persistContext(ctx);
 	const context = ctx.work.readContextSummary() ?? readPersistedContextSummary(ctx);
+	const technical =
+		readPersistedTechnicalSummary(ctx) ?? buildTechnicalFallback(ctx, classification);
 	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;
 	const domains = writeDomainReports(
 		ctx,
@@ -1061,7 +1156,7 @@ export function finalize(
 			context,
 			classification,
 			findings: merged,
-			nameOf,
+			technical,
 		}),
 	});
 

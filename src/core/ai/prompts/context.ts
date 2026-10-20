@@ -9,9 +9,9 @@ export function contextInstructions(): string {
 	return buildSystem(
 		"Você resume o contexto de uma Pull Request para revisores técnicos.",
 		[
-			"Objetivo em uma frase (máx. 200 caracteres).",
-			"Motivação em uma frase (máx. 240 caracteres).",
-			"Resumo das alterações em até 4 bullets (máx. 160 caracteres cada).",
+			"Objetivo em até 2 frases (máx. 400 caracteres).",
+			"Motivação em até 3 frases (máx. 480 caracteres), com o problema e o impacto esperado.",
+			"Resumo das alterações em até 6 bullets (máx. 240 caracteres cada), focado em comportamento, fluxos e impacto.",
 			"Não invente informação ausente do contexto.",
 		],
 	);

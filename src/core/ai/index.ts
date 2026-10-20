@@ -21,6 +21,7 @@ export { AiBriefEnricher } from "./features/brief-enricher";
 export { AiClassifier } from "./features/classifier";
 export { AiContextSummarizer } from "./features/context-summarizer";
 export { AiPreAnalyzer } from "./features/pre-analyzer";
+export { AiTechnicalSummarizer } from "./features/technical-summarizer";
 export { AiVerifier } from "./features/verifier";
 export { hasProviderCredential, ModelFactory } from "./model-factory";
 export {
@@ -35,6 +36,8 @@ export {
 	type ContextSummaryPlan,
 	ContextSummarySchema,
 	SeveritySchema,
+	type TechnicalSummaryPlan,
+	TechnicalSummarySchema,
 	VerifySchema,
 	WatchdogReportSchema,
 } from "./schemas";
