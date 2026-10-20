@@ -188,7 +188,8 @@ describe("cli smoke — imports dinâmicos", () => {
 	test("doctor valida a config (import lazy de registry-check)", () => {
 		const project = makeProject();
 		try {
-			const result = runCli(project.cwd, ["doctor"]);
+			// `--no-ping`: o teste cobre import lazy, não latência de rede.
+			const result = runCli(project.cwd, ["doctor", "--no-ping"]);
 			expect(result.code).toBe(0);
 			expect(result.stdout).toContain("Validando");
 		} finally {

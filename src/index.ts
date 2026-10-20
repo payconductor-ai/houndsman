@@ -252,4 +252,9 @@ export {
 } from "./core/watchdog-registry";
 export type { ServerOptions } from "./server";
 export { createRequestHandler, HoundsmanServer, startServer } from "./server";
+export type {
+	DeleteRunResult,
+	RunDetail,
+	RunListItem,
+} from "./server/run-repository";
 export { RunRepository } from "./server/run-repository";

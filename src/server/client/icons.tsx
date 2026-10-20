@@ -120,6 +120,16 @@ export const Alert = (p: IconProps) => (
 	</Svg>
 );
 
+/** Lixeira — excluir a run. */
+export const Trash = (p: IconProps) => (
+	<Svg {...p}>
+		<path d="M4 7h16" />
+		<path d="M9 7V4h6v3" />
+		<path d="m6.5 7 1 13h9l1-13" />
+		<path d="M10 11v6M14 11v6" />
+	</Svg>
+);
+
 export const ListIcon = (p: IconProps) => (
 	<Svg {...p}>
 		<path d="M9 6h12M9 12h12M9 18h12" />

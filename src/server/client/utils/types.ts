@@ -150,6 +150,15 @@ export type CheckoutResponse =
 			changes?: string[];
 	  };
 
+/** Resultado de `DELETE /api/runs/:slug`. */
+export type DeleteRunResponse = {
+	deleted: boolean;
+	worktreeRequested: boolean;
+	worktreeRemoved: boolean;
+	worktreePath?: string;
+	warning?: string;
+};
+
 export type PrWorktreeResponse =
 	| {
 			ok: true;

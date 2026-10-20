@@ -111,6 +111,44 @@ describe("server API", () => {
 		}
 	});
 
+	test("DELETE /api/runs/:slug apaga review, findings, artefatos e staging", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config, env);
+			const res = await handler(
+				new Request("http://localhost/api/runs/main", { method: "DELETE" }),
+			);
+			expect(res.status).toBe(200);
+			const body = (await res.json()) as { deleted: boolean };
+			expect(body.deleted).toBe(true);
+
+			expect(env.storage.getReview(env.reviewId)).toBeNull();
+			expect(env.storage.readFindings(env.reviewId)).toBeNull();
+			expect(env.storage.listArtifacts(env.reviewId)).toHaveLength(0);
+
+			const list = await get(handler, "/api/runs");
+			const after = (await list.json()) as { runs: unknown[] };
+			expect(after.runs).toHaveLength(0);
+		} finally {
+			env.cleanup();
+		}
+	});
+
+	test("DELETE /api/runs/:slug inexistente devolve 404", async () => {
+		const env = makeEnv();
+		try {
+			const handler = createRequestHandler(env.config, env);
+			const res = await handler(
+				new Request("http://localhost/api/runs/nao-existe", {
+					method: "DELETE",
+				}),
+			);
+			expect(res.status).toBe(404);
+		} finally {
+			env.cleanup();
+		}
+	});
+
 	test("GET findings reconstrói do artefato e PATCH atualiza o estado", async () => {
 		const env = makeEnv();
 		try {

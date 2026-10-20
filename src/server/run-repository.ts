@@ -36,7 +36,10 @@ import {
 import { pingFindingsStatus } from "../core/run-status";
 import { systemClock } from "../core/services/clock";
 import { defaultGhRunner } from "../core/services/gh-client";
+import type { WorktreeManager } from "../core/services/worktree-manager";
+import { workRoot } from "../core/storage/paths";
 import type { RepoIdentity, ReviewRecord, StorageProvider } from "../core/storage/types";
+import { ReviewWorkArea } from "../core/storage/work-area";
 import type { Severity } from "../core/types";
 import { isSlug } from "./artifacts";
 import { fetchPrComments, type PrCommentsResponse } from "./pr-comments";
@@ -72,6 +75,18 @@ export type RunDetail = {
 	deleted: string[];
 };
 
+/** Resultado da exclusão de uma run. */
+export type DeleteRunResult = {
+	deleted: boolean;
+	/** O usuário pediu para remover o worktree. */
+	worktreeRequested: boolean;
+	/** O worktree foi de fato removido. */
+	worktreeRemoved: boolean;
+	worktreePath?: string;
+	/** Aviso quando o worktree não pôde ser removido. */
+	warning?: string;
+};
+
 /** Resultado do envio dos findings à PR. */
 export type SubmitResult =
 	| { available: false; reason: string }
@@ -90,15 +105,18 @@ export class RunRepository {
 	private readonly storage: StorageProvider;
 	private readonly repo: RepoIdentity;
 	private readonly ghRunner: GhRunner;
+	private readonly worktrees?: WorktreeManager;
 
 	constructor(
 		storage: StorageProvider,
 		repo: RepoIdentity,
 		ghRunner: GhRunner = defaultGhRunner,
+		worktrees?: WorktreeManager,
 	) {
 		this.storage = storage;
 		this.repo = repo;
 		this.ghRunner = ghRunner;
+		this.worktrees = worktrees;
 	}
 
 	/** `true` se o slug aponta para uma run do repositório atual. */
@@ -171,6 +189,49 @@ export class RunRepository {
 			watchdogs: Object.keys(classification?.watchdogs ?? {}),
 			unclassified: classification?.unclassified ?? [],
 			deleted: classification?.deleted ?? [],
+		};
+	}
+
+	/**
+	 * Apaga a run por completo: staging local, findings, histórico, artefatos e a
+	 * review. Opcionalmente remove o worktree (com `--force`, pois a run foi
+	 * confirmada para exclusão).
+	 */
+	delete(
+		slug: string,
+		options: { removeWorktree?: boolean } = {},
+	): DeleteRunResult | null {
+		const review = this.findBySlug(slug);
+		if (!review) return null;
+
+		const worktreePath = review.worktreePath;
+		const removeWorktree = options.removeWorktree === true && Boolean(worktreePath);
+		let worktreeRemoved = false;
+		let warning: string | undefined;
+
+		if (removeWorktree && worktreePath) {
+			if (this.worktrees) {
+				const result = this.worktrees.remove(worktreePath, { force: true });
+				worktreeRemoved = result.removed;
+				if (!result.removed) {
+					warning = result.detail ?? "worktree não removido";
+				}
+			} else {
+				warning = "worktree não gerenciado por este servidor";
+			}
+		}
+
+		// Staging atual (dentro do worktree quando existe) + legado no home.
+		new ReviewWorkArea(review).clean();
+		new ReviewWorkArea(review, workRoot()).clean();
+
+		this.storage.deleteReview(review.id);
+		return {
+			deleted: true,
+			worktreeRequested: options.removeWorktree === true,
+			worktreeRemoved,
+			worktreePath,
+			warning,
 		};
 	}
 

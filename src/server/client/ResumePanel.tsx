@@ -10,7 +10,7 @@
 
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { ExternalLink, Layers } from "./icons";
+import { ExternalLink, Layers, Trash } from "./icons";
 import { MarkdownBlocks } from "./MarkdownText";
 import { api } from "./utils/api";
 import { SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";
@@ -79,13 +79,13 @@ export function ResumePanel({
 	branch,
 	findings,
 	summary,
-	onOpenArtifacts,
+	onRequestDelete,
 }: {
 	slug: string;
 	branch: string;
 	findings: Finding[];
 	summary: Summary;
-	onOpenArtifacts: () => void;
+	onRequestDelete: () => void;
 }) {
 	const [resume, setResume] = useState("");
 	const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -241,12 +241,12 @@ export function ResumePanel({
 					<span class={`resume-status ${status.tone}`}>{status.label}</span>
 					<button
 						type="button"
-						class="btn"
-						title="Ver os artefatos brutos da revisão"
-						onClick={onOpenArtifacts}
+						class="btn danger"
+						title="Excluir esta execução, seus findings e artefatos locais"
+						onClick={onRequestDelete}
 					>
-						<Layers size={14} />
-						Ver artefatos
+						<Trash size={14} />
+						Excluir
 					</button>
 				</div>
 			</section>

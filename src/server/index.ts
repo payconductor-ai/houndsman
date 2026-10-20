@@ -191,6 +191,14 @@ async function route(
 	const rest = match[2] ?? "";
 	if (!runs.exists(slug)) return notFound(`run '${slug}' não encontrada`);
 
+	if (rest === "" && request.method === "DELETE") {
+		const removeWorktree = ["1", "true"].includes(
+			url.searchParams.get("worktree") ?? "",
+		);
+		const result = runs.delete(slug, { removeWorktree });
+		return result ? json(result) : notFound(`run '${slug}' não encontrada`);
+	}
+
 	if (rest === "" || rest === "/") return json(runs.detail(slug));
 
 	if (rest === "/comments" && request.method === "GET") {
@@ -260,13 +268,6 @@ export class HoundsmanServer {
 	constructor(config: HoundsmanConfig, deps: ServerDeps = {}) {
 		const repo = deps.repo ?? resolveRepoIdentity();
 		this.ghRunner = deps.ghRunner ?? defaultGhRunner;
-		this.runs = new RunRepository(
-			deps.storage ?? createStorage(config),
-			repo,
-			this.ghRunner,
-		);
-		this.editor =
-			deps.editor ?? resolveEditor(deps.editorPreference, process.env, repo.root);
 		this.git = new GitRepository(deps.gitRunner ?? createGitRunner(repo.root));
 		this.prs = new PrInbox(this.ghRunner, this.git);
 		this.worktrees = new WorktreeManager(
@@ -277,6 +278,14 @@ export class HoundsmanServer {
 				baseDir: resolveWorktreesRoot(config.worktrees?.location, repo.root),
 			},
 		);
+		this.runs = new RunRepository(
+			deps.storage ?? createStorage(config),
+			repo,
+			this.ghRunner,
+			this.worktrees,
+		);
+		this.editor =
+			deps.editor ?? resolveEditor(deps.editorPreference, process.env, repo.root);
 	}
 
 	/** Handler de requisições (testável sem abrir porta). */
@@ -500,6 +509,13 @@ code, pre, .mono { font-family:var(--font-mono); tab-size:4; }
   transition:background .15s ease, border-color .15s ease, color .15s ease; }
 .btn:hover { background:#202027; border-color:var(--accent-line); }
 .btn:disabled { opacity:.55; cursor:not-allowed; }
+.btn.danger { color:#ffb3b3; background:rgba(255,86,86,.12); border-color:rgba(255,86,86,.4); }
+.btn.danger:hover { background:rgba(255,86,86,.2); border-color:rgba(255,86,86,.62); }
+.modal-check { display:flex; align-items:flex-start; gap:10px; padding:12px 14px; font-size:12.5px; line-height:1.55;
+  color:var(--fg); background:var(--surface-2); border:1px solid var(--border); border-radius:12px; cursor:pointer; }
+.modal-check input { margin:3px 0 0; flex:none; accent-color:var(--accent); }
+.modal-check code { font-family:var(--font-mono); font-size:11.5px; color:var(--muted); word-break:break-all; }
+.modal-warn { margin:0; font-size:12px; line-height:1.55; color:var(--muted); }
 .icon.spin { animation:spin .8s linear infinite; }
 .content { width:100%; max-width:1180px; margin:0 auto; padding:22px 24px 64px; }
 .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; margin-bottom:16px; }

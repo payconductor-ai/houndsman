@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks"
 import { ArtifactsPanel } from "./ArtifactsPanel";
 import { AutoRefresh } from "./AutoRefresh";
 import { CommentsPanel } from "./CommentsPanel";
+import { DeleteRunModal } from "./DeleteRunModal";
 import { Filters, type FiltersState } from "./Filters";
 import { FindingsList } from "./FindingsList";
 import { FileText, Layers, ListIcon, MessageSquare, Refresh, Send } from "./icons";
@@ -17,7 +18,13 @@ import { SubmitModal } from "./SubmitModal";
 import { SummaryBar } from "./SummaryBar";
 import { api, computeSummary } from "./utils/api";
 import { AUTO_REFRESH_MS, TAB_CAPTIONS } from "./utils/constants";
-import type { EditorContext, Finding, FindingsResponse, RunSummary } from "./utils/types";
+import type {
+	DeleteRunResponse,
+	EditorContext,
+	Finding,
+	FindingsResponse,
+	RunSummary,
+} from "./utils/types";
 
 type Tab = "resume" | "findings" | "artifacts" | "comments";
 
@@ -67,6 +74,7 @@ export function App() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [syncing, setSyncing] = useState(false);
 	const [submitOpen, setSubmitOpen] = useState(false);
+	const [deleteOpen, setDeleteOpen] = useState(false);
 	/** Editor detectado pelo servidor — base dos links de código. */
 	const [editor, setEditor] = useState<EditorContext>({ kind: "vscode" });
 	/** Refs espelhando estado volátil — o polling não deve recriar o intervalo. */
@@ -212,8 +220,28 @@ export function App() {
 
 	const summary = useMemo(() => computeSummary(data?.findings ?? []), [data]);
 
-	const branch =
-		data?.branch ?? runs.find((run) => run.slug === slug)?.branch ?? slug ?? "";
+	const selectedRun = runs.find((run) => run.slug === slug) ?? null;
+	const branch = data?.branch ?? selectedRun?.branch ?? slug ?? "";
+
+	/** Após excluir: limpa a seleção e escolhe a próxima run da lista. */
+	const afterDelete = useCallback((result: DeleteRunResponse) => {
+		setDeleteOpen(false);
+		setData(null);
+		setSlug(null);
+		if (result.warning) {
+			setError(
+				`Execução excluída, mas o worktree não foi removido: ${result.warning}`,
+			);
+		} else {
+			setError("");
+		}
+		api<{ runs: RunSummary[] }>("/api/runs")
+			.then(({ runs: list }) => {
+				setRuns(list);
+				setSlug(list[0]?.slug ?? null);
+			})
+			.catch((err) => setError(String(err)));
+	}, []);
 
 	return (
 		<div class="app">
@@ -290,7 +318,7 @@ export function App() {
 							branch={branch}
 							findings={data.findings}
 							summary={summary}
-							onOpenArtifacts={() => setTab("artifacts")}
+							onRequestDelete={() => setDeleteOpen(true)}
 						/>
 					)}
 					{slug && tab === "findings" && data && (
@@ -312,13 +340,23 @@ export function App() {
 					{!slug && !error && <p class="empty">Nenhuma execução para triar.</p>}
 				</div>
 				{slug && (
-					<SubmitModal
-						slug={slug}
-						branch={branch}
-						open={submitOpen}
-						onClose={() => setSubmitOpen(false)}
-						onSubmitted={afterSubmit}
-					/>
+					<>
+						<SubmitModal
+							slug={slug}
+							branch={branch}
+							open={submitOpen}
+							onClose={() => setSubmitOpen(false)}
+							onSubmitted={afterSubmit}
+						/>
+						<DeleteRunModal
+							slug={slug}
+							branch={branch}
+							worktreePath={selectedRun?.worktreePath}
+							open={deleteOpen}
+							onClose={() => setDeleteOpen(false)}
+							onDeleted={afterDelete}
+						/>
+					</>
 				)}
 			</main>
 		</div>
