@@ -6,7 +6,7 @@
  */
 
 import type { ZodType, ZodTypeAny } from "zod";
-import type { AiProviderKind } from "../config";
+import type { AiProviderKind, AiProviderOptions } from "../config";
 
 /** Uso de tokens de uma chamada (ou acumulado de uma review). */
 export type AiUsage = {
@@ -52,6 +52,8 @@ export type ModelRequest<T> = {
 	maxSteps?: number;
 	maxOutputTokens?: number;
 	temperature?: number;
+	/** Opções do AI SDK por provider (repassadas ao SDK sem interpretação). */
+	providerOptions?: AiProviderOptions;
 	signal?: AbortSignal;
 };
 

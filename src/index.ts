@@ -49,6 +49,7 @@ export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export { ProjectScaffolder } from "./core/commands/scaffold";
 export type {
 	AiProviderKind,
+	AiProviderOptions,
 	HoundsmanAi,
 	HoundsmanAiFeatures,
 	HoundsmanAst,

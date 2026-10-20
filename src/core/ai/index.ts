@@ -2,7 +2,7 @@
  * Barrel da camada de IA (`core/ai`).
  */
 
-export type { AiProviderKind } from "../config";
+export type { AiProviderKind, AiProviderOptions } from "../config";
 export type {
 	AiClientOptions,
 	AiCredentialCheck,

@@ -154,12 +154,20 @@ ai: {
 		verify: false,
 	},
 	watchdogs: { alpha: { model: "deepseek-v4-pro", maxSteps: 8 } },
+	// Opções do AI SDK por provider, repassadas sem interpretação.
+	// Nos modelos V4 o thinking vem ligado e `temperature` é ignorada;
+	// para voltar a usar temperature, desligue o thinking:
+	// providerOptions: { deepseek: { thinking: { type: "disabled" } } },
 },
 ```
 
 Falhas de IA no fluxo normal são **fail-open**: sem chave, o fluxo determinístico segue
 idêntico. O `hunt` é explícito e falha com mensagem clara quando não há IA configurada
 (use `--dry-run` para inspecionar sem chamadas).
+
+`ai.temperature` tem default `0`, mas é **omitida** quando o provider não a aplica
+(DeepSeek V4 em thinking mode). O motor também aceita `reasoningEffort` por
+`providerOptions`, sem acoplar a config a um provider específico.
 
 ## Worktrees
 

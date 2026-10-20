@@ -10,6 +10,7 @@ import type { LanguageModel, ToolSet } from "ai";
 import { generateText, Output, stepCountIs, tool } from "ai";
 import type { AiProviderKind } from "../config";
 import { AiProviderError } from "./errors";
+import { temperatureApplies } from "./provider-capabilities";
 import {
 	type AiTool,
 	type AiUsage,
@@ -45,6 +46,47 @@ function numberOrZero(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+/** Argumentos aceitos por `generateText` (inclui `providerOptions` do SDK). */
+type GenerateTextArgs = Parameters<typeof generateText>[0];
+
+/**
+ * Argumentos de `generateText` derivados do pedido (puro — testável sem rede).
+ *
+ * `temperature` só é enviada quando o provider de fato a aplica: em thinking
+ * mode (DeepSeek V4 default) o AI SDK a descarta e emite warning por chamada.
+ */
+export function buildGenerateTextArgs<T>(
+	model: LanguageModel,
+	request: ModelRequest<T>,
+	provider: AiProviderKind,
+	modelId: string,
+) {
+	const tools = request.tools ? toToolSet(request.tools) : undefined;
+	const hasTools = tools !== undefined && Object.keys(tools).length > 0;
+	const maxSteps = request.maxSteps ?? 1;
+	const providerOptions = request.providerOptions
+		? (request.providerOptions as GenerateTextArgs["providerOptions"])
+		: undefined;
+	const temperature =
+		request.temperature !== undefined &&
+		temperatureApplies(provider, modelId, request.providerOptions)
+			? request.temperature
+			: undefined;
+	return {
+		model,
+		system: request.instructions,
+		prompt: request.prompt,
+		...(hasTools ? { tools, stopWhen: stepCountIs(maxSteps) } : {}),
+		...(request.outputSchema
+			? { output: Output.object({ schema: request.outputSchema }) }
+			: {}),
+		...(request.maxOutputTokens ? { maxOutputTokens: request.maxOutputTokens } : {}),
+		...(providerOptions ? { providerOptions } : {}),
+		...(temperature !== undefined ? { temperature } : {}),
+		maxRetries: 0,
+	};
+}
+
 /** Provider de modelo apoiado no AI SDK. */
 export class AiSdkModelProvider implements ModelProvider {
 	constructor(
@@ -54,27 +96,10 @@ export class AiSdkModelProvider implements ModelProvider {
 	) {}
 
 	async generate<T>(request: ModelRequest<T>): Promise<ModelResponse<T>> {
-		const tools = request.tools ? toToolSet(request.tools) : undefined;
-		const hasTools = tools !== undefined && Object.keys(tools).length > 0;
-		const maxSteps = request.maxSteps ?? 1;
-
 		try {
 			const result = await generateText({
-				model: this.model,
-				system: request.instructions,
-				prompt: request.prompt,
-				...(hasTools ? { tools, stopWhen: stepCountIs(maxSteps) } : {}),
-				...(request.outputSchema
-					? { output: Output.object({ schema: request.outputSchema }) }
-					: {}),
-				...(request.maxOutputTokens
-					? { maxOutputTokens: request.maxOutputTokens }
-					: {}),
-				...(request.temperature !== undefined
-					? { temperature: request.temperature }
-					: {}),
+				...buildGenerateTextArgs(this.model, request, this.name, this.modelId),
 				...(request.signal ? { abortSignal: request.signal } : {}),
-				maxRetries: 0,
 			});
 
 			const output = request.outputSchema

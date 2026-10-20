@@ -219,6 +219,9 @@ export type HoundsmanAst = {
 /** Providers suportados pela camada de IA. */
 export type AiProviderKind = "deepseek" | "openai" | "anthropic";
 
+/** Opções do AI SDK por provider (repassadas sem interpretação). */
+export type AiProviderOptions = Record<string, Record<string, unknown>>;
+
 /** Features de IA do fluxo normal (todas fail-open). */
 export type HoundsmanAiFeatures = {
 	context?: boolean;
@@ -246,6 +249,7 @@ export type HoundsmanAi = {
 	maxSteps?: number;
 	maxOutputTokens?: number;
 	temperature?: number;
+	providerOptions?: AiProviderOptions;
 	timeoutMs?: number;
 	maxCallsPerReview?: number;
 	maxTokensPerReview?: number;

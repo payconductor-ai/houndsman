@@ -3,8 +3,11 @@
  */
 
 import { describe, expect, test } from "bun:test";
+import type { LanguageModel } from "ai";
 import { z } from "zod";
 import { AiClient, AiUsageBudget, AiUsageRecorder } from "../core/ai";
+import { buildGenerateTextArgs } from "../core/ai/ai-sdk-model-provider";
+import { temperatureApplies } from "../core/ai/provider-capabilities";
 import { defineHoundsmanConfig } from "../core/config";
 import { DEFAULT_AI_MODEL } from "../core/defaults";
 import { ProjectConfig } from "../core/project-config";
@@ -78,6 +81,74 @@ describe("AiClient", () => {
 
 			const missing = new AiClient({ project, provider: null });
 			expect((await missing.validateCredential()).kind).toBe("missing");
+		});
+	});
+});
+
+describe("temperature e providerOptions", () => {
+	test("DeepSeek V4 ignora temperature; thinking disabled reabilita", () => {
+		expect(temperatureApplies("deepseek", "deepseek-v4-pro", undefined)).toBe(false);
+		expect(
+			temperatureApplies("deepseek", "deepseek-v4-pro", {
+				deepseek: { thinking: { type: "disabled" } },
+			}),
+		).toBe(true);
+		expect(
+			temperatureApplies("deepseek", "deepseek-v4-pro", {
+				deepseek: { thinking: { type: "enabled" } },
+			}),
+		).toBe(false);
+		expect(temperatureApplies("deepseek", "deepseek-chat", undefined)).toBe(true);
+		expect(temperatureApplies("openai", "gpt-4o", undefined)).toBe(true);
+	});
+
+	test("adapter omite temperature ignorada e repassa providerOptions", () => {
+		const model = {} as LanguageModel;
+		const thinkingOff = buildGenerateTextArgs(
+			model,
+			{
+				prompt: "oi",
+				temperature: 0,
+				providerOptions: { deepseek: { thinking: { type: "disabled" } } },
+			},
+			"deepseek",
+			"deepseek-v4-pro",
+		);
+		expect(thinkingOff).toMatchObject({
+			temperature: 0,
+			providerOptions: { deepseek: { thinking: { type: "disabled" } } },
+		});
+
+		const defaultThinking = buildGenerateTextArgs(
+			model,
+			{ prompt: "oi", temperature: 0 },
+			"deepseek",
+			"deepseek-v4-pro",
+		);
+		expect(defaultThinking).not.toHaveProperty("temperature");
+
+		const openai = buildGenerateTextArgs(
+			model,
+			{ prompt: "oi", temperature: 0 },
+			"openai",
+			"gpt-4o",
+		);
+		expect(openai).toMatchObject({ temperature: 0 });
+	});
+
+	test("AiClient injeta providerOptions da config", async () => {
+		const configured = new ProjectConfig({
+			...fakeHoundsmanConfig,
+			ai: { providerOptions: { deepseek: { thinking: { type: "disabled" } } } },
+		});
+		const provider = new FakeModelProvider(() => ({ ok: true }));
+		const client = new AiClient({ project: configured, provider });
+		await client.generateObject("x", {
+			prompt: "oi",
+			outputSchema: z.object({ ok: z.boolean() }),
+		});
+		expect(provider.requests[0]?.providerOptions).toEqual({
+			deepseek: { thinking: { type: "disabled" } },
 		});
 	});
 });

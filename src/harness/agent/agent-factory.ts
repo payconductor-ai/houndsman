@@ -37,6 +37,7 @@ export class AgentFactory {
 			reporter: this.deps.reporter,
 			maxOutputTokens: config.maxOutputTokensFor(context.watchdog.id),
 			temperature: config.temperature,
+			providerOptions: config.providerOptions,
 			timeoutMs: config.timeoutMs,
 			ast: this.deps.ast,
 			readFile: this.deps.readFile,

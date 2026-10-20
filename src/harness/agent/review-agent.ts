@@ -8,7 +8,13 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type AiUsage, addUsage, emptyUsage, type ModelProvider } from "../../core/ai";
+import {
+	type AiProviderOptions,
+	type AiUsage,
+	addUsage,
+	emptyUsage,
+	type ModelProvider,
+} from "../../core/ai";
 import type { AstService } from "../../core/ast/service";
 import type { WatchdogReport } from "../../core/report-builder";
 import type { Severity } from "../../core/types";
@@ -49,6 +55,7 @@ export type ReviewAgentDeps = {
 	reporter: AgentReporter;
 	maxOutputTokens: number;
 	temperature: number;
+	providerOptions?: AiProviderOptions;
 	timeoutMs: number;
 	ast: AstService;
 	readFile?: (path: string) => string | null;
@@ -338,6 +345,9 @@ export class ReviewAgent {
 			maxSteps,
 			maxOutputTokens: this.deps.maxOutputTokens,
 			temperature: this.deps.temperature,
+			...(this.deps.providerOptions
+				? { providerOptions: this.deps.providerOptions }
+				: {}),
 			signal: AbortSignal.timeout(this.deps.timeoutMs),
 		});
 		this.usage = addUsage(this.usage, response.usage);

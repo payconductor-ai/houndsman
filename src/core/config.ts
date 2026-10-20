@@ -57,6 +57,15 @@ export type HoundsmanConcurrency = {
 /** Providers suportados pela camada de IA. */
 export type AiProviderKind = "deepseek" | "openai" | "anthropic";
 
+/**
+ * Opções do AI SDK indexadas pelo id do provider
+ * (`{ deepseek: { thinking: { type: "disabled" } } }`).
+ *
+ * O motor não interpreta o conteúdo: só repassa. Use para controlar
+ * thinking/reasoning sem acoplar a config a um provider específico.
+ */
+export type AiProviderOptions = Record<string, Record<string, unknown>>;
+
 /** Features de IA do fluxo determinístico (todas fail-open). */
 export type HoundsmanAiFeatures = {
 	/** Resume o contexto da PR (`context-summary`) quando o subagente não gerou. */
@@ -96,8 +105,13 @@ export type HoundsmanAi = {
 	maxSteps?: number;
 	/** Teto de tokens de saída por chamada. */
 	maxOutputTokens?: number;
-	/** Temperatura (default: 0). */
+	/**
+	 * Temperatura (default: 0). Ignorada quando o provider usa thinking
+	 * (DeepSeek V4 liga thinking por default) — nesse caso o motor não a envia.
+	 */
 	temperature?: number;
+	/** Opções do AI SDK por provider (repassadas sem interpretação). */
+	providerOptions?: AiProviderOptions;
 	/** Timeout por chamada em ms (default: 120_000). */
 	timeoutMs?: number;
 	/** Teto de chamadas por review (default: 40). */

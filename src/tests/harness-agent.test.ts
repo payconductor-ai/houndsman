@@ -119,4 +119,23 @@ describe("ReviewAgent", () => {
 		expect(result.status).toBe("failed");
 		expect(result.error).toContain("429");
 	});
+
+	test("repassa providerOptions da config em toda chamada", async () => {
+		const provider = investigatingProvider();
+		const reporter = new SilentReporter();
+		const agent = new ReviewAgent(
+			fakeAgentDeps(provider, {
+				context: fakeAgentContext({ repoRoot: dir }),
+				reporter,
+				providerOptions: { deepseek: { thinking: { type: "disabled" } } },
+			}),
+		);
+		await agent.run();
+		expect(provider.requests.length).toBeGreaterThan(0);
+		for (const request of provider.requests) {
+			expect(request.providerOptions).toEqual({
+				deepseek: { thinking: { type: "disabled" } },
+			});
+		}
+	});
 });

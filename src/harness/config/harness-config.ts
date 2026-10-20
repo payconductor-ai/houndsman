@@ -5,7 +5,7 @@
  * aplica apenas overrides de execução (`hunt --model`, `--max-calls`, etc.).
  */
 
-import type { AiProviderKind } from "../../core/config";
+import type { AiProviderKind, AiProviderOptions } from "../../core/config";
 import { ProjectConfig } from "../../core/project-config";
 
 /** Overrides de execução do harness. */
@@ -75,6 +75,11 @@ export class HarnessConfig {
 
 	get temperature(): number {
 		return this.project.aiTemperature;
+	}
+
+	/** Opções do AI SDK por provider (config do projeto, sem override de flag). */
+	get providerOptions(): AiProviderOptions | undefined {
+		return this.project.aiProviderOptions;
 	}
 }
 

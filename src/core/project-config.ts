@@ -8,6 +8,7 @@
 
 import type {
 	AiProviderKind,
+	AiProviderOptions,
 	HoundsmanAi,
 	HoundsmanAiFeatures,
 	HoundsmanAst,
@@ -136,6 +137,12 @@ export class ProjectConfig<TId extends string = string> {
 	get aiTemperature(): number {
 		const value = this.ai.temperature;
 		return typeof value === "number" && Number.isFinite(value) ? value : 0;
+	}
+
+	/** Opções do AI SDK por provider (undefined quando ausentes/vazias). */
+	get aiProviderOptions(): AiProviderOptions | undefined {
+		const value = this.ai.providerOptions;
+		return value && Object.keys(value).length > 0 ? value : undefined;
 	}
 
 	get aiTimeoutMs(): number {

@@ -7,6 +7,7 @@
  */
 
 import type { ZodType } from "zod";
+import type { AiProviderOptions } from "../config";
 import type { ProjectConfig } from "../project-config";
 import { AiConfigurationError, errorMessage } from "./errors";
 import { ModelFactory } from "./model-factory";
@@ -33,6 +34,8 @@ export type ObjectRequest<T> = {
 	maxSteps?: number;
 	maxOutputTokens?: number;
 	temperature?: number;
+	/** Opções do AI SDK por provider (mescladas com a config do projeto). */
+	providerOptions?: AiProviderOptions;
 	signal?: AbortSignal;
 };
 
@@ -188,6 +191,10 @@ export class AiClient {
 			const provider = await this.requireProvider(model);
 			const response = await provider.generate({
 				...request,
+				providerOptions: mergeProviderOptions(
+					this.project.aiProviderOptions,
+					request.providerOptions,
+				),
 				signal: combineSignals(request.signal, this.project.aiTimeoutMs),
 			});
 			this.budget.record(response.usage);
@@ -202,6 +209,20 @@ export class AiClient {
 			return { ok: false, error: errorMessage(error) };
 		}
 	}
+}
+
+/** Mescla opções por provider (o override do chamador vence chave a chave). */
+function mergeProviderOptions(
+	base: AiProviderOptions | undefined,
+	override: AiProviderOptions | undefined,
+): AiProviderOptions | undefined {
+	if (!base) return override;
+	if (!override) return base;
+	const merged: AiProviderOptions = { ...base };
+	for (const [provider, values] of Object.entries(override)) {
+		merged[provider] = { ...base[provider], ...values };
+	}
+	return merged;
 }
 
 /** Combina o sinal do chamador com o timeout configurado. */
