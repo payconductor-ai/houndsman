@@ -10,6 +10,7 @@
  * com o UUID interno no banco.
  */
 
+import { existsSync } from "node:fs";
 import { AiClient } from "../ai/ai-client";
 import { AiVerifier } from "../ai/features/verifier";
 import { type HoundsmanConfig, resolveJevConcurrency } from "../config";
@@ -107,11 +108,13 @@ function parseArgs(args: string[]): ParsedArgs {
 	return parsed;
 }
 
-/** Contexto de uma review (storage + registro + staging). */
+/** Contexto de uma review (storage + registro + staging + raiz). */
 type CommandContext = {
 	storage: StorageProvider;
 	review: ReviewRecord;
 	work: ReviewWorkArea;
+	/** Worktree da review quando existir; senão, a raiz do repositório. */
+	root: string;
 };
 
 /** Resolve a review da branch atual (explícita ou via git). */
@@ -127,7 +130,10 @@ function openContext(
 			`Nenhuma revisão para '${branch}'. Rode \`houndsman --finalize\` primeiro.`,
 		);
 	}
-	return { storage, review, work: new ReviewWorkArea(review) };
+	const worktree = review.worktreePath;
+	// Sem worktree, mantém a raiz onde o comando foi invocado (comportamento histórico).
+	const root = worktree && existsSync(worktree) ? worktree : process.cwd();
+	return { storage, review, work: new ReviewWorkArea(review), root };
 }
 
 /** Lê o estado de triagem; lança se a review ainda não tem findings. */
@@ -380,7 +386,7 @@ function execute(
 		}
 		case "sync": {
 			const state = loadState(ctx);
-			const result = syncState(state, fileReader(process.cwd()));
+			const result = syncState(state, fileReader(ctx.root));
 			ctx.storage.writeFindings(ctx.review.id, state);
 			pingStatus(ctx, state);
 			const output = parsed.bools.has("--json")
@@ -517,7 +523,7 @@ async function executeVerify(
 	const { JevCandidatesStore, JevClient, JevVerifier } = await import("../jev");
 
 	const findings = verifier.select(state, filterFrom(parsed));
-	const entries = verifier.verifyLocal(findings, fileReader(process.cwd()));
+	const entries = verifier.verifyLocal(findings, fileReader(ctx.root));
 
 	// Tier 1 — Jev só nos ambíguos (fail-open: sem chave/erro mantém o provisório).
 	let jevChecked = 0;
@@ -565,7 +571,7 @@ async function executeVerify(
 		} else if (!aiVerifier.enabled) {
 			aiReason = "feature ai.features.verify desligada";
 		} else {
-			const readFile = fileReader(process.cwd());
+			const readFile = fileReader(ctx.root);
 			const byId = new Map(findings.map((finding) => [finding.id, finding]));
 			const confidence = await aiVerifier.verify({
 				findings: stillAmbiguous.map((entry) => ({

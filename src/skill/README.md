@@ -39,13 +39,20 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 | 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (um por watchdog) |
 | 3. Finalizar | `bun run houndsman --finalize` | skill | `review.md` |
 
+> **Alvo = PR** (ex.: “revise a PR 456”): troque os passos por `houndsman context --pr 456`,
+> `houndsman --pr 456` e `houndsman --pr 456 --finalize`. O prepare cria um **worktree**
+> detached em `<repo>/.houndsman/worktrees/<repo>/<branch>`; os briefs trazem
+> `**Worktree:**` e os subagentes devem ler essa árvore (nunca o clone principal).
+
 ## Comandos
 
 | Comando | Função |
 |---|---|
-| `houndsman context` | Passo 0 — contexto da PR via `gh` |
+| `houndsman context` | Passo 0 — contexto da PR via `gh` (`--pr <n>`/`--worktree <path>`) |
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
-| `houndsman --finalize` | Passo 3 — gerar o relatório |
+| `houndsman --pr <n>` | Passo 1 em worktree dedicado (revisões paralelas) |
+| `houndsman --finalize` | Passo 3 — gerar o relatório (`--pr <n>` reusa o worktree) |
+| `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 | `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `houndsman server` | UI local de triagem (Bun.serve + Preact) |
@@ -57,7 +64,8 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 ### Flags
 
 `--config <path>` · `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
-`--branch <nome>` · `--clean` · `--full` · `--no-jev` · `--fail-on-blocking` (no `--finalize`).
+`--branch <nome>` · `--pr <n>` · `--worktree <path>` · `--clean` · `--full` · `--no-jev` ·
+`--fail-on-blocking` (no `--finalize`).
 
 ## Artefatos
 

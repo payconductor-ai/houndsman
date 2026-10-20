@@ -31,6 +31,8 @@ export type ReviewRow = {
 	status: string | null;
 	started_at: string | null;
 	heartbeat_at: string | null;
+	worktree_path: string | null;
+	pr_number: number | null;
 	created_at: string;
 	updated_at: string;
 };
@@ -95,6 +97,8 @@ export function reviewFromRow(row: ReviewRow): ReviewRecord {
 		headSha: row.head_sha ?? undefined,
 		reviewedSha: row.reviewed_sha ?? undefined,
 		reviewedAt: row.reviewed_at ?? undefined,
+		worktreePath: row.worktree_path ?? undefined,
+		prNumber: row.pr_number ?? undefined,
 		status: (row.status as ReviewRecord["status"]) ?? null,
 		startedAt: row.started_at ?? undefined,
 		heartbeatAt: row.heartbeat_at ?? undefined,

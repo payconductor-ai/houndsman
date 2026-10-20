@@ -19,6 +19,13 @@ export const DEFAULT_MAX_FILES_PER_BRIEF = 40;
 /** Concorrência default das chamadas simultâneas ao Jev. */
 export const DEFAULT_JEV_CONCURRENCY = 5;
 
+/**
+ * Localização default dos worktrees: dentro do workspace aberto no editor.
+ * Mantém leitura/execução dentro da pasta do projeto — agentes com permissão
+ * escopada ao workspace não pedem autorização a cada acesso.
+ */
+export const DEFAULT_WORKTREES_LOCATION = "workspace";
+
 /** Teto default de bytes por arquivo no AST (evita bundles/minificados). */
 export const DEFAULT_AST_MAX_FILE_BYTES = 512_000;
 

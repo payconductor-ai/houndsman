@@ -108,6 +108,17 @@ export type HoundsmanAi = {
 	watchdogs?: Record<string, HoundsmanAiWatchdog>;
 };
 
+/** Onde os worktrees de revisão são criados. */
+export type HoundsmanWorktrees = {
+	/**
+	 * `workspace` (default): `<repo>/.houndsman/worktrees` — dentro da pasta
+	 * aberta no editor, então agentes com permissão escopada ao workspace
+	 * conseguem ler/executar sem prompts. `home`: `<HOUNDSMAN_HOME>/worktrees`.
+	 * Qualquer outro valor é um caminho (absoluto ou relativo à raiz do repo).
+	 */
+	location?: "home" | "workspace" | string;
+};
+
 /** Backend de persistência (reviews, findings e artefatos). */
 export type HoundsmanStorage = {
 	/**
@@ -132,6 +143,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
 	/** Persistência das runs e artefatos (default: SQLite global). */
 	storage?: HoundsmanStorage;
+	/** Localização dos worktrees de revisão (default: dentro do workspace). */
+	worktrees?: HoundsmanWorktrees;
 	/**
 	 * Ids dos watchdogs — **derivados** das chaves de `watchdogs` por
 	 * `defineHoundsmanConfig` (não informar manualmente).

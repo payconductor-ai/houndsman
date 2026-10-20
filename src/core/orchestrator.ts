@@ -16,13 +16,15 @@
  * review.<watchdog>.md, context e context-summary.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { AiClient } from "./ai/ai-client";
 import { AiBriefEnricher } from "./ai/features/brief-enricher";
 import { AiClassifier } from "./ai/features/classifier";
 import { AiContextSummarizer } from "./ai/features/context-summarizer";
 import { AiPreAnalyzer } from "./ai/features/pre-analyzer";
 import type { BriefPlan } from "./ai/schemas";
+import { assetPath, OUTPUT_FORMAT_FILE } from "./assets";
 import type { AstService } from "./ast/service";
 import type { AstAnalysis, AstFileBrief, AstImpact } from "./ast/types";
 import {
@@ -39,7 +41,6 @@ import { ReviewScopeResolver, type RunClassification } from "./engine/review-sco
 import { ENV_NAMES } from "./env";
 import type { BudgetSelection, ClassificationResult } from "./file-classifier";
 import { buildStateFromFindings, fileReader } from "./findings-state";
-import { resolveSha } from "./git-revision";
 import { syncResolvedThreads } from "./github-review";
 import {
 	type JevCandidate,
@@ -56,7 +57,6 @@ import {
 	REVIEW_FILE,
 	REVIEW_RESUME_FILE,
 } from "./paths";
-import { currentBranch } from "./pr-context";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
 import {
@@ -76,6 +76,7 @@ import {
 } from "./report-builder";
 import { writeRunStatus } from "./run-status";
 import { systemClock } from "./services/clock";
+import { GitRepository } from "./services/git-repository";
 import type { ReviewRecord, StorageProvider } from "./storage/types";
 import { ReviewWorkArea } from "./storage/work-area";
 import type { WatchdogMeta } from "./types";
@@ -95,6 +96,12 @@ export type ReviewOptions = {
 	full: boolean;
 	/** Desativa as features de IA do fluxo normal (hunt não usa esta flag). */
 	noAi: boolean;
+	/** PR de origem (resolvida via `--pr`). */
+	pr?: number;
+	/** Worktree informado via flag (`--worktree`). */
+	worktree?: string;
+	/** Worktree resolvido (absoluto; ausente = clone principal). */
+	worktreePath?: string;
 };
 
 /** Valores default das opções (o CLI sobrepõe com as flags). */
@@ -112,19 +119,49 @@ export function defaultOptions(): ReviewOptions {
 	};
 }
 
-/** Contexto de uma run: storage + review + staging. */
+/** Workspace onde os arquivos da review são lidos. */
+export type ReviewWorkspaceContext = {
+	/** Raiz operacional (worktree ou clone principal). */
+	root?: string;
+	/** Raiz do clone principal (identidade/config). */
+	mainRoot?: string;
+	git?: GitRepository;
+};
+
+/** Contexto de uma run: storage + review + staging + raiz operacional. */
 export type ReviewContext = {
 	storage: StorageProvider;
 	review: ReviewRecord;
 	work: ReviewWorkArea;
+	root: string;
+	mainRoot: string;
+	git: GitRepository;
 };
 
 /** Cria o contexto de uma review existente. */
 export function reviewContext(
 	storage: StorageProvider,
 	review: ReviewRecord,
+	workspace: ReviewWorkspaceContext = {},
 ): ReviewContext {
-	return { storage, review, work: new ReviewWorkArea(review) };
+	const root = workspace.root ?? process.cwd();
+	return {
+		storage,
+		review,
+		work: new ReviewWorkArea(review),
+		root,
+		mainRoot: workspace.mainRoot ?? root,
+		git: workspace.git ?? new GitRepository(),
+	};
+}
+
+/**
+ * Schema do output: relativo à raiz da review quando a camada existe; no
+ * worktree sem camada, cai para o asset embarcado (caminho absoluto legível).
+ */
+function outputFormatPathFor(ctx: ReviewContext): string {
+	if (existsSync(join(ctx.root, OUTPUT_FORMAT_PATH))) return OUTPUT_FORMAT_PATH;
+	return ctx.review.worktreePath ? assetPath(OUTPUT_FORMAT_FILE) : OUTPUT_FORMAT_PATH;
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +262,8 @@ function writeBriefs(
 			deleted: classification.deleted,
 			branch,
 			outputPath: work.findingFile(id),
-			outputFormatPath: OUTPUT_FORMAT_PATH,
+			outputFormatPath: outputFormatPathFor(ctx),
+			worktree: ctx.review.worktreePath,
 			docs,
 			context,
 			candidates: candidates.filter((c) => c.watchdogId === id),
@@ -277,7 +315,7 @@ async function resolveCandidates(
 				const def = findWatchdog(config, id);
 				if (!def) continue;
 				const inputs = files.slice(0, 5).flatMap((file) => {
-					const snippet = readSnippet(file);
+					const snippet = readSnippet(ctx.root, file);
 					return snippet ? [{ file, snippet }] : [];
 				});
 				candidates.push(
@@ -314,6 +352,7 @@ async function resolveCandidates(
 		const detector = new JevDetector(
 			client,
 			config.watchdogs as Record<string, WatchdogMeta>,
+			ctx.root,
 		);
 		const result = await detector.detect(classification, opts.base, opts.head, {
 			diff,
@@ -377,9 +416,10 @@ function budgetMessage(
 }
 
 /** Primeiras 80 linhas de um arquivo (pré-análise por IA; fail-open). */
-function readSnippet(file: string): string | null {
+function readSnippet(root: string, file: string): string | null {
 	try {
-		return readFileSync(file, "utf8").split("\n").slice(0, 80).join("\n");
+		const path = join(root, file);
+		return readFileSync(path, "utf8").split("\n").slice(0, 80).join("\n");
 	} catch {
 		return null;
 	}
@@ -507,12 +547,13 @@ export async function prepare(
 	ctx.storage.updateReview(ctx.review.id, { base: opts.base, head: opts.head });
 
 	// Marca o commit revisado e decide entre completo, incremental ou no-op.
-	const headSha = resolveSha(opts.head);
+	const headSha = ctx.git.resolveSha(opts.head);
 	const previous = ctx.storage.readFindings(ctx.review.id);
 	const scope = await new ReviewScopeResolver(
 		opts,
 		config,
 		opts.noAst ? undefined : ast,
+		ctx.git,
 	).resolve(previous, headSha);
 
 	// Mesmo commit já revisado: preserva artefatos e triagem, sem re-revisar.
@@ -937,7 +978,7 @@ export function finalize(
 	// (`reviewed.headSha`) habilita o review incremental e o diff focado do verify.
 	const state = buildStateFromFindings(merged, {
 		branch,
-		readFile: fileReader(process.cwd()),
+		readFile: fileReader(ctx.root),
 		previous: ctx.storage.readFindings(ctx.review.id),
 		reviewedPaths: new Set([
 			...reports.flatMap((report) => report.reviewedFiles),
@@ -1042,6 +1083,14 @@ export function finalize(
 }
 
 /** Resolve a branch (opção explícita ou a atual do git). */
-export function resolveBranch(opts: ReviewOptions): string {
-	return opts.branch ?? currentBranch();
+export function resolveBranch(
+	opts: ReviewOptions,
+	git: GitRepository = new GitRepository(),
+): string {
+	if (opts.branch) return opts.branch;
+	const branch = git.currentBranch();
+	if (!branch) {
+		throw new Error("Não foi possível detectar a branch. Use --branch <nome>.");
+	}
+	return branch;
 }

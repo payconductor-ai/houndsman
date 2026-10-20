@@ -135,6 +135,8 @@ export type WatchdogRenderArgs = {
 	branch: string;
 	outputPath: string;
 	outputFormatPath: string;
+	/** Worktree onde a review roda (ausente = clone principal). */
+	worktree?: string;
 	docs: readonly string[];
 	context?: WatchdogRenderContext | null;
 	candidates?: readonly WatchdogRenderCandidate[];

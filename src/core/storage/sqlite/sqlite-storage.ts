@@ -33,7 +33,7 @@ import { migrate } from "./schema";
 
 /** Colunas mutáveis de review (camel → snake). */
 const REVIEW_PATCH_COLUMNS: Record<
-	Exclude<keyof ReviewPatch, "resetStartedAt" | "resetHeartbeat">,
+	Exclude<keyof ReviewPatch, "resetStartedAt" | "resetHeartbeat" | "resetWorkspace">,
 	string
 > = {
 	branch: "branch",
@@ -43,6 +43,8 @@ const REVIEW_PATCH_COLUMNS: Record<
 	headSha: "head_sha",
 	reviewedSha: "reviewed_sha",
 	reviewedAt: "reviewed_at",
+	worktreePath: "worktree_path",
+	prNumber: "pr_number",
 	status: "status",
 	startedAt: "started_at",
 	heartbeatAt: "heartbeat_at",
@@ -70,13 +72,24 @@ export class SQLiteStorageProvider implements StorageProvider {
 		const existing = this.findReview(input.repo.key, input.branch);
 		if (existing) {
 			// O repo pode ter sido movido; a identidade continua a mesma.
-			if (
+			const moved =
 				existing.repoRoot !== input.repo.root ||
-				existing.repoRemote !== input.repo.remote
-			) {
+				existing.repoRemote !== input.repo.remote;
+			const workspace =
+				(input.worktreePath !== undefined &&
+					existing.worktreePath !== input.worktreePath) ||
+				(input.prNumber !== undefined && existing.prNumber !== input.prNumber);
+			if (moved || workspace) {
 				this.db.run(
-					"UPDATE reviews SET repo_root = ?, repo_remote = ? WHERE id = ?",
-					[input.repo.root, input.repo.remote ?? null, existing.id],
+					`UPDATE reviews SET repo_root = ?, repo_remote = ?, worktree_path = ?,
+					 pr_number = ? WHERE id = ?`,
+					[
+						input.repo.root,
+						input.repo.remote ?? null,
+						input.worktreePath ?? existing.worktreePath ?? null,
+						input.prNumber ?? existing.prNumber ?? null,
+						existing.id,
+					],
 				);
 			}
 			return this.requireReview(existing.id);
@@ -92,6 +105,8 @@ export class SQLiteStorageProvider implements StorageProvider {
 			slug: input.slug,
 			base: input.base,
 			head: input.head,
+			worktreePath: input.worktreePath,
+			prNumber: input.prNumber,
 			status: null,
 			createdAt: now,
 			updatedAt: now,
@@ -99,8 +114,8 @@ export class SQLiteStorageProvider implements StorageProvider {
 		this.db.run(
 			`INSERT INTO reviews
 				(id, repo_key, repo_root, repo_remote, branch, slug, base, head,
-				 created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				 worktree_path, pr_number, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				record.id,
 				record.repoKey,
@@ -110,6 +125,8 @@ export class SQLiteStorageProvider implements StorageProvider {
 				record.slug,
 				record.base ?? null,
 				record.head ?? null,
+				record.worktreePath ?? null,
+				record.prNumber ?? null,
 				record.createdAt,
 				record.updatedAt,
 			],
@@ -162,6 +179,9 @@ export class SQLiteStorageProvider implements StorageProvider {
 		}
 		if (patch.resetHeartbeat) {
 			sets.push("heartbeat_at = NULL");
+		}
+		if (patch.resetWorkspace) {
+			sets.push("worktree_path = NULL", "pr_number = NULL");
 		}
 		if (patch.updatedAt === undefined) {
 			sets.push("updated_at = ?");

@@ -160,6 +160,13 @@ Falhas de IA no fluxo normal são **fail-open**: sem chave, o fluxo determiníst
 idêntico. O `hunt` é explícito e falha com mensagem clara quando não há IA configurada
 (use `--dry-run` para inspecionar sem chamadas).
 
+## Worktrees
+
+`houndsman hunt --pr <n>` (ou `--worktree <path>`) executa o harness no worktree da PR.
+As tools recebem `repoRoot` = raiz do worktree, então leituras, `git grep`, `ls-files` e
+AST enxergam **somente** a árvore daquela revisão. É isso que permite rodar hunts de PRs
+diferentes ao mesmo tempo sem contaminação.
+
 ## Segurança
 
 - Código, docs e diffs são tratados como **dado não confiável** (anti-prompt-injection).

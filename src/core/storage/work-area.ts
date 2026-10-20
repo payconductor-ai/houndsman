@@ -14,6 +14,7 @@ import {
 	CONTEXT_FILE,
 	CONTEXT_SUMMARY_FILE,
 	displayPath,
+	PROJECT_DIR,
 } from "../paths";
 import type { ContextPaths } from "../pr-context";
 import {
@@ -35,12 +36,26 @@ export type FindingsIngest = {
 	warnings: string[];
 };
 
+/**
+ * Raiz do staging da review.
+ *
+ * Com worktree, tudo (briefs/findings/contexto) fica dentro dele — assim os
+ * agentes leem e escrevem dentro do workspace aberto no editor, sem prompts de
+ * permissão. Sem worktree, mantém o diretório global do houndsman.
+ */
+export function reviewWorkBase(review: ReviewRecord): string {
+	const worktree = review.worktreePath;
+	return worktree && existsSync(worktree)
+		? join(worktree, PROJECT_DIR, "work")
+		: workRoot();
+}
+
 /** Staging de uma review (briefs/findings/contexto). */
 export class ReviewWorkArea {
 	readonly review: ReviewRecord;
 	readonly root: string;
 
-	constructor(review: ReviewRecord, base: string = workRoot()) {
+	constructor(review: ReviewRecord, base: string = reviewWorkBase(review)) {
 		this.review = review;
 		this.root = join(base, review.id);
 	}
@@ -86,6 +101,10 @@ export class ReviewWorkArea {
 	/** Garante os diretórios; `clean` recria a área do zero. */
 	ensure(clean = false): void {
 		if (clean) this.clean();
+		mkdirSync(this.root, { recursive: true });
+		// Staging nunca deve sujar `git status` (especialmente dentro do worktree).
+		const ignore = join(this.root, ".gitignore");
+		if (!existsSync(ignore)) writeFileSync(ignore, "*\n");
 		mkdirSync(this.briefsDir, { recursive: true });
 		mkdirSync(this.findingsDir, { recursive: true });
 	}

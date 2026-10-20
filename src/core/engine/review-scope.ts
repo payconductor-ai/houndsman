@@ -8,13 +8,12 @@
 import type { AstService } from "../ast/service";
 import type { AstAnalysis, AstFacts } from "../ast/types";
 import type { HoundsmanConfig } from "../config";
-import { churnToRecord, collectDiff, type DiffSource } from "../diff-source";
+import { churnToRecord, type DiffSource } from "../diff-source";
 import { type ClassificationResult, parseEntries } from "../file-classifier";
 import type { FindingsStateFile } from "../findings-state";
-import { collectDiffSince, diffEntries, isAncestor } from "../git-revision";
-import { runGit, tryGit } from "../git-runner";
 import type { MergedFinding } from "../report-builder";
 import { FileClassifier } from "../services/file-classifier";
+import { GitRepository } from "../services/git-repository";
 import { buildCarryover } from "./carryover";
 
 /** Opções que afetam o escopo (subset do `ReviewOptions`). */
@@ -60,11 +59,18 @@ export class ReviewScopeResolver {
 	private readonly options: ScopeOptions;
 	private readonly classifier: FileClassifier;
 	private readonly ast?: AstService;
+	private readonly git: GitRepository;
 
-	constructor(options: ScopeOptions, config: HoundsmanConfig, ast?: AstService) {
+	constructor(
+		options: ScopeOptions,
+		config: HoundsmanConfig,
+		ast?: AstService,
+		git: GitRepository = new GitRepository(),
+	) {
 		this.options = options;
 		this.classifier = new FileClassifier(config);
 		this.ast = ast;
+		this.git = git;
 	}
 
 	/**
@@ -89,18 +95,15 @@ export class ReviewScopeResolver {
 			this.options.full ||
 			this.options.clean ||
 			!prevSha ||
-			!isAncestor(prevSha, headSha)
+			!this.git.isAncestor(prevSha, headSha)
 		) {
-			const diff = collectDiff(this.options.base, this.options.head);
+			const diff = this.git.collectDiff(this.options.base, this.options.head);
 			const entries = parseEntries(
-				runGit([
-					"diff",
-					`${this.options.base}...${this.options.head}`,
-					"--name-status",
-				]),
+				this.git.diffNameStatus(this.options.base, this.options.head),
 			);
 			const baseRef =
-				mergeBase(this.options.base, this.options.head) ?? this.options.base;
+				this.git.mergeBase(this.options.base, this.options.head) ??
+				this.options.base;
 			const ast = this.ast
 				? await this.ast.analyze(entries, diff, baseRef)
 				: undefined;
@@ -119,8 +122,8 @@ export class ReviewScopeResolver {
 		}
 
 		const range = `${prevSha}..${headSha}`;
-		const diff = collectDiffSince(prevSha, headSha);
-		const entries = diffEntries(range);
+		const diff = this.git.collectDiffSince(prevSha, headSha);
+		const entries = parseEntries(this.git.run(["diff", range, "--name-status"]));
 		const changedPaths = new Set(entries.map((entry) => entry.path));
 		const ast = this.ast ? await this.ast.analyze(entries, diff, prevSha) : undefined;
 		const classification: RunClassification = {
@@ -148,12 +151,4 @@ function factsOf(
 		if (!analysis.deleted) facts.set(path, analysis.facts);
 	}
 	return facts;
-}
-
-/** SHA do merge-base entre base e head (best effort). */
-function mergeBase(base: string, head: string): string | null {
-	const result = tryGit(["merge-base", base, head]);
-	if (!result.ok) return null;
-	const sha = result.stdout.trim();
-	return sha.length > 0 ? sha : null;
 }

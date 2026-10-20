@@ -4,10 +4,11 @@ export const HELP = `Uso: houndsman [comando] [flags]
 Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
-  context             Coleta o contexto da PR via gh (Passo 0)
+  context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
   hunt                Revisão nativa com IA (harness próprio): prepare + agentes + finalize
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
+  worktree <ação>     Lista/cria/remove worktrees de revisão (list · add · remove · prune · path)
   server              Sobe a UI local de triagem (--port, --host, --open, --editor)
   setup               Cria a configuração inicial do projeto (config + skills)
   update              Sincroniza os arquivos auto-gerados (.houndsman/core)
@@ -20,6 +21,8 @@ Flags:
   --base <branch>     Base do diff (default: main)
   --head <ref>        Head do diff (default: HEAD)
   --branch <nome>     Branch alvo (default: detecta do git)
+  --pr <n>            Revisa a PR em um worktree dedicado (cria/reusa automaticamente)
+  --worktree <path>   Revisa em um worktree já existente
   --clean             Descarta findings brutos do staging anterior
   --full              Força review completo (ignora o modo incremental)
   --no-jev            Desativa a pré-análise Jev
@@ -28,7 +31,7 @@ Flags:
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
 
 Flags do hunt:
-  --base <b> · --head <ref> · --branch <nome> · --watchdog <id>
+  --base <b> · --head <ref> · --branch <nome> · --watchdog <id> · --pr <n> · --worktree <path>
   --full · --clean · --no-ast · --with-jev
   --resume · --allow-partial · --dry-run · --fail-on-blocking
   --max-calls <n> · --concurrency <n> · --provider <p> · --model <m>
@@ -51,6 +54,13 @@ Flags de findings:
   --include-sent      (submit) Reenvia findings já enviados à PR
   --dry-run           (submit) Só a prévia do envio, sem postar
   --no-ping           (doctor) Pula a validação de rede das credenciais
+
+Worktrees:
+  houndsman worktree list
+  houndsman worktree add --pr 123
+  houndsman worktree remove <branch> [--force]
+  Os worktrees ficam em <repo>/.houndsman/worktrees/<repo>/<branch> (detached).
+  Use worktrees.location: "home" na config para voltar ao HOUNDSMAN_HOME.
 
 Persistência:
   Runs, findings e artefatos ficam no storage global (SQLite em

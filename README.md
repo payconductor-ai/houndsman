@@ -98,6 +98,26 @@ bun run houndsman hunt --fail-on-blocking
 
 Detalhes (catálogo de tools, máquina de estados, custos e segurança): [`docs/HARNESS.md`](docs/HARNESS.md).
 
+### 8. Várias PRs ao mesmo tempo (worktrees)
+
+Cada revisão pode rodar em um **worktree dedicado** (detached no commit da PR), sem
+checkout no clone principal e sem bloquear a revisão das outras PRs:
+
+```bash
+houndsman --pr 123                 # cria/reusa o worktree e prepara os briefs
+houndsman hunt --pr 123            # revisão nativa no mesmo worktree
+houndsman --pr 123 --finalize      # consolida o relatório
+houndsman worktree list            # worktrees ativos
+houndsman worktree remove feature/x
+```
+
+Os worktrees ficam em `<repo>/.houndsman/worktrees/<repo>/<branch>` (ignorados pelo git) e
+são removidos manualmente (ou com `houndsman worktree prune`). Ficam **dentro do
+workspace** de propósito: agentes de codificação com permissão escopada à pasta aberta
+conseguem ler/executar sem pedir autorização. Para voltar ao diretório global, use
+`worktrees: { location: "home" }` no `houndsman.config.ts`. A UI (`houndsman server`)
+mostra o worktree ativo de cada PR e permite criá-lo pela sidebar.
+
 ---
 
 ## O fluxo de trabalho

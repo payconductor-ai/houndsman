@@ -38,6 +38,8 @@ projeto **autocontida**), carregada em runtime.
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
+| `bun run houndsman -- --pr <n>` | Revisa a PR em um worktree dedicado (revisões paralelas) |
+| `bun run houndsman -- worktree list` | Lista/cria/remove worktrees (`list`/`add`/`remove`/`prune`/`path`) |
 | `bun run houndsman -- server` | Sobe a UI local de triagem (Bun.serve + Preact) |
 | `bun publish --dry-run` | Confere o que vai no tarball |
 
@@ -57,11 +59,12 @@ src/
 ├── core/             # bibliotecas genéricas
 │   ├── ai/                  # camada genérica de IA (modelo, uso, schemas, features)
 │   ├── engine/              # HoundsmanEngine (composition root), ReviewSession,
-│   │                        # ReviewScopeResolver, carry-over
+│   │                        # ReviewScopeResolver, review-workspace, carry-over
 │   ├── ast/                 # AST determinístico: parser wasm, símbolos, delta e impacto
 │   ├── domain/              # Watchdog, Classification, Diff, budget (regras puras)
 │   ├── services/            # GitRepository, GhClient, FileClassifier, Verifier,
-│   │                        # FixBatchBuilder, ProjectFiles, Clock
+│   │                        # FixBatchBuilder, ProjectFiles, Clock,
+│   │                        # WorktreeManager, PrResolver
 │   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter, presenters
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
@@ -171,6 +174,19 @@ de agentes do hunt; `server/` = servidor local; `skill/` = markdown embarcado; `
 - **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`
   (arquivo + regra + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é cache,
   recalculada por `syncState`. Não volte a chavear por `(file, line)`.
+- **Revisão nunca lê `process.cwd()` implicitamente.** A raiz operacional vem do
+  `HoundsmanEngine` (`root` = worktree ou clone principal) e é propagada por
+  `ReviewContext`/`ReviewSession`/harness. Módulos de negócio usam `ctx.root` e `ctx.git`.
+- **Worktrees são detached e vivem dentro do workspace por default:**
+  `<repo>/.houndsman/worktrees/<repoSlug>/<branchSlug>` (config
+  `worktrees.location: "home"` move para `<HOUNDSMAN_HOME>/worktrees`). O diretório se
+  auto-ignora no git. Ficar dentro do workspace evita prompts de permissão de agentes
+  de codificação (leitura/execução fora da pasta aberta). O staging da review
+  (`briefs/`, `findings/`, contexto) acompanha: fica em
+  `<worktree>/.houndsman/work/<reviewId>` quando há worktree. `--pr <n>` resolve via
+  `gh`, busca `refs/pull/<n>/head` e cria/reusa o worktree; `--worktree <path>` usa um
+  já existente. A identidade da review continua `(repoKey, branch)`; `worktreePath` e
+  `prNumber` são metadados persistentes. Remoção é manual (`worktree remove|prune`).
 - A persistência é **centralizada** em `core/storage/`. Nenhum módulo grava runs/findings/
   artefatos em disco por conta própria: use o `StorageProvider` (SQLite default; `file` é o
   fallback). O diretório global é `<HOUNDSMAN_HOME>` (OS data dir ou env override).

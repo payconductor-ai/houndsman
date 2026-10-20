@@ -19,6 +19,13 @@ export type WorktreeState = {
 	sample: string[];
 };
 
+/** Run associada à branch de uma PR. */
+export type PrRunInfo = {
+	slug: string;
+	worktreePath?: string;
+	prNumber?: number;
+};
+
 /** PR aberta exibida na sidebar. */
 export type PrListItem = {
 	number: number;
@@ -32,6 +39,8 @@ export type PrListItem = {
 	url?: string;
 	/** Run local correspondente à branch, quando existir. */
 	runSlug?: string;
+	/** Worktree ativo da PR (revisão paralela). */
+	worktreePath?: string;
 };
 
 /** Resposta de `GET /api/prs`. */
@@ -70,11 +79,12 @@ type GhPrListItem = {
 
 function toItem(
 	raw: GhPrListItem,
-	runSlugs: ReadonlyMap<string, string>,
+	runs: ReadonlyMap<string, PrRunInfo>,
 ): PrListItem | null {
 	const number = Number(raw.number);
 	const headRefName = raw.headRefName?.trim();
 	if (!Number.isFinite(number) || number <= 0 || !headRefName) return null;
+	const run = runs.get(headRefName);
 	return {
 		number,
 		title: raw.title?.trim() || `PR #${number}`,
@@ -85,7 +95,8 @@ function toItem(
 		isDraft: Boolean(raw.isDraft),
 		reviewDecision: raw.reviewDecision?.trim() || undefined,
 		url: raw.url,
-		runSlug: runSlugs.get(headRefName),
+		runSlug: run?.slug,
+		worktreePath: run?.worktreePath,
 	};
 }
 
@@ -115,7 +126,7 @@ export class PrInbox {
 	}
 
 	/** Lista as PRs abertas (limite 50) e o estado local do repositório. */
-	list(runSlugs: ReadonlyMap<string, string> = new Map()): PrListResponse {
+	list(runs: ReadonlyMap<string, PrRunInfo> = new Map()): PrListResponse {
 		const currentBranch = this.git.currentBranch();
 		const worktree = this.worktree();
 		const result = this.ghRunner([
@@ -162,7 +173,7 @@ export class PrInbox {
 		}
 
 		const prs = (parsed as GhPrListItem[])
-			.map((item) => toItem(item, runSlugs))
+			.map((item) => toItem(item, runs))
 			.filter((item): item is PrListItem => item !== null)
 			.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 

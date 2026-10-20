@@ -27,10 +27,15 @@ export class AstService {
 	private readonly git: GitRepository;
 	private readonly parser: AstParser;
 
-	constructor(config: HoundsmanConfig, git: GitRepository = new GitRepository()) {
+	constructor(
+		config: HoundsmanConfig,
+		git: GitRepository = new GitRepository(),
+		root: string = process.cwd(),
+	) {
 		this.project = new ProjectConfig(config);
 		this.git = git;
-		const layerGrammars = join(process.cwd(), CORE_DIR, "grammars");
+		// Camada do projeto (quando presente); sem ela o parser usa o wasm embarcado.
+		const layerGrammars = join(root, CORE_DIR, "grammars");
 		this.parser = new AstParser({
 			maxFileBytes: this.project.astMaxFileBytes,
 			languages: this.project.ast.languages,

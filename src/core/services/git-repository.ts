@@ -75,6 +75,52 @@ export class GitRepository {
 	isAncestor(ancestor: string, descendant: string): boolean {
 		return this.tryRun(["merge-base", "--is-ancestor", ancestor, descendant]).ok;
 	}
+	/** SHA do merge-base entre duas refs; `null` quando não há ancestral comum. */
+	mergeBase(base: string, head: string): string | null {
+		const result = this.tryRun(["merge-base", base, head]);
+		const sha = result.ok ? result.stdout.trim() : "";
+		return sha.length > 0 ? sha : null;
+	}
+
+	/**
+	 * Diretório git comum (`.git`) em caminho absoluto. Em um worktree linkado
+	 * aponta para o `.git` do clone principal — é como descobrimos a raiz real.
+	 */
+	gitCommonDir(): string | null {
+		const result = this.tryRun([
+			"rev-parse",
+			"--path-format=absolute",
+			"--git-common-dir",
+		]);
+		const dir = result.ok ? result.stdout.trim() : "";
+		return dir.length > 0 ? dir : null;
+	}
+
+	/** Saída crua de `git worktree list --porcelain` (vazia em erro). */
+	worktreeListRaw(): string {
+		const result = this.tryRun(["worktree", "list", "--porcelain"]);
+		return result.ok ? result.stdout : "";
+	}
+
+	/** Cria um worktree detached apontando para `ref` (lança em falha). */
+	addWorktree(path: string, ref: string): string {
+		return this.run(["worktree", "add", "--detach", path, ref]);
+	}
+
+	/** Remove um worktree; nunca lança (devolve o resultado para o chamador). */
+	removeWorktree(path: string, force = false): GitResult {
+		return this.tryRun(["worktree", "remove", ...(force ? ["--force"] : []), path]);
+	}
+
+	/** Remove metadados de worktrees cujo diretório sumiu. */
+	pruneWorktrees(): GitResult {
+		return this.tryRun(["worktree", "prune"]);
+	}
+
+	/** `git fetch --no-tags <remote> <refspecs...>` (nunca lança). */
+	fetch(remote: string, refspecs: readonly string[]): GitResult {
+		return this.tryRun(["fetch", "--no-tags", remote, ...refspecs]);
+	}
 
 	/** Conteúdo de um arquivo num commit; `null` se ausente. */
 	readFileAt(sha: string, path: string): string | null {

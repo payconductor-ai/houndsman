@@ -24,6 +24,12 @@ export type HuntOptions = {
 	concurrency?: number;
 	provider?: AiProviderKind;
 	model?: string;
+	/** Número da PR (`--pr`) — o comando resolve/cria o worktree. */
+	pr?: number;
+	/** Worktree informado via flag (relativo ao cwd ou absoluto). */
+	worktree?: string;
+	/** Worktree resolvido (absoluto) para persistir na review. */
+	worktreePath?: string;
 };
 
 /** Defaults do hunt. */
@@ -54,6 +60,17 @@ export function parseHuntArgs(args: string[]): HuntOptions {
 	const model = parser.value("--model");
 	const maxCalls = parser.value("--max-calls");
 	const concurrency = parser.value("--concurrency");
+	const pr = parser.value("--pr");
+	const worktree = parser.value("--worktree");
+	if (pr) {
+		const number = Number.parseInt(pr, 10);
+		if (Number.isFinite(number) && number > 0) options.pr = number;
+		else throw new Error(`--pr inválido: '${pr}'.`);
+	}
+	if (worktree) options.worktree = worktree;
+	if (options.pr !== undefined && options.worktree !== undefined) {
+		throw new Error("Use --pr ou --worktree, não os dois.");
+	}
 	if (base) options.base = base;
 	if (head) options.head = head;
 	if (branch) options.branch = branch;

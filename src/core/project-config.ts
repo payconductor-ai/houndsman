@@ -13,6 +13,7 @@ import type {
 	HoundsmanAst,
 	HoundsmanConfig,
 	HoundsmanStorage,
+	HoundsmanWorktrees,
 } from "./config";
 import {
 	DEFAULT_AI_CONCURRENCY,
@@ -27,6 +28,7 @@ import {
 	DEFAULT_AST_MAX_IMPACT_FILES,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
+	DEFAULT_WORKTREES_LOCATION,
 } from "./defaults";
 import { WatchdogRegistry } from "./watchdog-registry";
 
@@ -46,6 +48,16 @@ export class ProjectConfig<TId extends string = string> {
 
 	get storage(): HoundsmanStorage {
 		return this.raw.storage ?? {};
+	}
+
+	/** Config de worktrees (objeto vazio quando ausente). */
+	get worktrees(): HoundsmanWorktrees {
+		return this.raw.worktrees ?? {};
+	}
+
+	/** Localização dos worktrees resolvida (default: workspace). */
+	get worktreesLocation(): string {
+		return this.worktrees.location?.trim() || DEFAULT_WORKTREES_LOCATION;
 	}
 
 	/** Config do AST (objeto vazio quando ausente). */

@@ -17,7 +17,10 @@ import {
 } from "../core/github-review";
 import { logger } from "../core/logging";
 import { GitRepository } from "../core/services/git-repository";
+import { PrResolver } from "../core/services/pr-resolver";
+import { WorktreeManager } from "../core/services/worktree-manager";
 import { createStorage } from "../core/storage/factory";
+import { resolveWorktreesRoot } from "../core/storage/paths";
 import { resolveRepoIdentity } from "../core/storage/repo-identity";
 import type { RepoIdentity, StorageProvider } from "../core/storage/types";
 import { buildClientBundle } from "./client-build";
@@ -94,6 +97,8 @@ async function route(
 	ghRunner: GhRunner,
 	prs: PrInbox,
 	editor: EditorContext,
+	worktrees: WorktreeManager,
+	git: GitRepository,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const path = url.pathname;
@@ -108,7 +113,61 @@ async function route(
 	if (path === "/api/health") return json({ ok: true });
 	if (path === "/api/editor" && request.method === "GET") return json(editor);
 	if (path === "/api/prs" && request.method === "GET") {
-		return json(prs.list(runs.branchIndex()));
+		return json(prs.list(runs.workspaceIndex()));
+	}
+	if (path === "/api/worktrees" && request.method === "GET") {
+		return json({
+			worktrees: worktrees.managed().map((entry) => ({
+				path: entry.path,
+				branch: entry.branch?.replace(/^refs\/heads\//, "") ?? null,
+				head: entry.head ?? null,
+				prunable: entry.prunable,
+			})),
+		});
+	}
+	if (path === "/api/prs/worktree" && request.method === "POST") {
+		const body = (await request.json().catch(() => ({}))) as { number?: unknown };
+		const number = Number(body.number);
+		if (!Number.isInteger(number) || number <= 0) {
+			return json(
+				{ ok: false, reason: "invalid", detail: "Número de PR inválido." },
+				400,
+			);
+		}
+		const resolver = new PrResolver(ghRunner, git);
+		const resolved = resolver.resolve(number);
+		if (!resolved.ok) {
+			return json({ ok: false, reason: resolved.reason, detail: resolved.detail });
+		}
+		const refs = resolver.prepareRefs(resolved.pr);
+		try {
+			const worktree = worktrees.ensure({
+				branch: resolved.pr.headRefName,
+				ref: refs.head,
+			});
+			return json({
+				ok: true,
+				number,
+				branch: resolved.pr.headRefName,
+				path: worktree.path,
+				head: worktree.head,
+				created: worktree.created,
+				warning: refs.warning,
+			});
+		} catch (error) {
+			return json({
+				ok: false,
+				reason: "git",
+				detail: error instanceof Error ? error.message : String(error),
+			});
+		}
+	}
+	const worktreeMatch = path.match(/^\/api\/worktrees\/(.+)$/);
+	if (worktreeMatch && request.method === "DELETE") {
+		const branch = decodeURIComponent(worktreeMatch[1]);
+		const force = url.searchParams.get("force") === "1";
+		const result = worktrees.remove(branch, { force });
+		return json(result, result.removed ? 200 : 409);
 	}
 	if (path === "/api/prs/checkout" && request.method === "POST") {
 		const body = (await request.json().catch(() => ({}))) as { number?: unknown };
@@ -195,6 +254,8 @@ export class HoundsmanServer {
 	private readonly ghRunner: GhRunner;
 	private readonly prs: PrInbox;
 	private readonly editor: EditorContext;
+	private readonly worktrees: WorktreeManager;
+	private readonly git: GitRepository;
 
 	constructor(config: HoundsmanConfig, deps: ServerDeps = {}) {
 		const repo = deps.repo ?? resolveRepoIdentity();
@@ -206,14 +267,30 @@ export class HoundsmanServer {
 		);
 		this.editor =
 			deps.editor ?? resolveEditor(deps.editorPreference, process.env, repo.root);
-		const git = new GitRepository(deps.gitRunner ?? createGitRunner(repo.root));
-		this.prs = new PrInbox(this.ghRunner, git);
+		this.git = new GitRepository(deps.gitRunner ?? createGitRunner(repo.root));
+		this.prs = new PrInbox(this.ghRunner, this.git);
+		this.worktrees = new WorktreeManager(
+			new GitRepository(createGitRunner(repo.root)),
+			{
+				repoKey: repo.key,
+				repoRoot: repo.root,
+				baseDir: resolveWorktreesRoot(config.worktrees?.location, repo.root),
+			},
+		);
 	}
 
 	/** Handler de requisições (testável sem abrir porta). */
 	readonly handler = async (request: Request): Promise<Response> => {
 		try {
-			return await route(request, this.runs, this.ghRunner, this.prs, this.editor);
+			return await route(
+				request,
+				this.runs,
+				this.ghRunner,
+				this.prs,
+				this.editor,
+				this.worktrees,
+				this.git,
+			);
 		} catch (error) {
 			return json(
 				{ error: error instanceof Error ? error.message : String(error) },

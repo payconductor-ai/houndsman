@@ -20,9 +20,22 @@ export function parseReviewArgs(args: string[]): ReviewOptions {
 	const base = parser.value("--base");
 	const head = parser.value("--head");
 	const branch = parser.value("--branch");
+	const pr = parser.value("--pr");
+	const worktree = parser.value("--worktree");
 	if (base) opts.base = base;
 	if (head) opts.head = head;
 	if (branch) opts.branch = branch;
+	if (worktree) opts.worktree = worktree;
+	if (pr) {
+		const number = Number.parseInt(pr, 10);
+		if (!Number.isFinite(number) || number <= 0) {
+			throw new Error(`--pr inválido: '${pr}'.`);
+		}
+		opts.pr = number;
+	}
+	if (opts.pr !== undefined && opts.worktree !== undefined) {
+		throw new Error("Use --pr ou --worktree, não os dois.");
+	}
 
 	if (parser.has("--finalize") || parser.has("--report-only")) opts.finalize = true;
 	if (parser.has("--fail-on-blocking")) opts.failOnBlocking = true;

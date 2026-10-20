@@ -9,6 +9,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { collectDiff, type DiffSource } from "../diff-source";
 import type { ClassificationResult } from "../file-classifier";
 import type { WatchdogMeta } from "../types";
@@ -47,11 +48,18 @@ export class JevDetector {
 
 	private readonly client: JevClient;
 	private readonly questions: JevQuestionFactory;
+	/** Raiz dos arquivos (worktree ou clone principal). */
+	private readonly root: string;
 
 	/** Construtor que recebe o cliente e o registry de watchdogs (injeção). */
-	constructor(client: JevClient, registry: Record<string, WatchdogMeta>) {
+	constructor(
+		client: JevClient,
+		registry: Record<string, WatchdogMeta>,
+		root: string = process.cwd(),
+	) {
 		this.client = client;
 		this.questions = new JevQuestionFactory(registry);
+		this.root = root;
 	}
 
 	/** Roda a pré-análise e devolve os candidatos (ordenados por confiança desc). */
@@ -157,7 +165,7 @@ export class JevDetector {
 
 	private readHeader(filePath: string): string {
 		try {
-			return readFileSync(filePath, "utf8")
+			return readFileSync(join(this.root, filePath), "utf8")
 				.split("\n")
 				.slice(0, JevDetector.HEADER_LINES)
 				.join("\n");

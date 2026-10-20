@@ -398,10 +398,12 @@ const DOC_MAPPINGS_TEMPLATE = `/**
 export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [];
 `;
 
-const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`
-# e \`.runs/\` guarda os artefatos de revisão.
+const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`.
+# \`work/\` e \`worktrees/\` são runtime de revisão (staging e worktrees).
 core/
 .runs/
+work/
+worktrees/
 `;
 
 // ---------------------------------------------------------------------------

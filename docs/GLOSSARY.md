@@ -37,6 +37,8 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **fallback (watchdog)** | Watchdog de último recurso (`fallback: true`) que só assume arquivos sem outro dono; `classify` é ignorado. | `src/core/file-classifier.ts` |
 | **finding emergente** | Achado de lógica/domínio fora das regras explícitas, permitido por `allowEmergentFindings`; prefixos `Lógica:`/`Domínio:`, evidência obrigatória, severidade máxima `attention`. | `src/core/rule-text.ts` |
 | **logger** | Instância única de saída do CLI/harness (cores, spinner, progresso), em `core/logging`; módulos de negócio do core não logam. | `src/core/logging/` |
+| **worktree** | Árvore de trabalho git isolada, em **detached HEAD** no commit da PR. Permite revisar várias PRs ao mesmo tempo sem checkout. | `<repo>/.houndsman/worktrees/<repo>/<branch>` (default) · `src/core/services/worktree-manager.ts` |
+| **workspace da review** | Raiz operacional (`root`) onde git/arquivos são lidos + `mainRoot` do clone principal. Resolvido por `--pr`, `--worktree` ou branch atual. | `src/core/engine/review-workspace.ts` |
 
 ## 2. O fluxo em 4 passos
 
@@ -53,7 +55,9 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 ## 3. Artefatos da revisão
 
 Runs, findings e artefatos ficam no **storage global** (`<HOUNDSMAN_HOME>/houndsman.db`). O
-staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/`.
+staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
+`<worktree>/.houndsman/work/<reviewId>/` quando há worktree); os worktrees ficam em
+`<repo>/.houndsman/worktrees/<repo>/<branch>/` por default.
 
 | Termo | Significado |
 | --- | --- |

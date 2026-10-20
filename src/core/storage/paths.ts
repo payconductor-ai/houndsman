@@ -7,9 +7,11 @@
  */
 
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import type { HoundsmanConfig } from "../config";
+import { DEFAULT_WORKTREES_LOCATION } from "../defaults";
 import { ENV_NAMES, env } from "../env";
+import { PROJECT_DIR } from "../paths";
 
 export const HOUNDSMAN_HOME_ENV = ENV_NAMES.home;
 
@@ -50,6 +52,33 @@ export function fileRoot(config: HoundsmanConfig): string {
 /** Raiz do staging por review (briefs/findings/contexto dos subagentes). */
 export function workRoot(): string {
 	return join(houndsmanHome(), "work");
+}
+
+/** Raiz global dos worktrees (`worktrees.location: "home"`). */
+export function worktreesRoot(): string {
+	return join(houndsmanHome(), "worktrees");
+}
+
+/** Diretório de um worktree gerenciado. */
+export function worktreeDir(repoSlug: string, branchSlug: string): string {
+	return join(worktreesRoot(), repoSlug, branchSlug);
+}
+
+/**
+ * Raiz efetiva dos worktrees de um repositório.
+ *
+ * `workspace` (default) mantém tudo em `<repo>/.houndsman/worktrees` — dentro
+ * da pasta aberta no editor, o que evita prompts de permissão de agentes.
+ * `home` usa o diretório global; outros valores são caminhos do usuário.
+ */
+export function resolveWorktreesRoot(
+	location: string | undefined,
+	repoRoot: string,
+): string {
+	const value = location?.trim() || DEFAULT_WORKTREES_LOCATION;
+	if (value === "home") return worktreesRoot();
+	if (value === "workspace") return join(repoRoot, PROJECT_DIR, "worktrees");
+	return isAbsolute(value) ? value : resolve(repoRoot, value);
 }
 
 /** Referência legível do storage configurado (diagnóstico). */

@@ -34,6 +34,10 @@ export type ReviewRecord = {
 	headSha?: string;
 	reviewedSha?: string;
 	reviewedAt?: string;
+	/** Worktree onde a revisão roda (ausente = clone principal). */
+	worktreePath?: string;
+	/** Número da PR revisada (quando iniciada via `--pr`). */
+	prNumber?: number;
 	status: ReviewStatus | null;
 	startedAt?: string;
 	/**
@@ -56,6 +60,8 @@ export type ReviewPatch = Partial<
 		| "headSha"
 		| "reviewedSha"
 		| "reviewedAt"
+		| "worktreePath"
+		| "prNumber"
 		| "status"
 		| "startedAt"
 		| "heartbeatAt"
@@ -66,6 +72,8 @@ export type ReviewPatch = Partial<
 	resetStartedAt?: boolean;
 	/** Limpa o heartbeat (execução terminou). */
 	resetHeartbeat?: boolean;
+	/** Limpa `worktreePath`/`prNumber` (review voltou ao clone principal). */
+	resetWorkspace?: boolean;
 };
 
 /** Entrada de `getOrCreateReview`. */
@@ -75,6 +83,10 @@ export type CreateReviewInput = {
 	slug: string;
 	base?: string;
 	head?: string;
+	/** Worktree onde a revisão roda (ausente = clone principal). */
+	worktreePath?: string;
+	/** Número da PR revisada (quando iniciada via `--pr`). */
+	prNumber?: number;
 	now?: string;
 };
 

@@ -5,6 +5,7 @@
  * O slug continua sendo o branch-slug (estável nas URLs).
  */
 
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import {
 	applyFindingUpdate,
@@ -44,6 +45,10 @@ import { fetchPrComments, type PrCommentsResponse } from "./pr-comments";
 export type RunListItem = {
 	slug: string;
 	branch: string;
+	/** Worktree onde a run foi executada (ausente = clone principal). */
+	worktreePath?: string;
+	/** PR revisada (quando iniciada via `--pr`). */
+	prNumber?: number;
 	updatedAt?: string;
 	startedAt?: string;
 	heartbeatAt?: string;
@@ -55,6 +60,10 @@ export type RunListItem = {
 export type RunDetail = {
 	slug: string;
 	branch: string;
+	/** Worktree onde a run foi executada (ausente = clone principal). */
+	worktreePath?: string;
+	/** PR revisada (quando iniciada via `--pr`). */
+	prNumber?: number;
 	status: ReviewRecord | null;
 	manifest: unknown;
 	summary: FindingsSummary;
@@ -104,6 +113,8 @@ export class RunRepository {
 			return {
 				slug: review.slug,
 				branch: review.branch,
+				worktreePath: review.worktreePath,
+				prNumber: review.prNumber,
 				updatedAt: review.updatedAt,
 				startedAt: review.startedAt,
 				heartbeatAt: review.heartbeatAt,
@@ -122,6 +133,23 @@ export class RunRepository {
 		);
 	}
 
+	/** Mapa branch → run + worktree (sidebar de PRs). */
+	workspaceIndex(): Map<
+		string,
+		{ slug: string; worktreePath?: string; prNumber?: number }
+	> {
+		return new Map(
+			this.storage.listReviews(this.repo.key).map((review) => [
+				review.branch,
+				{
+					slug: review.slug,
+					worktreePath: review.worktreePath,
+					prNumber: review.prNumber,
+				},
+			]),
+		);
+	}
+
 	/** Detalhe da run (null se o slug for inválido). */
 	detail(slug: string): RunDetail | null {
 		const review = this.findBySlug(slug);
@@ -135,6 +163,8 @@ export class RunRepository {
 		return {
 			slug: review.slug,
 			branch: review.branch,
+			worktreePath: review.worktreePath,
+			prNumber: review.prNumber,
 			status: review,
 			manifest: this.readArtifactJson(review, "manifest.json"),
 			summary: summarize(state),
@@ -169,6 +199,12 @@ export class RunRepository {
 
 	private loadState(review: ReviewRecord): FindingsStateFile {
 		return this.storage.readFindings(review.id) ?? emptyState(review.branch);
+	}
+
+	/** Raiz dos arquivos da review: worktree vivo ou clone principal. */
+	private rootOf(review: ReviewRecord): string {
+		const worktree = review.worktreePath;
+		return worktree && existsSync(worktree) ? worktree : this.repo.root;
 	}
 
 	private readArtifactJson<T>(review: ReviewRecord, name: string): T | null {
@@ -252,7 +288,7 @@ export class RunRepository {
 		const review = this.findBySlug(slug);
 		if (!review) return null;
 		const state = this.loadState(review);
-		const result = syncState(state, fileReader(process.cwd()));
+		const result = syncState(state, fileReader(this.rootOf(review)));
 		this.storage.writeFindings(review.id, state);
 		pingFindingsStatus(this.storage, review.id, state);
 		return { result, summary: summarize(state) };
@@ -336,5 +372,9 @@ function toClientFinding(
 	finding: FindingState,
 	review: ReviewRecord,
 ): FindingState & { absFile: string } {
-	return { ...finding, absFile: resolve(review.repoRoot, finding.file) };
+	const root =
+		review.worktreePath && existsSync(review.worktreePath)
+			? review.worktreePath
+			: review.repoRoot;
+	return { ...finding, absFile: resolve(root, finding.file) };
 }

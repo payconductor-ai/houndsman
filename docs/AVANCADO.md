@@ -165,6 +165,43 @@ ast: {
   `foundAtSha..HEAD`, uma pergunta por finding). `--apply` marca os `resolved` como `done`;
   o `verify.md` fica no storage e pode ser lido na UI.
 
+### Revisando várias PRs em paralelo (worktrees)
+
+O clone principal pode continuar no seu branch de trabalho enquanto as PRs são revisadas
+em worktrees isoladas:
+
+- `houndsman --pr <n>` consulta a PR via `gh`, busca `refs/pull/<n>/head` (funciona em
+  forks), cria o worktree **detached** no commit do head e roda o prepare ali.
+- `--worktree <path>` usa um worktree já existente (ex.: criado à mão); informe
+  `--branch` se ele estiver em detached HEAD.
+- A review continua identificada por `(repositório, branch)`; `worktreePath` e
+  `prNumber` ficam gravados no storage e são usados por `findings`, `verify` e pela UI
+  para ler os arquivos certos.
+- `houndsman worktree list|add|remove|prune|path` administra os diretórios em
+  `<repo>/.houndsman/worktrees/<repo>/<branch>` (default).
+- Duas revisões em branches diferentes usam workspaces distintos e podem rodar ao mesmo
+  tempo; o SQLite já opera em WAL e o staging é por `reviewId`.
+
+#### Por que dentro do workspace (e como mudar)
+
+O default `worktrees.location: "workspace"` mantém worktree **e staging**
+(`briefs/`, `findings/`, contexto) dentro da pasta aberta no editor. Isso evita que
+agentes de codificação peçam permissão a cada leitura/execução fora do workspace. O
+diretório é auto-ignorado pelo git.
+
+```ts
+// houndsman.config.ts
+export default defineHoundsmanConfig({
+  // ...
+  worktrees: { location: "workspace" }, // default
+  // worktrees: { location: "home" },   // <HOUNDSMAN_HOME>/worktrees
+  // worktrees: { location: "../wt" },   // caminho relativo à raiz do repo
+});
+```
+
+Se o agente continuar pedindo permissão, confirme que ele está aberto na raiz do
+repositório (não em uma subpasta) e que o caminho do worktree está sob ela.
+
 ---
 
 ## Comandos do dia a dia
@@ -176,14 +213,17 @@ ast: {
 | `houndsman doctor` | Valida a configuração, o ambiente e a credencial Jev |
 | `houndsman context` | Passo 0 — contexto da PR via `gh` |
 | `houndsman --base main` | Passo 1 — prepara os briefs |
+| `houndsman --pr <n>` | Prepara a PR em um worktree dedicado |
+| `houndsman --worktree <path>` | Prepara em um worktree já existente |
 | `houndsman --finalize` | Passo 3 — gera o relatório |
+| `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--rules`, `--json`) |
 | `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`batch`/`verify`/`path`) |
 | `houndsman server` | UI local de triagem + leitura de artefatos (`--port`, `--host`, `--open`, `--editor`) |
 
 Flags: `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
-`--branch <nome>` · `--config <path>` · `--clean` · `--full` · `--no-jev` ·
-`--no-ast` · `--fail-on-blocking` (com `--finalize`) ·
+`--branch <nome>` · `--pr <n>` · `--worktree <path>` · `--config <path>` · `--clean` ·
+`--full` · `--no-jev` · `--no-ast` · `--fail-on-blocking` (com `--finalize`) ·
 `--editor <auto|vscode|jetbrains|none>` (com `server`).
 
 ---

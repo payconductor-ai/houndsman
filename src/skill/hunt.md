@@ -4,16 +4,32 @@
 > (`.agents/skills/houndsman/SKILL.md` e `.claude/skills/houndsman/SKILL.md`).
 
 Revisão de PR: classificação de arquivos → revisão paralela por domínio → consolidação.
-Invocação: `/houndsman` (default) ou `/houndsman hunt`. O motor é o CLI **`houndsman`**;
-as regras do projeto ficam em `houndsman.config.ts` + `.houndsman/`.
+Invocação: `/houndsman` (default), `/houndsman hunt` ou `/houndsman hunt pr 456`.
+O motor é o CLI **`houndsman`**; as regras do projeto ficam em `houndsman.config.ts` +
+`.houndsman/`.
+
+## Alvo da revisão
+
+Traduza o pedido do usuário para flags **antes** de começar:
+
+| Pedido | Alvo | Flag |
+|---|---|---|
+| “revise a PR 456”, “#456”, URL `.../pull/456` | PR | `--pr 456` |
+| “revise a branch feature/x” | branch | `--branch feature/x` |
+| “revise esta PR / o que mudou” | branch atual | *(sem flag)* |
+
+> **Se o alvo é uma PR, use worktree.** Rode `houndsman --pr 456` (não `houndsman`), nunca faça
+> checkout no clone principal e use o caminho impresso na saída como raiz dos subagentes.
+> Isso permite revisar outras PRs em paralelo, cada uma na sua árvore.
 
 **Quando usar:** revisar PR antes de merge · code review de feature branch · validar
 mudanças antes de push.
 
 > **Harness nativo (opcional):** além deste skill, o CLI tem `houndsman hunt` — o mesmo
 > fluxo executado pelo próprio houndsman, com tools read-only, investigação por evidência
-> e `VERIFY` obrigatório. Use `houndsman hunt --dry-run` para inspecionar sem IA. Detalhes
-> em `docs/HARNESS.md`.
+> e `VERIFY` obrigatório. Use `houndsman hunt --dry-run` para inspecionar sem IA. Para uma
+> PR específica, `houndsman hunt --pr 456` roda no worktree automaticamente. Detalhes em
+> `docs/HARNESS.md`.
 
 ## Quem executa o quê
 
@@ -56,7 +72,8 @@ O contexto vem da **descrição da PR** via GitHub CLI (`gh`), quando disponíve
 Um subagente executa o CLI e resume:
 
 ```
-Você é o subagente de contexto do houndsman. Execute `houndsman context`;
+Você é o subagente de contexto do houndsman. Execute `houndsman context --pr 456`
+(ou `houndsman context --worktree <path>` se o prepare já criou o worktree);
 leia o `context-brief.md` indicado na saída; siga as instruções e grave
 `context-summary.json`. Retorne `objective`/`motivation`/`changeSummary` ou "indisponível".
 ```
@@ -72,8 +89,15 @@ leia o `context-brief.md` indicado na saída; siga as instruções e grave
 ## Passo 1 — Preparar (skill executa)
 
 ```bash
-houndsman --base main
+houndsman --pr 456          # alvo = PR (cria/reusa o worktree)
+houndsman --base main       # alvo = branch atual (clone principal)
 ```
+
+Quando o alvo é uma PR, o prepare consulta a PR via `gh`, busca `refs/pull/<n>/head`, cria o
+worktree **detached** em `<repo>/.houndsman/worktrees/<repo>/<branch>` e imprime o caminho.
+Cada brief passa a trazer `**Worktree:** <path>` — essa é a raiz que os subagentes devem ler.
+Guarde também a linha `PR #456 — <head> → <base>`: `<head>` é a branch a usar em
+`status ping`, `findings` e `verify`.
 
 Grava os artefatos no **storage global** (SQLite em `<HOUNDSMAN_HOME>/houndsman.db`) e o
 staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
@@ -157,6 +181,7 @@ calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt 
 ```
 Leia e execute o brief: <caminho absoluto impresso pelo prepare>/briefs/<watchdog-id>.md
 Você é o watchdog <watchdog-id> do {{projectName}}.
+Use como raiz de leitura o **Worktree:** indicado no brief (nunca o clone principal).
 ```
 
 Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
@@ -171,7 +196,8 @@ não são lidos: registre-os em `skipped`.
 ## Passo 3 — Finalizar (skill executa)
 
 ```bash
-houndsman --finalize
+houndsman --pr 456 --finalize     # alvo = PR (reusa o worktree gravado)
+houndsman --finalize              # alvo = branch atual
 ```
 
 Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. Quando todos existem:

@@ -89,6 +89,14 @@ export { buildCarryover, mergeCarryover } from "./core/engine/carryover";
 export { HoundsmanEngine } from "./core/engine/houndsman-engine";
 export { ReviewScopeResolver } from "./core/engine/review-scope";
 export { ReviewSession } from "./core/engine/review-session";
+export type {
+	ResolvedWorkspace,
+	WorkspaceRequest,
+} from "./core/engine/review-workspace";
+export {
+	mainRootOf,
+	resolveReviewWorkspace,
+} from "./core/engine/review-workspace";
 export type { HoundsmanEnv } from "./core/env";
 export { ENV_NAMES, env, readEnv } from "./core/env";
 export {
@@ -171,8 +179,26 @@ export { FixBatchBuilder } from "./core/services/fix-batch-builder";
 export type { GhResult, GhRunner } from "./core/services/gh-client";
 export { GhClient } from "./core/services/gh-client";
 export { GitRepository } from "./core/services/git-repository";
+export type {
+	PrRefs,
+	PrResolveResult,
+	PullRequestInfo,
+} from "./core/services/pr-resolver";
+export { PrResolver } from "./core/services/pr-resolver";
 export { ProjectFiles } from "./core/services/project-files";
 export { Verifier } from "./core/services/verifier";
+export type {
+	EnsureWorktreeInput,
+	EnsureWorktreeResult,
+	RemoveWorktreeResult,
+	WorktreeEntry,
+	WorktreeManagerOptions,
+} from "./core/services/worktree-manager";
+export {
+	parseWorktreeList,
+	repoSlug,
+	WorktreeManager,
+} from "./core/services/worktree-manager";
 export {
 	createMemoryStorage,
 	createStorage,

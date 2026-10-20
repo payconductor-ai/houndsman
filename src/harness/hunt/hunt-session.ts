@@ -14,11 +14,9 @@ import {
 	type ModelProvider,
 } from "../../core/ai";
 import type { AstAnalysis } from "../../core/ast/types";
-import { collectDiff } from "../../core/diff-source";
 import type { HoundsmanEngine } from "../../core/engine/houndsman-engine";
 import type { RunClassification } from "../../core/engine/review-scope";
 import { parseEntries } from "../../core/file-classifier";
-import { runGit, tryGit } from "../../core/git-runner";
 import type { LoggerLike } from "../../core/logging";
 import type { PrepareResult } from "../../core/orchestrator";
 import { defaultOptions, type ReviewOptions } from "../../core/orchestrator";
@@ -67,6 +65,8 @@ export class HuntSession {
 			clean: options.clean,
 			noAi: true,
 			finalize: false,
+			pr: options.pr,
+			worktreePath: options.worktreePath,
 		};
 
 		const session = engine.session(reviewOptions);
@@ -137,7 +137,7 @@ export class HuntSession {
 			reporter,
 			config: this.deps.config,
 			ast: engine.ast,
-			readFile: defaultFileReader(fileRoot()),
+			readFile: defaultFileReader(engine.root),
 		});
 		const runner = new AgentRunner(factory);
 		const scheduler = new AgentScheduler(
@@ -265,11 +265,11 @@ export class HuntSession {
 		work: import("../../core/storage/work-area").ReviewWorkArea,
 	) {
 		const { engine, options } = this.deps;
-		const diff = collectDiff(options.base, options.head);
+		const diff = engine.git.collectDiff(options.base, options.head);
 		const entries = parseEntries(
-			runGit(["diff", `${options.base}...${options.head}`, "--name-status"]),
+			engine.git.diffNameStatus(options.base, options.head),
 		);
-		const baseRef = mergeBase(options.base, options.head) ?? options.base;
+		const baseRef = engine.git.mergeBase(options.base, options.head) ?? options.base;
 		const ast: Map<string, AstAnalysis> = options.noAst
 			? new Map()
 			: await engine.ast.analyze(entries, diff, baseRef);
@@ -283,7 +283,7 @@ export class HuntSession {
 			context,
 			ast,
 			impact,
-			repoRoot: process.cwd(),
+			repoRoot: engine.root,
 			diff,
 			branch: review.branch,
 			watchdog: options.watchdog,
@@ -356,17 +356,4 @@ function readContextSummary(
 	} catch {
 		return null;
 	}
-}
-
-/** Merge-base best effort. */
-function mergeBase(base: string, head: string): string | null {
-	const result = tryGit(["merge-base", base, head]);
-	if (!result.ok) return null;
-	const sha = result.stdout.trim();
-	return sha.length > 0 ? sha : null;
-}
-
-/** Raiz do repositório para leitura das tools. */
-function fileRoot(): string {
-	return process.cwd();
 }

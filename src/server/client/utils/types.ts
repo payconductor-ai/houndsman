@@ -83,6 +83,9 @@ export type ArtifactMeta = {
 export type RunSummary = {
 	slug: string;
 	branch: string;
+	/** Worktree onde a run foi executada (ausente = clone principal). */
+	worktreePath?: string;
+	prNumber?: number;
 	updatedAt?: string;
 	startedAt?: string;
 	/** Último sinal de vida de uma execução ativa (revisão/correção). */
@@ -126,6 +129,8 @@ export type PrListItem = {
 	reviewDecision?: string;
 	url?: string;
 	runSlug?: string;
+	/** Worktree ativo da PR (revisão paralela). */
+	worktreePath?: string;
 };
 
 export type PrListResponse = {
@@ -144,6 +149,18 @@ export type CheckoutResponse =
 			detail: string;
 			changes?: string[];
 	  };
+
+export type PrWorktreeResponse =
+	| {
+			ok: true;
+			number: number;
+			branch: string;
+			path: string;
+			head: string;
+			created: boolean;
+			warning?: string;
+	  }
+	| { ok: false; reason: string; detail: string };
 
 /** Comentário normalizado da PR (thread ou geral). */
 export type PrCommentView = {

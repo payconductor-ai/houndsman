@@ -43,12 +43,17 @@ export class FileStorageProvider implements StorageProvider {
 		if (existing) {
 			if (
 				existing.repoRoot !== input.repo.root ||
-				existing.repoRemote !== input.repo.remote
+				existing.repoRemote !== input.repo.remote ||
+				(input.worktreePath !== undefined &&
+					existing.worktreePath !== input.worktreePath) ||
+				(input.prNumber !== undefined && existing.prNumber !== input.prNumber)
 			) {
 				return this.writeReview({
 					...existing,
 					repoRoot: input.repo.root,
 					repoRemote: input.repo.remote,
+					worktreePath: input.worktreePath ?? existing.worktreePath,
+					prNumber: input.prNumber ?? existing.prNumber,
 				});
 			}
 			return existing;
@@ -64,6 +69,8 @@ export class FileStorageProvider implements StorageProvider {
 			slug: input.slug,
 			base: input.base,
 			head: input.head,
+			worktreePath: input.worktreePath,
+			prNumber: input.prNumber,
 			status: null,
 			createdAt: now,
 			updatedAt: now,
@@ -99,11 +106,17 @@ export class FileStorageProvider implements StorageProvider {
 		if (patch.headSha !== undefined) updated.headSha = patch.headSha;
 		if (patch.reviewedSha !== undefined) updated.reviewedSha = patch.reviewedSha;
 		if (patch.reviewedAt !== undefined) updated.reviewedAt = patch.reviewedAt;
+		if (patch.worktreePath !== undefined) updated.worktreePath = patch.worktreePath;
+		if (patch.prNumber !== undefined) updated.prNumber = patch.prNumber;
 		if (patch.status !== undefined) updated.status = patch.status;
 		if (patch.resetStartedAt) updated.startedAt = now;
 		else if (patch.startedAt !== undefined) updated.startedAt = patch.startedAt;
 		if (patch.resetHeartbeat) updated.heartbeatAt = undefined;
 		else if (patch.heartbeatAt !== undefined) updated.heartbeatAt = patch.heartbeatAt;
+		if (patch.resetWorkspace) {
+			updated.worktreePath = undefined;
+			updated.prNumber = undefined;
+		}
 		updated.updatedAt = patch.updatedAt ?? now;
 		return this.writeReview(updated);
 	}

@@ -265,6 +265,7 @@ export function defaultRenderBrief(
 		`# Brief — ${def.name} (\`${def.id}\`)`,
 		"",
 		`**Branch:** ${args.branch}`,
+		...(args.worktree ? [`**Worktree:** \`${args.worktree}\``] : []),
 		`**Output obrigatório:** \`${args.outputPath}\``,
 		`**Schema do output:** \`${args.outputFormatPath}\``,
 		"",

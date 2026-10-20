@@ -26,13 +26,21 @@ export function runContextCommand(
 	_config: HoundsmanConfig,
 	storage: StorageProvider,
 	repo: RepoIdentity,
-	opts: { branch?: string } = {},
+	opts: {
+		branch?: string;
+		/** Worktree onde a review roda (persistido na review). */
+		worktreePath?: string;
+		/** PR de origem (persistida na review). */
+		prNumber?: number;
+	} = {},
 ): ContextRunResult {
 	const branch = opts.branch ?? currentBranch();
 	const review = storage.getOrCreateReview({
 		repo,
 		branch,
 		slug: sanitizeBranch(branch),
+		worktreePath: opts.worktreePath,
+		prNumber: opts.prNumber,
 	});
 	const work = new ReviewWorkArea(review);
 	const paths = work.contextPaths;

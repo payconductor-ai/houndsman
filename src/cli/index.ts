@@ -27,6 +27,7 @@
  *   `--clean` · `--full` · `--no-jev` · `--no-ast` · `--fail-on-blocking`.
  */
 
+import type { HoundsmanConfig } from "../core/config";
 import { loadConfig } from "../core/config-loader";
 import { HoundsmanEngine } from "../core/engine/houndsman-engine";
 import { logger } from "../core/logging";
@@ -43,6 +44,7 @@ import { ServerCommand } from "./commands/server-command";
 import { SetupCommand, TestCommand, UpdateCommand } from "./commands/setup-command";
 import { StatusCommand } from "./commands/status-command";
 import { WatchdogCommand } from "./commands/watchdog-command";
+import { WorktreeCommand } from "./commands/worktree-command";
 import { HELP } from "./help";
 
 // ---------------------------------------------------------------------------
@@ -60,6 +62,7 @@ function buildRegistry(): CommandRegistry {
 		.register(new FindingsCommand())
 		.register(new StatusCommand())
 		.register(new WatchdogCommand())
+		.register(new WorktreeCommand())
 		.register(new ServerCommand())
 		.register(new SetupCommand())
 		.register(new UpdateCommand())
@@ -85,16 +88,23 @@ export async function main(): Promise<void> {
 		process.exit(1);
 	}
 
+	let loaded: Awaited<ReturnType<typeof loadConfig>> | null = null;
+	const config = async (): Promise<HoundsmanConfig> => {
+		loaded ??= await loadConfig({ configPath: parser.value("--config") });
+		return loaded.config;
+	};
+
 	const context: CliContext = {
 		cwd: process.cwd(),
 		logger,
 		out: (message) => logger.info(message),
 		err: (message) => logger.error(message),
-		engine: async () => {
-			const { config } = await loadConfig({
-				configPath: parser.value("--config"),
+		config,
+		engine: async (options = {}) => {
+			return new HoundsmanEngine(await config(), {
+				root: options.root,
+				mainRoot: options.mainRoot,
 			});
-			return new HoundsmanEngine(config);
 		},
 	};
 
