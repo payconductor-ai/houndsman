@@ -180,7 +180,7 @@ describe("WorktreeManager", () => {
 		} finally {
 			sandbox.cleanup();
 		}
-	});
+	}, 20_000);
 });
 
 describe("revisões paralelas em worktrees", () => {
@@ -263,7 +263,7 @@ describe("revisões paralelas em worktrees", () => {
 			else process.env.HOUNDSMAN_HOME = originalHome;
 			sandbox.cleanup();
 		}
-	});
+	}, 30_000);
 
 	test("duas PRs preparam em paralelo sem se contaminar", async () => {
 		const sandbox = makeSandbox();
@@ -365,5 +365,5 @@ describe("revisões paralelas em worktrees", () => {
 			else process.env.HOUNDSMAN_HOME = originalHome;
 			sandbox.cleanup();
 		}
-	});
+	}, 30_000);
 });

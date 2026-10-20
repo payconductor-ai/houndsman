@@ -7,7 +7,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
-import { Clock, GitHub, GitPullRequest, Refresh, Spinner } from "./icons";
+import { BranchIcon, Clock, GitHub, GitPullRequest, Refresh, Spinner } from "./icons";
 import type { SidebarSectionContext } from "./sidebar-sections";
 import { api } from "./utils/api";
 import { formatRunTime } from "./utils/format";
@@ -15,7 +15,6 @@ import type {
 	CheckoutResponse,
 	PrListItem,
 	PrListResponse,
-	PrWorktreeResponse,
 	WorktreeState,
 } from "./utils/types";
 
@@ -31,11 +30,9 @@ function PrItem({
 	worktree,
 	busy,
 	confirming,
-	worktreeBusy,
 	onConfirm,
 	onCancel,
 	onCheckout,
-	onCreateWorktree,
 	onSelectRun,
 }: {
 	pr: PrListItem;
@@ -43,16 +40,17 @@ function PrItem({
 	worktree: WorktreeState;
 	busy: boolean;
 	confirming: boolean;
-	worktreeBusy: boolean;
 	onConfirm: (number: number) => void;
 	onCancel: () => void;
 	onCheckout: (pr: PrListItem) => void;
-	onCreateWorktree: (pr: PrListItem) => void;
 	onSelectRun: (slug: string) => void;
 }) {
 	const isCurrent = currentBranch === pr.headRefName;
 	const runSlug = pr.runSlug;
 	const review = pr.reviewDecision ? REVIEW_LABELS[pr.reviewDecision] : undefined;
+	// O título da PR às vezes repete o nome da branch; nesse caso só o
+	// indicador `head → base` fica visível.
+	const showTitle = pr.title.trim() !== pr.headRefName.trim();
 	return (
 		<article class={`pr${isCurrent ? " current" : ""}`}>
 			<div class="pr-head">
@@ -60,6 +58,15 @@ function PrItem({
 				<span class="pr-number">#{pr.number}</span>
 				{pr.isDraft && <span class="tag">draft</span>}
 				{isCurrent && <span class="pr-current">atual</span>}
+				{pr.worktreePath && (
+					<span
+						class="pr-worktree-badge"
+						title={`Worktree: ${pr.worktreePath}`}
+					>
+						<BranchIcon size={10} />
+						worktree
+					</span>
+				)}
 				<span class="spacer" />
 				{pr.updatedAt && (
 					<span class="run-when">
@@ -68,7 +75,7 @@ function PrItem({
 					</span>
 				)}
 			</div>
-			<p class="pr-title">{pr.title}</p>
+			{showTitle && <p class="pr-title">{pr.title}</p>}
 			<p class="pr-meta">
 				<span class="pr-branch">{pr.headRefName}</span>
 				<span class="pr-arrow">→</span>
@@ -76,11 +83,6 @@ function PrItem({
 				<span>· {pr.author}</span>
 			</p>
 			{review && <p class={`pr-review pr-review-${pr.reviewDecision}`}>{review}</p>}
-			{pr.worktreePath && (
-				<p class="pr-worktree" title={pr.worktreePath}>
-					Worktree: <code>{pr.worktreePath}</code>
-				</p>
-			)}
 			<div class="pr-actions">
 				{runSlug && (
 					<button
@@ -90,21 +92,6 @@ function PrItem({
 						onClick={() => onSelectRun(runSlug)}
 					>
 						Abrir run
-					</button>
-				)}
-				{!pr.worktreePath && (
-					<button
-						type="button"
-						class="pr-btn"
-						disabled={busy || worktreeBusy}
-						title={`Criar um worktree dedicado para ${pr.headRefName} (revisão paralela)`}
-						onClick={() => onCreateWorktree(pr)}
-					>
-						{worktreeBusy ? (
-							<Spinner size={12} class="icon spin" />
-						) : (
-							"Worktree"
-						)}
 					</button>
 				)}
 				{pr.url && (
@@ -164,7 +151,6 @@ export function PrsSection({ active, onSelect, onRefreshRuns }: SidebarSectionCo
 	const [error, setError] = useState("");
 	const [notice, setNotice] = useState("");
 	const [busy, setBusy] = useState<number | null>(null);
-	const [worktreeBusy, setWorktreeBusy] = useState<number | null>(null);
 	const [confirming, setConfirming] = useState<number | null>(null);
 	const requested = useRef(false);
 
@@ -241,35 +227,6 @@ export function PrsSection({ active, onSelect, onRefreshRuns }: SidebarSectionCo
 		[loadPrs, onRefreshRuns, onSelect],
 	);
 
-	const createWorktree = useCallback(
-		async (pr: PrListItem) => {
-			setWorktreeBusy(pr.number);
-			setError("");
-			setNotice("");
-			try {
-				const result = await api<PrWorktreeResponse>("/api/prs/worktree", {
-					method: "POST",
-					headers: { "content-type": "application/json" },
-					body: JSON.stringify({ number: pr.number }),
-				});
-				if (!result.ok) {
-					setError(result.detail);
-					return;
-				}
-				setNotice(
-					`Worktree de #${pr.number} em ${result.path}. ` +
-						`Rode \`houndsman --pr ${pr.number}\` para revisar em paralelo.`,
-				);
-				await loadPrs();
-			} catch (err) {
-				setError(String(err));
-			} finally {
-				setWorktreeBusy(null);
-			}
-		},
-		[loadPrs],
-	);
-
 	const openCount = data?.available ? data.prs.length : null;
 
 	return (
@@ -327,11 +284,9 @@ export function PrsSection({ active, onSelect, onRefreshRuns }: SidebarSectionCo
 						worktree={data.worktree}
 						busy={busy !== null}
 						confirming={confirming === pr.number}
-						worktreeBusy={worktreeBusy === pr.number}
 						onConfirm={setConfirming}
 						onCancel={() => setConfirming(null)}
 						onCheckout={checkout}
-						onCreateWorktree={createWorktree}
 						onSelectRun={onSelect}
 					/>
 				))}

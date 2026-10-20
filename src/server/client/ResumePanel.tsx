@@ -10,7 +10,7 @@
 
 import type { ComponentChildren } from "preact";
 import { useEffect, useMemo, useState } from "preact/hooks";
-import { ExternalLink, Layers, Trash } from "./icons";
+import { ExternalLink, Trash } from "./icons";
 import { MarkdownBlocks } from "./MarkdownText";
 import { api } from "./utils/api";
 import { SEVERITY_LABELS, SEVERITY_ORDER } from "./utils/constants";

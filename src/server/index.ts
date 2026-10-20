@@ -453,8 +453,8 @@ body.resizing-sidebar { cursor:col-resize; user-select:none; }
 .run-top { display:flex; align-items:flex-start; gap:8px; }
 .run-icon { flex:none; margin-top:2px; color:var(--muted-2); }
 .run.active .run-icon { color:var(--accent); }
-.run-branch { font-size:13.5px; font-weight:600; line-height:1.35; word-break:break-word; }
-.run-meta { display:flex; align-items:center; gap:10px; font-family:var(--font-mono); font-size:11px; color:var(--muted); }
+.run-branch { font-size:12.5px; font-weight:600; line-height:1.35; word-break:break-word; }
+.run-meta { display:flex; align-items:center; gap:10px; font-family:var(--font-mono); font-size:10.5px; color:var(--muted); }
 .run-when { display:inline-flex; align-items:center; gap:6px; }
 .run-count { margin-left:auto; color:var(--muted-2); }
 .run-badge { align-self:flex-start; display:inline-flex; align-items:center; gap:6px; padding:4px 9px; border-radius:999px;
@@ -481,6 +481,9 @@ body.resizing-sidebar { cursor:col-resize; user-select:none; }
 .pr-title { margin:0; font-size:12.5px; font-weight:600; line-height:1.4; word-break:break-word; }
 .pr-meta { display:flex; flex-wrap:wrap; align-items:center; gap:1px 5px; margin:0; font-family:var(--font-mono); font-size:10.5px; color:var(--muted-2); }
 .pr-branch { color:var(--suggestion); }
+.pr-worktree-badge { display:inline-flex; align-items:center; gap:4px; padding:1px 6px; font-family:var(--font-mono); font-size:9px;
+  font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--success);
+  background:rgba(69,192,122,.12); border:1px solid rgba(69,192,122,.3); border-radius:999px; }
 .pr-review { margin:0; font-size:10.5px; font-weight:600; }
 .pr-review-APPROVED { color:var(--success); }
 .pr-review-CHANGES_REQUESTED { color:var(--blocking); }
