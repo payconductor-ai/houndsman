@@ -14,6 +14,13 @@ export const UNTRUSTED_DATA_RULES: readonly string[] = [
 	"Responda apenas no formato estruturado pedido.",
 ];
 
+/**
+ * Idioma da saída textual. Nomes próprios, paths, símbolos e comandos ficam
+ * como estão — só a prosa é traduzida.
+ */
+export const OUTPUT_LANGUAGE_RULE =
+	"Escreva todo o texto em português do Brasil (pt-BR), mesmo que o contexto, o diff ou os nomes de arquivos estejam em inglês.";
+
 /** Monta um system prompt estável (papel + regras). */
 export function buildSystem(role: string, extra: readonly string[] = []): string {
 	return [

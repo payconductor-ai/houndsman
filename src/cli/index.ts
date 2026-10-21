@@ -31,6 +31,7 @@ import type { HoundsmanConfig } from "../core/config";
 import { loadConfig } from "../core/config-loader";
 import { HoundsmanEngine } from "../core/engine/houndsman-engine";
 import { logger } from "../core/logging";
+import { syncProjectLayerForRoot } from "../core/services/worktree-manager";
 import { ArgParser } from "./arg-parser";
 import type { CliContext } from "./commands/command";
 import { ContextCommand } from "./commands/context-command";
@@ -90,7 +91,14 @@ export async function main(): Promise<void> {
 
 	let loaded: Awaited<ReturnType<typeof loadConfig>> | null = null;
 	const config = async (): Promise<HoundsmanConfig> => {
-		loaded ??= await loadConfig({ configPath: parser.value("--config") });
+		loaded ??= await (async () => {
+			// Rodando dentro de um worktree, a camada gerada (`.houndsman/core`)
+			// não existe (é ignorada pelo git). Repõe a partir do clone principal
+			// antes de importar a config — sem isso os watchdogs não resolvem
+			// `../core/types`. No clone principal é no-op.
+			syncProjectLayerForRoot(process.cwd());
+			return loadConfig({ configPath: parser.value("--config") });
+		})();
 		return loaded.config;
 	};
 

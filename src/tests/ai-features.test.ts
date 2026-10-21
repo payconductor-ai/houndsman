@@ -11,6 +11,8 @@ import { AiPreAnalyzer } from "../core/ai/features/pre-analyzer";
 import { AiTechnicalSummarizer } from "../core/ai/features/technical-summarizer";
 import { AiVerifier } from "../core/ai/features/verifier";
 import { briefInstructions, briefPrompt } from "../core/ai/prompts/brief";
+import { contextInstructions } from "../core/ai/prompts/context";
+import { technicalInstructions } from "../core/ai/prompts/technical";
 import { renderBrief } from "../core/brief";
 import { ProjectConfig } from "../core/project-config";
 import { FakeModelProvider } from "./fixtures/fake-model-provider";
@@ -215,5 +217,14 @@ describe("AiPreAnalyzer", () => {
 				files: [{ file: "a.ts", snippet: "x" }],
 			}),
 		).toEqual([]);
+	});
+});
+
+describe("idioma dos resumos", () => {
+	test("prompts de contexto e pontos técnicos exigem pt-BR", () => {
+		for (const instructions of [contextInstructions(), technicalInstructions()]) {
+			expect(instructions).toContain("português do Brasil");
+			expect(instructions).toContain("pt-BR");
+		}
 	});
 });

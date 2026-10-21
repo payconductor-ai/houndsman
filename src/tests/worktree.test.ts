@@ -24,7 +24,12 @@ import { createGitRunner } from "../core/git-runner";
 import { defaultOptions } from "../core/orchestrator";
 import type { GhRunner } from "../core/services/gh-client";
 import { GitRepository } from "../core/services/git-repository";
-import { parseWorktreeList, WorktreeManager } from "../core/services/worktree-manager";
+import {
+	parseWorktreeList,
+	syncProjectLayer,
+	syncProjectLayerForRoot,
+	WorktreeManager,
+} from "../core/services/worktree-manager";
 import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 import { parseHuntArgs } from "../harness/hunt/hunt-options";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
@@ -184,6 +189,71 @@ describe("nomes de diretório do worktree", () => {
 	test("branches só de caracteres inválidos caem no fallback", () => {
 		expect(basename(manager.pathFor("///"))).toMatch(/^branch-[0-9a-f]{8}$/);
 	});
+});
+
+describe("camada gerada no worktree", () => {
+	test("espelha `.houndsman/core` do clone principal e ignora origem ausente", () => {
+		const sandbox = makeSandbox();
+		try {
+			const worktree = join(sandbox.root, "wt-layer");
+			mkdirSync(worktree, { recursive: true });
+			mkdirSync(join(sandbox.repo, ".houndsman", "core"), { recursive: true });
+			writeFileSync(
+				join(sandbox.repo, ".houndsman", "core", "types.ts"),
+				"export {};\n",
+			);
+
+			expect(syncProjectLayer(sandbox.repo, worktree)).toBe(true);
+			expect(existsSync(join(worktree, ".houndsman", "core", "types.ts"))).toBe(
+				true,
+			);
+
+			// Sem camada na origem: no-op (fail-open).
+			const empty = join(sandbox.root, "empty");
+			mkdirSync(empty, { recursive: true });
+			expect(syncProjectLayer(empty, worktree)).toBe(false);
+		} finally {
+			sandbox.cleanup();
+		}
+	});
+
+	test("ensure copia a camada e o auto-reparo repõe num worktree existente", () => {
+		const sandbox = makeSandbox();
+		try {
+			mkdirSync(join(sandbox.repo, ".houndsman", "core"), { recursive: true });
+			writeFileSync(
+				join(sandbox.repo, ".houndsman", "core", "types.ts"),
+				"export {};\n",
+			);
+			const manager = new WorktreeManager(
+				new GitRepository(createGitRunner(sandbox.repo)),
+				{
+					repoKey: "path:fake",
+					repoRoot: sandbox.repo,
+					baseDir: sandbox.home,
+				},
+			);
+
+			const ensured = manager.ensure({
+				branch: "feature",
+				ref: sandbox.featureSha,
+			});
+			const layer = join(ensured.path, ".houndsman", "core", "types.ts");
+			expect(existsSync(layer)).toBe(true);
+
+			// Comando rodando no worktree (sem `--pr`) também se auto-repara.
+			rmSync(join(ensured.path, ".houndsman", "core"), {
+				recursive: true,
+				force: true,
+			});
+			expect(syncProjectLayerForRoot(ensured.path)).toBe(true);
+			expect(existsSync(layer)).toBe(true);
+
+			manager.remove("feature");
+		} finally {
+			sandbox.cleanup();
+		}
+	}, 20_000);
 });
 
 describe("WorktreeManager", () => {

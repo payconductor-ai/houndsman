@@ -2,13 +2,14 @@
  * Prompt do resumo de contexto da PR (`AiContextSummarizer`).
  */
 
-import { buildSystem, clip } from "./base";
+import { buildSystem, clip, OUTPUT_LANGUAGE_RULE } from "./base";
 
 /** Instruções de sistema do resumo. */
 export function contextInstructions(): string {
 	return buildSystem(
 		"Você resume o contexto de uma Pull Request para revisores técnicos.",
 		[
+			OUTPUT_LANGUAGE_RULE,
 			"Objetivo em até 2 frases (máx. 400 caracteres).",
 			"Motivação em até 3 frases (máx. 480 caracteres), com o problema e o impacto esperado.",
 			"Resumo das alterações em até 6 bullets (máx. 240 caracteres cada), focado em comportamento, fluxos e impacto.",

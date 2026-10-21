@@ -10,12 +10,17 @@
  * truncado porque o checkout de uma PR herda a profundidade dos arquivos do
  * projeto, e o Windows (MAX_PATH = 260) estoura "Filename too long" com
  * repo+branch longos. O hash mantém o nome determinístico e único.
+ *
+ * Cada worktree recebe o espelho da camada gerada (`.houndsman/core`) do clone
+ * principal — o checkout não traz arquivos ignorados e, sem ela, a config do
+ * projeto não importa (`../core/types`).
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createGitRunner } from "../git-runner";
+import { CORE_DIR } from "../paths";
 import { sanitizeBranch } from "../report-builder";
 import { worktreesRoot } from "../storage/paths";
 import { GitRepository } from "./git-repository";
@@ -59,7 +64,7 @@ export type RemoveWorktreeResult = {
 /** Opções do gerenciador. */
 export type WorktreeManagerOptions = {
 	repoKey: string;
-	/** Raiz do clone principal. */
+	/** Raiz do clone principal (fonte da camada gerada espelhada). */
 	repoRoot: string;
 	/**
 	 * Raiz onde os diretórios por repositório são criados.
@@ -112,6 +117,54 @@ function isInside(root: string, path: string): boolean {
 	return rel === "" || (!rel.startsWith("..") && !rel.split(sep).includes(".."));
 }
 
+/** Raiz do clone principal a partir do diretório git comum (ou `null`). */
+function mainRootOf(git: GitRepository): string | null {
+	const common = git.gitCommonDir();
+	if (!common) return null;
+	const gitDir = resolve(common);
+	return basename(gitDir).toLowerCase() === ".git" ? dirname(gitDir) : null;
+}
+
+/**
+ * Espelha a camada gerada (`.houndsman/core`) do clone principal no worktree.
+ *
+ * O checkout de uma PR só traz arquivos versionados e `core/` é gerado (e
+ * ignorado pelo git). Sem ele, qualquer comando dentro do worktree falha ao
+ * importar `../core/types` a partir dos watchdogs. Fail-open: nunca bloqueia
+ * a revisão.
+ */
+export function syncProjectLayer(mainRoot: string, worktreeRoot: string): boolean {
+	const source = join(mainRoot, CORE_DIR);
+	const dest = join(worktreeRoot, CORE_DIR);
+	if (normalizePath(source) === normalizePath(dest)) return false;
+	if (!existsSync(source)) return false;
+	try {
+		mkdirSync(dirname(dest), { recursive: true });
+		cpSync(source, dest, { recursive: true, force: true });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * Auto-reparo para comandos executados **dentro** de um worktree: repõe a
+ * camada gerada a partir do clone principal quando ela não existe ali. No
+ * clone principal (camada presente) é no-op. Fail-open.
+ */
+export function syncProjectLayerForRoot(root: string): boolean {
+	try {
+		const git = new GitRepository(createGitRunner(root));
+		const gitRoot = git.rootPath();
+		if (!gitRoot || existsSync(join(gitRoot, CORE_DIR))) return false;
+		const mainRoot = mainRootOf(git);
+		if (!mainRoot) return false;
+		return syncProjectLayer(mainRoot, gitRoot);
+	} catch {
+		return false;
+	}
+}
+
 /** Fatia a saída de `git worktree list --porcelain` em entradas. */
 export function parseWorktreeList(raw: string): WorktreeEntry[] {
 	const entries: WorktreeEntry[] = [];
@@ -150,11 +203,13 @@ export function parseWorktreeList(raw: string): WorktreeEntry[] {
 export class WorktreeManager {
 	private readonly git: GitRepository;
 	private readonly repoKey: string;
+	private readonly repoRoot: string;
 	private readonly rootDir: string;
 
 	constructor(git: GitRepository, options: WorktreeManagerOptions) {
 		this.git = git;
 		this.repoKey = options.repoKey;
+		this.repoRoot = options.repoRoot;
 		this.rootDir = join(
 			options.baseDir ?? worktreesRoot(),
 			repoSlug(options.repoKey),
@@ -214,6 +269,7 @@ export class WorktreeManager {
 
 		if (existing) {
 			if (existing.head === target) {
+				syncProjectLayer(this.repoRoot, path);
 				return { path, head: target, created: false, reused: true };
 			}
 			const checkout = new GitRepository(createGitRunner(path)).tryRun([
@@ -222,6 +278,7 @@ export class WorktreeManager {
 				target,
 			]);
 			if (checkout.ok) {
+				syncProjectLayer(this.repoRoot, path);
 				return { path, head: target, created: false, reused: true };
 			}
 			// Worktree quebrado/inacessível: remove e recria do zero.
@@ -251,6 +308,8 @@ export class WorktreeManager {
 				);
 			}
 		}
+		// A camada gerada é ignorada pelo git e não vem no checkout da PR.
+		syncProjectLayer(this.repoRoot, path);
 		return { path, head: target, created: true, reused: false };
 	}
 

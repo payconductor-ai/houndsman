@@ -11,7 +11,7 @@ import { createGitRunner } from "../git-runner";
 import { createGhRunner, type GhRunner } from "../services/gh-client";
 import { GitRepository } from "../services/git-repository";
 import { PrResolver } from "../services/pr-resolver";
-import { WorktreeManager } from "../services/worktree-manager";
+import { syncProjectLayer, WorktreeManager } from "../services/worktree-manager";
 import { resolveWorktreesRoot } from "../storage/paths";
 import { resolveRepoIdentity } from "../storage/repo-identity";
 import type { RepoIdentity } from "../storage/types";
@@ -105,9 +105,13 @@ export function resolveReviewWorkspace(
 				`Worktree '${root}' está em detached HEAD. Informe --branch <nome>.`,
 			);
 		}
+		// A camada gerada não vem no checkout; sem ela os comandos no worktree
+		// não carregam a config (`../core/types`).
+		const explicitMainRoot = mainRootOf(git, repo.root);
+		syncProjectLayer(explicitMainRoot, root);
 		return {
 			root,
-			mainRoot: mainRootOf(git, repo.root),
+			mainRoot: explicitMainRoot,
 			repo,
 			git,
 			branch,

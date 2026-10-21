@@ -2,13 +2,14 @@
  * Prompt dos pontos técnicos estruturais (`AiTechnicalSummarizer`).
  */
 
-import { buildSystem, clip } from "./base";
+import { buildSystem, clip, OUTPUT_LANGUAGE_RULE } from "./base";
 
 /** Instruções de sistema dos pontos técnicos. */
 export function technicalInstructions(): string {
 	return buildSystem(
 		"Você descreve a estrutura técnica de uma Pull Request para revisores.",
 		[
+			OUTPUT_LANGUAGE_RULE,
 			"Foque em arquitetura e contratos: novos módulos/services, interfaces, providers, repositories, camadas, exports, dependências e impacto.",
 			"NÃO avalie qualidade, NÃO liste achados, bugs ou riscos de revisão.",
 			"NÃO repita a motivação de negócio: isso pertence ao resumo de negócio.",

@@ -31,6 +31,12 @@ export type LoadedConfig<TId extends string = string> = {
 	path: string;
 };
 
+/** Forma do módulo de config (default ou export nomeado). */
+type ConfigModule<TId extends string> = {
+	default?: HoundsmanConfig<TId>;
+	houndsmanConfig?: HoundsmanConfig<TId>;
+};
+
 /** Primeiro arquivo de config existente no diretório (ou `null`). */
 export function resolveConfigPath(cwd: string = process.cwd()): string | null {
 	for (const name of CONFIG_FILE_CANDIDATES) {
@@ -61,10 +67,18 @@ export async function loadConfig<TId extends string = string>(
 		throw new Error(MISSING_CONFIG_HINT);
 	}
 
-	const module = (await import(pathToFileURL(path).href)) as {
-		default?: HoundsmanConfig<TId>;
-		houndsmanConfig?: HoundsmanConfig<TId>;
-	};
+	let module: ConfigModule<TId>;
+	try {
+		module = (await import(pathToFileURL(path).href)) as ConfigModule<TId>;
+	} catch (error) {
+		const detail = error instanceof Error ? error.message : String(error);
+		// Causa comum: camada gerada ausente (`.houndsman/core`), importada pelos
+		// watchdogs como `../core/types` — típico de worktree ainda não sincronizado.
+		throw new Error(
+			`Falha ao carregar ${path}: ${detail}\n` +
+				"A camada gerada (`.houndsman/core`) existe? Rode `houndsman update` na raiz do projeto.",
+		);
+	}
 	const config = module.default ?? module.houndsmanConfig;
 
 	if (!config) {

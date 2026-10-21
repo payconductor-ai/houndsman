@@ -192,6 +192,10 @@ de agentes do hunt; `server/` = servidor local; `skill/` = markdown embarcado; `
   Os segmentos `<repoSlug>/<branchSlug>` são `<trecho legível truncado>-<hash8>`:
   o hash garante unicidade e o truncamento evita `Filename too long` (MAX_PATH 260)
   no checkout de PRs com paths profundos. Não volte a usar o nome bruto.
+  Ao criar/reusar um worktree, a camada gerada (`.houndsman/core`) é espelhada
+  do clone principal: o checkout só traz arquivos versionados e, sem ela, a
+  config não carrega (`watchdogs` importam `../core/types`). O CLI também
+  auto-repara a camada ao rodar **dentro** de um worktree.
 - A persistência é **centralizada** em `core/storage/`. Nenhum módulo grava runs/findings/
   artefatos em disco por conta própria: use o `StorageProvider` (SQLite default; `file` é o
   fallback). O diretório global é `<HOUNDSMAN_HOME>` (OS data dir ou env override).
