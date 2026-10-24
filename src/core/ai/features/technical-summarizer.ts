@@ -30,7 +30,6 @@ export class AiTechnicalSummarizer {
 				instructions: technicalInstructions(),
 				prompt: technicalPrompt(buildTechnicalPromptPayload(input)),
 				outputSchema: TechnicalSummarySchema,
-				maxSteps: 1,
 			},
 		);
 		if (!result.ok) return null;

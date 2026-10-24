@@ -1,8 +1,7 @@
 /**
  * Schemas Zod da camada de IA.
  *
- * Espelham os contratos existentes (`ContextSummary`, `WatchdogReport`) e os
- * planos das features. Todo schema é fechado por validação: saída inválida do
+ * Espelham os contratos existentes (`ContextSummary`) e os planos das features. Todo schema é fechado por validação: saída inválida do
  * modelo vira falha fail-open, nunca dado corrompido.
  */
 
@@ -88,27 +87,6 @@ export const CandidateSchema = z.object({
 		.default([]),
 });
 export type AiCandidate = z.infer<typeof CandidateSchema>["candidates"][number];
-
-/** Relatório de um watchdog (espelha `OUTPUT-FORMAT.md`). */
-export const WatchdogReportSchema = z.object({
-	watchdogId: z.string(),
-	reviewedFiles: z.array(z.string()).default([]),
-	skipped: z.array(z.string()).default([]),
-	findings: z
-		.array(
-			z.object({
-				rule: z.string(),
-				severity: SeveritySchema,
-				file: z.string(),
-				line: z.number().int().positive().optional(),
-				message: z.string(),
-				action: z.string(),
-				evidence: z.string().optional(),
-			}),
-		)
-		.default([]),
-});
-export type AiWatchdogReport = z.infer<typeof WatchdogReportSchema>;
 
 /** Veredito de verificação (confirma/refuta um finding ambíguo). */
 export const VerifySchema = z.object({

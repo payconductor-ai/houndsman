@@ -282,12 +282,7 @@ function checkAiConfig(
 	if (ai.enabled !== false && ai.model !== undefined && !ai.model.trim()) {
 		warnings.push("ai.model vazio — usando o default.");
 	}
-	for (const key of [
-		"concurrency",
-		"maxSteps",
-		"maxOutputTokens",
-		"timeoutMs",
-	] as const) {
+	for (const key of ["concurrency", "timeoutMs"] as const) {
 		const value = ai[key];
 		if (value !== undefined && value <= 0) {
 			warnings.push(`ai.${key} = ${value} — não-positivo; usando o default.`);
@@ -303,14 +298,9 @@ function checkAiConfig(
 			`ai.maxTokensPerReview = ${ai.maxTokensPerReview} — negativo; sem teto.`,
 		);
 	}
-	for (const [id, override] of Object.entries(ai.watchdogs ?? {})) {
+	for (const id of Object.keys(ai.watchdogs ?? {})) {
 		if (!config.watchdogIds.includes(id)) {
 			warnings.push(`ai.watchdogs['${id}'] não corresponde a nenhum watchdog.`);
-		}
-		if (override.maxSteps !== undefined && override.maxSteps <= 0) {
-			warnings.push(
-				`ai.watchdogs['${id}'].maxSteps não-positivo — usando o default.`,
-			);
 		}
 	}
 

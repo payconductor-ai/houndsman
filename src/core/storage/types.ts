@@ -110,7 +110,6 @@ export type ArtifactKind =
 	| "ai"
 	| "ai-usage"
 	| "ai-brief"
-	| "harness-transcript"
 	| "other";
 
 /** Artefato persistido de uma review. */

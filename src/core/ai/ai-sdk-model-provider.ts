@@ -1,37 +1,22 @@
 /**
- * Adapter do AI SDK (`generateText` + `Output.object` + tools).
+ * Adapter do AI SDK (`generateText` + `Output.object`).
  *
  * O resto do motor depende só de `ModelProvider`; trocar de SDK é trocar este
- * arquivo. O loop de tools é do SDK (`stepCountIs`), com timeout/cancelamento
- * via `AbortSignal`.
+ * arquivo. Timeout/cancelamento vêm do `AbortSignal`.
  */
 
-import type { LanguageModel, ToolSet } from "ai";
-import { generateText, Output, stepCountIs, tool } from "ai";
+import type { LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import type { AiProviderKind } from "../config";
 import { AiProviderError } from "./errors";
 import { temperatureApplies } from "./provider-capabilities";
 import {
-	type AiTool,
 	type AiUsage,
 	emptyUsage,
 	type ModelProvider,
 	type ModelRequest,
 	type ModelResponse,
 } from "./types";
-
-/** Converte as tools do motor para o formato do AI SDK. */
-function toToolSet(tools: Record<string, AiTool>): ToolSet {
-	const entries = Object.entries(tools).map(([name, item]) => [
-		name,
-		tool({
-			description: item.description,
-			inputSchema: item.inputSchema,
-			execute: async (input: unknown) => item.execute(input),
-		}),
-	]);
-	return Object.fromEntries(entries) as ToolSet;
-}
 
 /** Mapeia o uso do SDK de forma defensiva (campos opcionais por provider). */
 export function mapUsage(raw: unknown): AiUsage {
@@ -61,9 +46,6 @@ export function buildGenerateTextArgs<T>(
 	provider: AiProviderKind,
 	modelId: string,
 ) {
-	const tools = request.tools ? toToolSet(request.tools) : undefined;
-	const hasTools = tools !== undefined && Object.keys(tools).length > 0;
-	const maxSteps = request.maxSteps ?? 1;
 	const providerOptions = request.providerOptions
 		? (request.providerOptions as GenerateTextArgs["providerOptions"])
 		: undefined;
@@ -76,7 +58,6 @@ export function buildGenerateTextArgs<T>(
 		model,
 		system: request.instructions,
 		prompt: request.prompt,
-		...(hasTools ? { tools, stopWhen: stepCountIs(maxSteps) } : {}),
 		...(request.outputSchema
 			? { output: Output.object({ schema: request.outputSchema }) }
 			: {}),
@@ -108,7 +89,6 @@ export class AiSdkModelProvider implements ModelProvider {
 			return {
 				output,
 				usage: mapUsage(result.usage),
-				steps: result.steps?.length ?? 1,
 				finishReason: result.finishReason ?? "unknown",
 			};
 		} catch (error) {

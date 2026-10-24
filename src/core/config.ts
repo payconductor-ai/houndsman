@@ -13,8 +13,6 @@ import type { WatchdogDefinition } from "./types";
 export {
 	DEFAULT_AI_CONCURRENCY,
 	DEFAULT_AI_MAX_CALLS_PER_REVIEW,
-	DEFAULT_AI_MAX_OUTPUT_TOKENS,
-	DEFAULT_AI_MAX_STEPS,
 	DEFAULT_AI_MODEL,
 	DEFAULT_AI_PROVIDER,
 	DEFAULT_AI_TIMEOUT_MS,
@@ -85,11 +83,9 @@ export type HoundsmanAiFeatures = {
 /** Overrides de IA por watchdog. */
 export type HoundsmanAiWatchdog = {
 	model?: string;
-	maxSteps?: number;
-	maxOutputTokens?: number;
 };
 
-/** Configuração da camada de IA (genérica; o harness nativo também a consome). */
+/** Configuração da camada de IA (briefs, contexto, classificação, pré-análise, verify). */
 export type HoundsmanAi = {
 	/** Liga a IA do fluxo normal (default: `true`; sem chave é fail-open). */
 	enabled?: boolean;
@@ -101,15 +97,6 @@ export type HoundsmanAi = {
 	baseURL?: string;
 	/** Chamadas simultâneas (default: 2). */
 	concurrency?: number;
-	/** Passos por agente (default: 12). */
-	maxSteps?: number;
-	/** Teto de tokens de saída por chamada. */
-	maxOutputTokens?: number;
-	/**
-	 * Temperatura (default: 0). Ignorada quando o provider usa thinking
-	 * (DeepSeek V4 liga thinking por default) — nesse caso o motor não a envia.
-	 */
-	temperature?: number;
 	/** Opções do AI SDK por provider (repassadas sem interpretação). */
 	providerOptions?: AiProviderOptions;
 	/** Timeout por chamada em ms (default: 120_000). */
@@ -180,7 +167,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	concurrency?: HoundsmanConcurrency;
 	/** AST determinístico (classificação estrutural, brief e impacto). */
 	ast?: HoundsmanAst;
-	/** Camada de IA (briefs, contexto, classificação e o harness nativo). */
+	/** Camada de IA (briefs, contexto, classificação, pré-análise e verify). */
 	ai?: HoundsmanAi;
 };
 

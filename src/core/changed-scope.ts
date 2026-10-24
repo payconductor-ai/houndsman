@@ -3,7 +3,7 @@
  *
  * Traduz os hunks do diff (`-U0`) em faixas de linhas revisáveis por arquivo e,
  * quando o AST está disponível, no menor símbolo folha que contém cada âncora.
- * É a fonte única usada pelo brief, pelo harness e pela pré-análise para evitar
+ * É a fonte única usada pelo brief e pela pré-análise para evitar
  * achados em código pré-existente.
  *
  * Fail-open: sem AST (grammar ausente/`--no-ast`/binário) o escopo cai nos

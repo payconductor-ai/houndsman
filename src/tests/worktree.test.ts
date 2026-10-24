@@ -31,7 +31,6 @@ import {
 	WorktreeManager,
 } from "../core/services/worktree-manager";
 import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
-import { parseHuntArgs } from "../harness/hunt/hunt-options";
 import { fakeHoundsmanConfig } from "./fixtures/fake-project";
 
 function git(cwd: string, args: string[]): string {
@@ -127,11 +126,10 @@ function fakeGh(
 }
 
 describe("flags de worktree", () => {
-	test("parse de review/hunt e exclusão mútua", () => {
+	test("parse de review e exclusão mútua", () => {
 		expect(parseReviewArgs(["--pr", "7"]).pr).toBe(7);
 		expect(parseReviewArgs(["--worktree", "/tmp/wt"]).worktree).toBe("/tmp/wt");
 		expect(() => parseReviewArgs(["--pr", "7", "--worktree", "/tmp/wt"])).toThrow();
-		expect(parseHuntArgs(["--pr", "8"]).pr).toBe(8);
 	});
 });
 

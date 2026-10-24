@@ -28,7 +28,6 @@ export {
 	type AiCandidate,
 	type AiClassification,
 	type AiVerdict,
-	type AiWatchdogReport,
 	type BriefPlan,
 	BriefPlanSchema,
 	CandidateSchema,
@@ -39,11 +38,9 @@ export {
 	type TechnicalSummaryPlan,
 	TechnicalSummarySchema,
 	VerifySchema,
-	WatchdogReportSchema,
 } from "./schemas";
 export {
 	type AiResult,
-	type AiTool,
 	type AiUsage,
 	addUsage,
 	emptyUsage,

@@ -1,11 +1,10 @@
 /**
  * Contratos genéricos da camada de IA (biblioteca).
  *
- * `core/ai` não conhece o harness: expõe modelo, uso, tools e resultado. O
- * harness nativo (`src/harness/`) consome estes contratos.
+ * Expõe modelo, uso e resultado; as features do core são as únicas consumidoras.
  */
 
-import type { ZodType, ZodTypeAny } from "zod";
+import type { ZodType } from "zod";
 import type { AiProviderKind, AiProviderOptions } from "../config";
 
 /** Uso de tokens de uma chamada (ou acumulado de uma review). */
@@ -31,25 +30,14 @@ export function addUsage(a: AiUsage, b: AiUsage): AiUsage {
 	};
 }
 
-/** Tool exposta ao modelo (execução já vinculada a um contexto). */
-export type AiTool = {
-	name: string;
-	description: string;
-	inputSchema: ZodTypeAny;
-	execute(input: unknown): Promise<string>;
-};
-
 /** Pedido de geração de modelo (texto ou objeto estruturado). */
 export type ModelRequest<T> = {
 	/** Instruções de sistema. */
 	instructions?: string;
 	/** Prompt do usuário. */
 	prompt: string;
-	/** Tools disponíveis para o loop do modelo. */
-	tools?: Record<string, AiTool>;
 	/** Schema de saída (quando ausente, a saída é texto). */
 	outputSchema?: ZodType<T>;
-	maxSteps?: number;
 	maxOutputTokens?: number;
 	temperature?: number;
 	/** Opções do AI SDK por provider (repassadas ao SDK sem interpretação). */
@@ -61,7 +49,6 @@ export type ModelRequest<T> = {
 export type ModelResponse<T> = {
 	output: T;
 	usage: AiUsage;
-	steps: number;
 	finishReason: string;
 };
 

@@ -31,19 +31,6 @@ export const SEVERITY_EMOJI: Record<Severity, string> = {
 };
 
 /**
- * Sinais opcionais de uma regra: ajudam o `RuleAnalyzer` a transformar texto
- * em checagens concretas (símbolos, imports, decorators, paths e tools).
- */
-export type RuleHints = {
-	symbols?: string[];
-	imports?: string[];
-	decorators?: string[];
-	paths?: string[];
-	/** Nomes de tools sugeridos (ex.: `symbol_context`). */
-	checks?: string[];
-};
-
-/**
  * Regra do watchdog: severidade + texto. O texto declara a polaridade de forma
  * explícita — `Promover:` (algo que DEVE acontecer) ou `Evitar:`/`Não`/`Nunca`
  * (algo que NÃO DEVE acontecer).
@@ -55,7 +42,6 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
-	hints?: RuleHints;
 };
 
 /**

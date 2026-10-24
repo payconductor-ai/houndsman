@@ -1,7 +1,7 @@
 /**
  * Instância pronta do logger (`import { logger } from "../core/logging"`).
  *
- * Infraestrutura compartilhada por `cli`, `harness` e `server`. Módulos de
+ * Infraestrutura compartilhada por `cli` e `server`. Módulos de
  * negócio do core não escrevem saída.
  */
 

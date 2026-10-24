@@ -162,7 +162,7 @@ export class AstService {
 		return buildImpact(analyses, importersByFile);
 	}
 
-	/** Fatos estruturais do arquivo atual (usado pelas tools do harness). */
+	/** Fatos estruturais do arquivo atual (usado pelo motor e pelo server). */
 	async factsOf(filePath: string): Promise<AstFacts | null> {
 		if (!this.enabled) return null;
 		const content = this.readWorkingFile(filePath);

@@ -102,7 +102,7 @@ export type ReviewOptions = {
 	noAst: boolean;
 	/** Força review completo (ignora o modo incremental). */
 	full: boolean;
-	/** Desativa as features de IA do fluxo normal (hunt não usa esta flag). */
+	/** Desativa as features de IA do fluxo normal. */
 	noAi: boolean;
 	/** PR de origem (resolvida via `--pr`). */
 	pr?: number;

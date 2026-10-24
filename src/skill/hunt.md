@@ -25,12 +25,6 @@ Traduza o pedido do usuário para flags **antes** de começar:
 **Quando usar:** revisar PR antes de merge · code review de feature branch · validar
 mudanças antes de push.
 
-> **Harness nativo (opcional):** além deste skill, o CLI tem `houndsman hunt` — o mesmo
-> fluxo executado pelo próprio houndsman, com tools read-only, investigação por evidência
-> e `VERIFY` obrigatório. Use `houndsman hunt --dry-run` para inspecionar sem IA. Para uma
-> PR específica, `houndsman hunt --pr 456` roda no worktree automaticamente. Detalhes em
-> `docs/HARNESS.md`.
-
 ## Quem executa o quê
 
 - **Você** só invoca o skill: `/houndsman [hunt]`. Não precisa rodar nenhum script à mão.

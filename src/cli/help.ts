@@ -5,7 +5,6 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
-  hunt                Revisão nativa com IA (harness próprio): prepare + agentes + finalize
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
   worktree <ação>     Lista/cria/remove worktrees de revisão (list · add · remove · prune · path)
@@ -29,12 +28,6 @@ Flags:
   --no-ast            Desativa a análise estrutural (tree-sitter)
   --no-ai             Desativa as features de IA do fluxo normal
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
-
-Flags do hunt:
-  --base <b> · --head <ref> · --branch <nome> · --watchdog <id> · --pr <n> · --worktree <path>
-  --full · --clean · --no-ast · --with-jev
-  --resume · --allow-partial · --dry-run · --fail-on-blocking
-  --max-calls <n> · --concurrency <n> · --provider <p> · --model <m>
 
 Flags de findings:
   --decision <d>      pending | execute | ignore

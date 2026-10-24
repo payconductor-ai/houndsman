@@ -132,7 +132,7 @@ Volte ao passo 1. A fila encolhe a cada volta; o `batch` traz o próximo grupo s
 
 ## Perguntas de decisão ao usuário
 
-Pergunte (ferramenta de perguntas do harness) **antes** de corrigir quando o achado for:
+Pergunte (ferramenta de perguntas do agente) **antes** de corrigir quando o achado for:
 
 - ambíguo ou com **múltiplas correções válidas**;
 - uma mudança de **produto/arquitetura** (não é "só código");

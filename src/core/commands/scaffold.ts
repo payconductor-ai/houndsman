@@ -131,16 +131,6 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
-	hints?: RuleHints;
-};
-
-/** Sinais opcionais de uma regra (símbolos, imports, decorators, paths, checks). */
-export type RuleHints = {
-	symbols?: string[];
-	imports?: string[];
-	decorators?: string[];
-	paths?: string[];
-	checks?: string[];
 };
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
@@ -235,20 +225,15 @@ export type HoundsmanAiFeatures = {
 /** Overrides de IA por watchdog. */
 export type HoundsmanAiWatchdog = {
 	model?: string;
-	maxSteps?: number;
-	maxOutputTokens?: number;
 };
 
-/** Configuração da camada de IA (briefs, contexto, classificação e hunt nativo). */
+/** Configuração da camada de IA (briefs, contexto, classificação, pré-análise, verify). */
 export type HoundsmanAi = {
 	enabled?: boolean;
 	provider?: AiProviderKind;
 	model?: string;
 	baseURL?: string;
 	concurrency?: number;
-	maxSteps?: number;
-	maxOutputTokens?: number;
-	temperature?: number;
 	providerOptions?: AiProviderOptions;
 	timeoutMs?: number;
 	maxCallsPerReview?: number;
@@ -337,7 +322,6 @@ export const defaultWatchdog = defineWatchdog({
 		{
 			severity: "attention",
 			text: "Promover: nome, contrato e documentação do símbolo correspondem ao comportamento real.",
-			hints: { checks: ["symbol_context"] },
 		},
 		{
 			severity: "attention",
@@ -350,7 +334,6 @@ export const defaultWatchdog = defineWatchdog({
 		{
 			severity: "suggestion",
 			text: "Evitar: lógica de negócio duplicada ou divergente entre camadas.",
-			hints: { checks: ["find_references"] },
 		},
 		{
 			severity: "suggestion",

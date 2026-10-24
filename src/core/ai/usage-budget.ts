@@ -2,7 +2,7 @@
  * Orçamento de IA por review (chamadas e tokens).
  *
  * O budget é consultado antes de cada chamada e atualizado com o uso real. Ao
- * estourar, o chamador decide parar (features do core) ou falhar (harness).
+ * estourar, o chamador decide parar a operação (features do core).
  */
 
 import { AiBudgetError } from "./errors";

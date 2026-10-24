@@ -2,8 +2,7 @@
  * Fachada de IA (`core/ai`) — fail-open, budget e uso.
  *
  * As features do core usam `generateObject`/`generateText` e tratam `ok:false`
- * como "sem IA": a revisão determinística segue idêntica. O harness nativo usa
- * `requireProvider` e falha com mensagem clara quando a IA não está configurada.
+ * como "sem IA": a revisão determinística segue idêntica.
  */
 
 import type { ZodType } from "zod";
@@ -11,7 +10,7 @@ import type { AiProviderOptions } from "../config";
 import type { ProjectConfig } from "../project-config";
 import { AiConfigurationError, errorMessage } from "./errors";
 import { ModelFactory } from "./model-factory";
-import type { AiResult, AiTool, AiUsage, ModelProvider, ModelRequest } from "./types";
+import type { AiResult, AiUsage, ModelProvider, ModelRequest } from "./types";
 import { AiUsageBudget } from "./usage-budget";
 import { AiUsageRecorder } from "./usage-recorder";
 
@@ -30,8 +29,6 @@ export type ObjectRequest<T> = {
 	instructions?: string;
 	prompt: string;
 	outputSchema: ZodType<T>;
-	tools?: Record<string, AiTool>;
-	maxSteps?: number;
 	maxOutputTokens?: number;
 	temperature?: number;
 	/** Opções do AI SDK por provider (mescladas com a config do projeto). */
@@ -93,7 +90,7 @@ export class AiClient {
 		return this.factory.isConfigured;
 	}
 
-	/** Provider obrigatório — usado pelo harness (falha clara sem IA). */
+	/** Provider obrigatório (lança quando a IA não está configurada). */
 	async requireProvider(model?: string): Promise<ModelProvider> {
 		if (this.override === null) {
 			throw new AiConfigurationError(
@@ -146,7 +143,6 @@ export class AiClient {
 		);
 		const result = await this.generateText("doctor-ping", {
 			prompt: "Responda apenas OK.",
-			maxSteps: 1,
 			maxOutputTokens: 4,
 			temperature: 0,
 			signal: AbortSignal.timeout(timeoutMs),

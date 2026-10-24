@@ -41,7 +41,6 @@ export class FakeModelProvider implements ModelProvider {
 		return {
 			output: output as T,
 			usage: fakeUsage(),
-			steps: 1,
 			finishReason: "stop",
 		};
 	}

@@ -23,7 +23,6 @@ export class AiContextSummarizer {
 			instructions: contextInstructions(),
 			prompt: contextPrompt(raw),
 			outputSchema: ContextSummarySchema,
-			maxSteps: 1,
 		});
 		if (!result.ok) return null;
 		return parseContextSummary({ ...result.output, available: true });

@@ -32,7 +32,6 @@ export class AiVerifier {
 				instructions: verifyInstructions(),
 				prompt: verifyPrompt(input),
 				outputSchema: VerifySchema,
-				maxSteps: 1,
 			},
 		);
 		if (!result.ok) return confidence;

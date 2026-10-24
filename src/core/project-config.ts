@@ -19,8 +19,6 @@ import type {
 import {
 	DEFAULT_AI_CONCURRENCY,
 	DEFAULT_AI_MAX_CALLS_PER_REVIEW,
-	DEFAULT_AI_MAX_OUTPUT_TOKENS,
-	DEFAULT_AI_MAX_STEPS,
 	DEFAULT_AI_MODEL,
 	DEFAULT_AI_PROVIDER,
 	DEFAULT_AI_TIMEOUT_MS,
@@ -126,19 +124,6 @@ export class ProjectConfig<TId extends string = string> {
 		return positive(this.ai.concurrency, DEFAULT_AI_CONCURRENCY);
 	}
 
-	get aiMaxSteps(): number {
-		return positive(this.ai.maxSteps, DEFAULT_AI_MAX_STEPS);
-	}
-
-	get aiMaxOutputTokens(): number {
-		return positive(this.ai.maxOutputTokens, DEFAULT_AI_MAX_OUTPUT_TOKENS);
-	}
-
-	get aiTemperature(): number {
-		const value = this.ai.temperature;
-		return typeof value === "number" && Number.isFinite(value) ? value : 0;
-	}
-
 	/** Opções do AI SDK por provider (undefined quando ausentes/vazias). */
 	get aiProviderOptions(): AiProviderOptions | undefined {
 		const value = this.ai.providerOptions;
@@ -176,19 +161,6 @@ export class ProjectConfig<TId extends string = string> {
 	aiModelFor(watchdogId: string): string {
 		const override = this.ai.watchdogs?.[watchdogId]?.model?.trim();
 		return override && override.length > 0 ? override : this.aiModel;
-	}
-
-	/** Passos efetivos de um watchdog (override por watchdog ou global). */
-	aiMaxStepsFor(watchdogId: string): number {
-		return positive(this.ai.watchdogs?.[watchdogId]?.maxSteps, this.aiMaxSteps);
-	}
-
-	/** Tokens de saída efetivos de um watchdog. */
-	aiMaxOutputTokensFor(watchdogId: string): number {
-		return positive(
-			this.ai.watchdogs?.[watchdogId]?.maxOutputTokens,
-			this.aiMaxOutputTokens,
-		);
 	}
 }
 

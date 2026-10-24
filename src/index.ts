@@ -7,7 +7,6 @@
 
 export type {
 	AiResult,
-	AiTool,
 	AiUsage,
 	ModelProvider,
 	ModelRequest,
@@ -255,7 +254,6 @@ export type {
 	FileStatus,
 	FileStatusMap,
 	Rule,
-	RuleHints,
 	Severity,
 	WatchdogDefinition,
 	WatchdogMeta,

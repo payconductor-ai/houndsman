@@ -37,7 +37,6 @@ export class AiClassifier {
 				instructions: classificationInstructions(),
 				prompt: classificationPrompt({ files, watchdogs }),
 				outputSchema: ClassificationSchema,
-				maxSteps: 1,
 			},
 		);
 		if (!result.ok) return assignments;

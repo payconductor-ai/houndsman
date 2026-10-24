@@ -405,16 +405,6 @@ export type Rule = {
 	severity: Severity;
 	text: string;
 	jev?: JevRuleSpec;
-	hints?: RuleHints;
-};
-
-/** Sinais opcionais de uma regra (símbolos, imports, decorators, paths, checks). */
-export type RuleHints = {
-	symbols?: string[];
-	imports?: string[];
-	decorators?: string[];
-	paths?: string[];
-	checks?: string[];
 };
 
 /** Como o watchdog casa um arquivo alterado. \`value\` é sempre regex. */
@@ -509,20 +499,15 @@ export type HoundsmanAiFeatures = {
 /** Overrides de IA por watchdog. */
 export type HoundsmanAiWatchdog = {
 	model?: string;
-	maxSteps?: number;
-	maxOutputTokens?: number;
 };
 
-/** Configuração da camada de IA (briefs, contexto, classificação e hunt nativo). */
+/** Configuração da camada de IA (briefs, contexto, classificação, pré-análise, verify). */
 export type HoundsmanAi = {
 	enabled?: boolean;
 	provider?: AiProviderKind;
 	model?: string;
 	baseURL?: string;
 	concurrency?: number;
-	maxSteps?: number;
-	maxOutputTokens?: number;
-	temperature?: number;
 	providerOptions?: AiProviderOptions;
 	timeoutMs?: number;
 	maxCallsPerReview?: number;
@@ -673,7 +658,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "b74af7e1979bf1b4",
+    "sha256": "5e5335870f493aba",
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
@@ -681,11 +666,11 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/fix.md",
-    "sha256": "9f10b2d846dc7db5",
+    "sha256": "5782f4880af78d29",
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "650770f2b75df8f0",
+    "sha256": "dfaec1a665d7ee65",
   },
   {
     "file": ".houndsman/core/skill/train.md",

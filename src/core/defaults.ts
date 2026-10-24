@@ -41,14 +41,8 @@ export const DEFAULT_AI_MODEL = "deepseek-v4-pro";
 /** Concorrência default das chamadas de IA. */
 export const DEFAULT_AI_CONCURRENCY = 2;
 
-/** Passos default por agente (loop de tools + saída). */
-export const DEFAULT_AI_MAX_STEPS = 12;
-
 /** Timeout default de uma chamada de modelo (ms). */
 export const DEFAULT_AI_TIMEOUT_MS = 120_000;
 
 /** Teto default de chamadas de IA por review. */
 export const DEFAULT_AI_MAX_CALLS_PER_REVIEW = 40;
-
-/** Teto default de tokens de saída por chamada. */
-export const DEFAULT_AI_MAX_OUTPUT_TOKENS = 4096;

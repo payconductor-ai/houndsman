@@ -32,7 +32,6 @@ export class AiPreAnalyzer {
 				instructions: preAnalysisInstructions(),
 				prompt: preAnalysisPrompt(input),
 				outputSchema: CandidateSchema,
-				maxSteps: 1,
 			},
 			this.client.projectConfig.aiModelFor(input.watchdogId),
 		);

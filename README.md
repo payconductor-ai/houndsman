@@ -28,7 +28,7 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 - **git** — o diff usa `git diff <base>...<head>`.
 - **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
 - **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
-- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — IA própria do `hunt` nativo e das features de IA.
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — features de IA (briefs, contexto, classificação, resumo técnico).
 - **`HOUNDSMAN_OPENAI_API_KEY`** / **`HOUNDSMAN_ANTHROPIC_API_KEY`** (opcional) — apenas se
   `ai.provider` for `openai`/`anthropic`.
 
@@ -74,7 +74,7 @@ bun run houndsman doctor
 
 ### 6. Rode a primeira revisão
 
-No seu harness (Claude Code / agents), invoque o skill:
+No seu agente (Claude Code / agents), invoque o skill:
 
 ```
 /houndsman hunt
@@ -84,28 +84,13 @@ O skill orquestra tudo e persiste o relatório no storage global (SQLite em
 `<HOUNDSMAN_HOME>/houndsman.db`); a UI lê os artefatos direto do storage. Não precisa rodar
 nenhum script à mão.
 
-### 7. Revisão nativa (opcional) — `houndsman hunt`
-
-Além do skill, o houndsman tem um **harness próprio**: o `hunt` roda o agente de revisão
-dentro do CLI, com tools read-only, investigação por evidência e a mesma saída `review.md`.
-
-```bash
-bun run houndsman hunt --dry-run     # inspeciona watchdogs/arquivos, sem IA
-HOUNDSMAN_DEEP_SEEK_API_KEY=... bun run houndsman hunt
-bun run houndsman hunt --resume      # preserva findings válidos do staging
-bun run houndsman hunt --fail-on-blocking
-```
-
-Detalhes (catálogo de tools, máquina de estados, custos e segurança): [`docs/HARNESS.md`](docs/HARNESS.md).
-
-### 8. Várias PRs ao mesmo tempo (worktrees)
+### 7. Várias PRs ao mesmo tempo (worktrees)
 
 Cada revisão pode rodar em um **worktree dedicado** (detached no commit da PR), sem
 checkout no clone principal e sem bloquear a revisão das outras PRs:
 
 ```bash
 houndsman --pr 123                 # cria/reusa o worktree e prepara os briefs
-houndsman hunt --pr 123            # revisão nativa no mesmo worktree
 houndsman --pr 123 --finalize      # consolida o relatório
 houndsman worktree list            # worktrees ativos
 houndsman worktree remove feature/x
@@ -153,7 +138,7 @@ Você decide o que fazer com cada finding pela **UI local**, informando se quer 
 bun run houndsman server --open     # UI: triar, comentar, marcar feito, ler artefatos
 ```
 
-> A partir da 2ª revisão o `hunt` é **incremental**: revisa apenas os arquivos que mudaram desde
+> A partir da 2ª revisão o prepare é **incremental**: revisa apenas os arquivos que mudaram desde
 > a última revisão. `--full` força o review completo.
 
 ---

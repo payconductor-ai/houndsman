@@ -2,8 +2,6 @@
 
 > Tópicos além do [README](../README.md): como o motor funciona por dentro, onde o Jev entra,
 > referência de comandos e boas práticas para escrever regras.
->
-> IA e harness nativo (`houndsman hunt`): [`HARNESS.md`](HARNESS.md).
 
 ---
 
@@ -129,8 +127,8 @@ Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consol
 ### Escopo do diff (símbolos alterados)
 
 Revisar o arquivo inteiro faz o watchdog reportar problemas **pré-existentes**, fora do que a
-PR mudou. O motor calcula um escopo determinístico no `prepare` e o injeta no brief, nos
-prompts do harness e na pré-análise:
+PR mudou. O motor calcula um escopo determinístico no `prepare` e o injeta no brief e na
+pré-análise:
 
 - **Âncoras:** `git diff -U0` (sem truncar) — linhas adicionadas + posição no lado novo das
   linhas removidas (mudança puramente de remoção também conta).

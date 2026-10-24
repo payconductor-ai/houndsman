@@ -1,11 +1,11 @@
 /**
- * Logger único do CLI/harness (infraestrutura).
+ * Logger único do CLI (infraestrutura).
  *
  * Usa `chalk` para cor e `ora` para spinner, mas cai para texto puro quando a
  * saída não é TTY, `NO_COLOR` está definido, `TERM=dumb` ou `--quiet`.
  *
- * Não é usado por módulos de negócio do `core/`: só `cli/`, `harness/` e
- * `server/` escrevem saída.
+ * Não é usado por módulos de negócio do `core/`: só `cli/` e `server/`
+ * escrevem saída.
  */
 
 import { Chalk, type ChalkInstance } from "chalk";
