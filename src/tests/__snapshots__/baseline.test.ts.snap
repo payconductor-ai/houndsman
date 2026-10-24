@@ -11,7 +11,7 @@ exports[`baseline — brief defaultRenderBrief (contexto, churn, overflow, candi
 
 Watchdog baseline.
 
-## Escopo
+## Escopo do domínio
 
 src/alpha/**
 
@@ -63,10 +63,10 @@ src/alpha/**
 ## Procedimento
 
 1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
-2. **READ HEAD** — leia os arquivos seletivamente (primeiras ~30 linhas). NUNCA o diff completo.
-3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações.
-4. **DEEP-READ** — aprofunde apenas os arquivos com suspeita de violação.
-5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
+3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.
+5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
 exports[`baseline — relatório renderReport consolidado 1`] = `
@@ -665,11 +665,11 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "94ea2b8def871784",
+    "sha256": "a78ed16d4d211889",
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "1738ef9c6d9ec919",
+    "sha256": "9aadf51b48c7f304",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
@@ -685,7 +685,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "1cf68076325da4ab",
+    "sha256": "650770f2b75df8f0",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -702,6 +702,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "Discovery: 1 watchdog(s) ativado(s), 3 arquivo(s), 1 deletado(s).
 Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
+Escopo: 2 arquivo(s), 0 símbolo(s) em 2 faixa(s) alterada(s).
 Jev: pulado (desativado (--no-jev)).
 AST: desabilitado ou sem grammar compatível.
 Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
@@ -753,7 +754,29 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
   },
   "excludedCount": 0,
   "headSha": "<sha>",
-  "mode": "full"
+  "mode": "full",
+  "changedScope": {
+    "src/alpha/a.ts": {
+      "ranges": [
+        {
+          "start": 1,
+          "end": 2
+        }
+      ],
+      "symbols": [],
+      "source": "hunks"
+    },
+    "src/alpha/b.ts": {
+      "ranges": [
+        {
+          "start": 1,
+          "end": 1
+        }
+      ],
+      "symbols": [],
+      "source": "hunks"
+    }
+  }
 }
 "
 `;
@@ -827,9 +850,19 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 
 Watchdog baseline.
 
-## Escopo
+## Escopo do domínio
 
 src/alpha/**
+
+## Escopo do diff (símbolos alterados)
+
+> **Regra de escopo:** um finding só é válido quando a \`line\` está nas faixas
+> abaixo. Código fora delas é contexto — use para entender o impacto, nunca
+> como achado. Se a mudança quebra código não alterado, ancore o finding na
+> linha alterada que causou o problema.
+
+- \`src/alpha/a.ts\` — linhas 1-2 _(faixas do diff)_
+- \`src/alpha/b.ts\` — linhas 1 _(faixas do diff)_
 
 ## Regras (por severidade)
 
@@ -852,10 +885,10 @@ src/alpha/**
 ## Procedimento
 
 1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
-2. **READ HEAD** — leia os arquivos seletivamente (primeiras ~30 linhas). NUNCA o diff completo.
-3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações.
-4. **DEEP-READ** — aprofunde apenas os arquivos com suspeita de violação.
-5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
+3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.
+5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "
 `;
 

@@ -9,6 +9,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { AstService } from "../core/ast/service";
 import { ReviewScopeResolver, type ScopeOptions } from "../core/engine/review-scope";
 import type { FindingState, FindingsStateFile } from "../core/findings-state";
 import { defaultOptions, finalize, prepare, reviewContext } from "../core/orchestrator";
@@ -138,6 +139,35 @@ describe("ReviewScopeResolver", () => {
 			if (scope.kind !== "review") throw new Error("esperava review");
 			expect(scope.classification.mode).toBe("full");
 			expect(scope.classification.headSha).toBe(repo.head);
+			expect(scope.classification.changedScope?.["src/alpha/a.ts"]).toEqual({
+				ranges: [{ start: 1, end: 1 }],
+				symbols: [],
+				source: "hunks",
+			});
+		} finally {
+			process.chdir(originalCwd);
+			repo.cleanup();
+		}
+	});
+
+	test("escopo usa o símbolo AST quando disponível", async () => {
+		const repo = makeRepo();
+		const originalCwd = process.cwd();
+		try {
+			process.chdir(repo.cwd);
+			const ast = new AstService(fakeHoundsmanConfig);
+			const scope = await new ReviewScopeResolver(
+				options({ base: repo.base, full: true }),
+				fakeHoundsmanConfig,
+				ast,
+			).resolve(null, repo.head);
+
+			expect(scope.kind).toBe("review");
+			if (scope.kind !== "review") throw new Error("esperava review");
+			const file = scope.classification.changedScope?.["src/alpha/a.ts"];
+			expect(file?.source).toBe("ast");
+			expect(file?.symbols.map((symbol) => symbol.name)).toEqual(["a"]);
+			expect(file?.ranges).toEqual([{ start: 1, end: 1 }]);
 		} finally {
 			process.chdir(originalCwd);
 			repo.cleanup();
@@ -163,6 +193,9 @@ describe("ReviewScopeResolver", () => {
 			expect(scope.classification.mode).toBe("incremental");
 			expect(scope.classification.reviewedFrom).toBe(repo.base);
 			expect(Object.keys(scope.classification.files)).toEqual(["src/alpha/a.ts"]);
+			expect(scope.classification.changedScope?.["src/alpha/a.ts"]?.ranges).toEqual(
+				[{ start: 1, end: 1 }],
+			);
 			expect(scope.classification.carryover?.map((f) => f.file)).toEqual([
 				"src/alpha/keep.ts",
 			]);

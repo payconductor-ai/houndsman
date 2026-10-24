@@ -6,6 +6,7 @@
  */
 
 import { buildSystem } from "../../core/ai/prompts/base";
+import { formatRanges, formatSymbols } from "../../core/changed-scope";
 import { OUTPUT_FORMAT_PATH } from "../../core/paths";
 import type { AgentContext } from "../agent/agent-context";
 
@@ -24,6 +25,9 @@ export function buildReviewerSystem(
 			"Nunca invente achado, arquivo, linha ou regra.",
 			"Toda regra deve terminar com cobertura (checked, not_applicable ou skipped).",
 			"blocking/attention exigem evidência rastreável.",
+			"O escopo do diff é obrigatório: só proponha draft com `line` dentro das faixas alteradas.",
+			"Código fora das faixas é contexto — use para entender impacto, nunca como achado.",
+			"Se a mudança quebra código não alterado, ancore o finding na linha alterada causadora.",
 			context.watchdog.definition.allowEmergentFindings
 				? "Findings emergentes de lógica/domínio usam `Lógica:`/`Domínio:`, exigem evidência e severidade máxima attention."
 				: "Todo finding deve citar uma regra existente do watchdog.",
@@ -31,14 +35,17 @@ export function buildReviewerSystem(
 			"## Regras do watchdog",
 			...rules,
 			"",
-			"## Escopo",
+			"## Escopo do domínio",
 			context.watchdog.scope,
 			"",
+			"## Escopo do diff",
+			"Símbolos alterados e faixas revisáveis desta revisão. Sem AST, valem as faixas do diff.",
+			"",
 			"## Procedimento",
-			"1. ORIENT — entenda regras, diff, AST e impacto.",
+			"1. ORIENT — entenda regras, escopo do diff, AST e impacto.",
 			"2. PLAN — escolha as tarefas priorizadas.",
 			"3. INVESTIGATE — use tools para coletar evidências; refute hipóteses.",
-			"4. VERIFY — cada draft precisa de evidência válida.",
+			"4. VERIFY — cada draft precisa de evidência válida dentro do escopo.",
 			"5. CONCLUDE — produza o relatório.",
 			"",
 			"## Tools disponíveis",
@@ -66,6 +73,26 @@ export function buildReviewerUser(context: AgentContext): string {
 			...context.overflow.slice(0, 40).map((file) => `- ${file}`),
 		);
 	}
+	const scopeFiles = context.files.filter((file) => context.changedScope[file]);
+	if (scopeFiles.length > 0) {
+		lines.push("", "## Escopo do diff (só o que pode virar finding)");
+		for (const file of scopeFiles) {
+			const entry = context.changedScope[file];
+			if (!entry) continue;
+			if (entry.ranges.length === 0) {
+				lines.push(`- \`${file}\` — sem linhas alteradas (não reportar)`);
+				continue;
+			}
+			const fallback = entry.source === "hunks" ? " (faixas do diff)" : "";
+			lines.push(`- \`${file}\` — linhas ${formatRanges(entry.ranges)}${fallback}`);
+			const symbols = formatSymbols(entry.symbols);
+			if (symbols) lines.push(`  símbolos: ${symbols}`);
+		}
+		lines.push(
+			"",
+			"Só proponha drafts com `line` dentro dessas faixas; o resto é contexto.",
+		);
+	}
 	if (context.deleted.length > 0) {
 		lines.push("", "Deletados:", ...context.deleted.map((file) => `- ${file}`));
 	}
@@ -91,6 +118,8 @@ export function buildReviewerUser(context: AgentContext): string {
 		lines.push(
 			"",
 			`Impacto: ${context.impact.affectedFiles.length} arquivo(s) importam o diff.`,
+			"> Importadores não alterados são contexto: use para entender o impacto; findings",
+			"> só nas faixas alteradas dos arquivos do escopo.",
 			...context.impact.affectedFiles.slice(0, 20).map((file) => `- ${file}`),
 		);
 	}

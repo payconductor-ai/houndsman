@@ -16,6 +16,7 @@ import { ImportsExportsTool } from "./imports-exports-tool";
 import { ListFilesTool } from "./list-files-tool";
 import { PrContextTool } from "./pr-context-tool";
 import { ReadFileRangeTool } from "./read-file-range-tool";
+import { ReviewScopeTool } from "./review-scope-tool";
 import { RuleSignalsTool } from "./rule-signals-tool";
 import { SearchCodeTool } from "./search-code-tool";
 import { SymbolContextTool } from "./symbol-context-tool";
@@ -25,6 +26,7 @@ import { TestsForSymbolTool } from "./tests-for-symbol-tool";
 export class BuiltinToolsModule implements ToolModule {
 	register(registry: ToolRegistryLike): void {
 		registry.registerTool(new PrContextTool());
+		registry.registerTool(new ReviewScopeTool());
 		registry.registerTool(new ListFilesTool());
 		registry.registerTool(new FileOutlineTool());
 		registry.registerTool(new ReadFileRangeTool());
@@ -52,6 +54,7 @@ export {
 	ListFilesTool,
 	PrContextTool,
 	ReadFileRangeTool,
+	ReviewScopeTool,
 	RuleSignalsTool,
 	SearchCodeTool,
 	SymbolContextTool,

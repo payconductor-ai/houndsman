@@ -6,6 +6,7 @@
  */
 
 import type { AstAnalysis, AstImpact } from "../../core/ast/types";
+import type { ChangedScope } from "../../core/changed-scope";
 import type { HoundsmanConfig } from "../../core/config";
 import type { DiffSource } from "../../core/diff-source";
 import { discoverDocs } from "../../core/doc-discoverer";
@@ -27,6 +28,8 @@ export type ReviewPlannerInput = {
 	impact?: AstImpact;
 	repoRoot: string;
 	diff: DiffSource;
+	/** Escopo do diff por arquivo (símbolos alterados; hunks como fallback). */
+	changedScope?: ChangedScope;
 	/** Branch alvo da review (prompt do agente). */
 	branch: string;
 	/** Filtra um único watchdog (`--watchdog`). */
@@ -89,6 +92,7 @@ export class ReviewPlanner {
 					maxCalls: this.input.maxCalls,
 					repoRoot: this.input.repoRoot,
 					diff: this.input.diff,
+					changedScope: this.input.changedScope ?? {},
 					rules,
 				},
 			});

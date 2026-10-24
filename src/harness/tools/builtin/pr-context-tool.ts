@@ -29,7 +29,9 @@ export class PrContextTool implements AgentTool<Record<string, never>, unknown> 
 				project: context.agent.projectName,
 				branch: context.agent.branch,
 				watchdog: context.agent.watchdog.id,
-				scope: context.agent.watchdog.scope,
+				// Escopo de DOMÍNIO (pastas/arquivos). O escopo do diff fica em
+				// `review_scope` para não confundir o agente.
+				domainScope: context.agent.watchdog.scope,
 				context: context.agent.context ?? null,
 				files: context.agent.files,
 				overflow: context.agent.overflow,

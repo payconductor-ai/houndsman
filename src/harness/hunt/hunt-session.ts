@@ -14,6 +14,7 @@ import {
 	type ModelProvider,
 } from "../../core/ai";
 import type { AstAnalysis } from "../../core/ast/types";
+import { buildChangedScope, summarizeScope } from "../../core/changed-scope";
 import type { HoundsmanEngine } from "../../core/engine/houndsman-engine";
 import type { RunClassification } from "../../core/engine/review-scope";
 import { parseEntries } from "../../core/file-classifier";
@@ -102,8 +103,10 @@ export class HuntSession {
 		}
 
 		if (options.dryRun) {
+			const totals = summarizeScope(classification.changedScope ?? {});
 			messages.push(
 				`Dry-run: ${planned.length} watchdog(s) sem chamadas de IA.`,
+				`Escopo: ${totals.files} arquivo(s), ${totals.symbols} símbolo(s) em ${totals.ranges} faixa(s) alterada(s).`,
 				...planned.map(
 					(item) =>
 						`- ${item.context.watchdog.id}: ${item.files.length} arquivo(s)` +
@@ -265,15 +268,42 @@ export class HuntSession {
 		work: import("../../core/storage/work-area").ReviewWorkArea,
 	) {
 		const { engine, options } = this.deps;
-		const diff = engine.git.collectDiff(options.base, options.head);
+		// Review incremental já preparou apenas o delta: o hunt precisa enxergar o
+		// mesmo intervalo, senão AST/escopo ficam maiores que o brief.
+		const from =
+			classification.mode === "incremental" && classification.reviewedFrom
+				? classification.reviewedFrom
+				: options.base;
+		const incremental =
+			classification.mode === "incremental" && Boolean(classification.reviewedFrom);
+		const diff = incremental
+			? engine.git.collectDiffSince(from, options.head)
+			: engine.git.collectDiff(options.base, options.head);
 		const entries = parseEntries(
-			engine.git.diffNameStatus(options.base, options.head),
+			incremental
+				? engine.git.run(["diff", `${from}..${options.head}`, "--name-status"])
+				: engine.git.diffNameStatus(options.base, options.head),
 		);
-		const baseRef = engine.git.mergeBase(options.base, options.head) ?? options.base;
+		const baseRef = incremental
+			? from
+			: (engine.git.mergeBase(options.base, options.head) ?? options.base);
 		const ast: Map<string, AstAnalysis> = options.noAst
 			? new Map()
 			: await engine.ast.analyze(entries, diff, baseRef);
 		const impact = ast.size > 0 ? await engine.ast.impact(ast) : undefined;
+		const changedScope =
+			classification.changedScope ??
+			buildChangedScope({
+				entries: entries
+					.filter(
+						(entry) =>
+							entry.status !== "deleted" &&
+							!classification.excluded.includes(entry.path),
+					)
+					.map((entry) => ({ path: entry.path, status: entry.status })),
+				diff,
+				ast,
+			});
 		const context =
 			work.readContextSummary() ?? readContextSummary(engine, review.id);
 		const planner = new ReviewPlanner({
@@ -285,6 +315,7 @@ export class HuntSession {
 			impact,
 			repoRoot: engine.root,
 			diff,
+			changedScope,
 			branch: review.branch,
 			watchdog: options.watchdog,
 			maxCalls: this.deps.config.maxCalls,

@@ -156,10 +156,15 @@ export class JevDetector {
 		const hunk =
 			diff.byFile.get(filePath)?.slice(0, JevDetector.MAX_DIFF_CHARS) ?? "";
 		const parts = [`Arquivo: ${filePath} (${status})`];
+		parts.push(
+			"Escopo: apenas o diff abaixo refere-se ao que mudou nesta revisão.",
+			"O topo do arquivo é contexto para entender imports/declarações — não reporte",
+			"problemas apenas nele.",
+		);
 		if (header) {
-			parts.push("--- topo do arquivo (imports/declarações) ---", header);
+			parts.push("--- topo do arquivo (contexto) ---", header);
 		}
-		if (hunk) parts.push("--- diff ---", hunk);
+		if (hunk) parts.push("--- diff (escopo alterado) ---", hunk);
 		return parts.join("\n").slice(0, JevDetector.MAX_STATE_CHARS);
 	}
 

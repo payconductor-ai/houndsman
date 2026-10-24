@@ -62,6 +62,8 @@ mudanças antes de push.
 - **As regras refletem os padrões APLICADOS hoje** — não validar práticas que o projeto
   não adota. Regra sem aplicação real no código gera falso positivo.
 - Cada watchdog recebe apenas seus arquivos relevantes (brief pronto) — nunca o diff completo.
+- O brief traz o **escopo do diff** (símbolos alterados e faixas revisáveis); achado fora
+  dessas faixas é código pré-existente, não escopo desta revisão.
 - Saída estruturada (JSON) por watchdog → consolidada e deduplicada automaticamente.
 
 ---

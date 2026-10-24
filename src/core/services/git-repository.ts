@@ -138,6 +138,14 @@ export class GitRepository {
 		return parseNumstat(this.run(["diff", "--numstat", "-z", range]));
 	}
 
+	/**
+	 * Patch com contexto zero (`git diff -U0 range`), sem truncar por arquivo.
+	 * É compacto e exato nas linhas — base do escopo do diff e do delta AST.
+	 */
+	patchZeroContext(range: string): Map<string, string> {
+		return parseDiffIndex(this.run(["diff", "-U0", range]));
+	}
+
 	/** Patch por arquivo de um intervalo, opcionalmente restrito a `paths`. */
 	diffPatch(
 		range: string,

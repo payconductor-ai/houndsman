@@ -94,6 +94,71 @@ describe("read_file_range", () => {
 	});
 });
 
+describe("review_scope", () => {
+	test("devolve faixas e símbolos alterados do domínio", async () => {
+		const registry = new ToolRegistry();
+		registry.registerModule(new BuiltinToolsModule());
+		const ctx = context();
+		ctx.agent.changedScope = {
+			"src/alpha/a.ts": {
+				ranges: [{ start: 1, end: 2 }],
+				symbols: [{ name: "x", kind: "variable", startLine: 1, endLine: 1 }],
+				source: "ast",
+			},
+		};
+
+		const result = await registry.execute(
+			"review_scope",
+			{},
+			ctx,
+			new ToolMiddleware(),
+		);
+
+		expect(result.ok).toBe(true);
+		const data = result.data as {
+			files: {
+				file: string;
+				lines: string;
+				source: string;
+				ranges: { start: number; end: number }[];
+				symbols: {
+					name: string;
+					kind: string;
+					startLine: number;
+					endLine: number;
+				}[];
+				symbolsText: string;
+			}[];
+			totals: { files: number; ranges: number; symbols: number };
+		};
+		expect(data.files).toEqual([
+			{
+				file: "src/alpha/a.ts",
+				source: "ast",
+				ranges: [{ start: 1, end: 2 }],
+				symbols: [{ name: "x", kind: "variable", startLine: 1, endLine: 1 }],
+				lines: "1-2",
+				symbolsText: "`x` (1-1)",
+			},
+		]);
+		expect(data.totals).toEqual({ files: 1, ranges: 1, symbols: 1 });
+	});
+
+	test("sem faixas devolve hint para tratar como contexto", async () => {
+		const registry = new ToolRegistry();
+		registry.registerModule(new BuiltinToolsModule());
+		const result = await registry.execute(
+			"review_scope",
+			{},
+			context(),
+			new ToolMiddleware(),
+		);
+
+		expect(result.ok).toBe(true);
+		expect(result.hint).toContain("contexto");
+	});
+});
+
 describe("ToolRegistry / middleware", () => {
 	test("nome duplicado falha no registro", () => {
 		const registry = new ToolRegistry();

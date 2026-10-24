@@ -32,6 +32,7 @@ export function fakeAgentContext(overrides: Partial<AgentContext> = {}): AgentCo
 		maxCalls: 8,
 		repoRoot: process.cwd(),
 		diff: { byFile: new Map(), churn: new Map() },
+		changedScope: {},
 		rules,
 		...overrides,
 	};

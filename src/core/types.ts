@@ -8,6 +8,7 @@
 
 import type { BriefPlan } from "./ai/schemas";
 import type { AstFileBrief } from "./ast/types";
+import type { ChangedScope } from "./changed-scope";
 import type { JevRuleSpec } from "./jev/jev-types";
 
 /** Severidade de um achado. `blocking` bloqueia o merge. */
@@ -144,6 +145,8 @@ export type WatchdogRenderArgs = {
 	ast?: readonly AstFileBrief[];
 	/** Plano de revisão sugerido por IA (nunca substitui as regras). */
 	aiPlan?: BriefPlan;
+	/** Escopo do diff por arquivo (símbolos alterados; hunks como fallback). */
+	changedScope?: ChangedScope;
 };
 
 /** Definição completa de um watchdog — 1 por arquivo em `project/watchdogs/`. */

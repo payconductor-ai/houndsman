@@ -69,6 +69,11 @@ staging global da review:
 - Sem achados → `"findings": []` (arquivo **obrigatório**).
 - Um achado por regra violada; não agrupar regras diferentes.
 - `file:line` sempre que possível; `evidence` quando o achado não é óbvio.
+- **Escopo do diff:** a `line` deve cair dentro das faixas listadas em
+  *Escopo do diff (símbolos alterados)* no brief. Código fora delas é contexto — não é
+  achado desta revisão. Se a alteração quebra código não alterado, ancore o finding na
+  linha alterada que causou o problema.
+- Achado **sem linha** só quando for inerente à alteração (vira comentário de arquivo).
 - Não inventar achados — se não houver violação, o array fica vazio.
 
 ## Findings emergentes (opt-in)

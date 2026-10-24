@@ -63,7 +63,8 @@ flowchart TD
    `unclassified`.
 3. **Briefs determinísticos.** Para cada watchdog ativado, o CLI renderiza um brief com **só**
    os arquivos do domínio dele + **só** as regras daquele domínio. Nunca o diff completo. Os
-   arquivos entram **priorizados por churn** e limitados pelo **orçamento** (ver abaixo).
+   arquivos entram **priorizados por churn** e limitados pelo **orçamento** (ver abaixo). O
+   brief também traz o **escopo do diff** — as faixas revisáveis de cada arquivo (ver abaixo).
 4. **Despacho em ondas.** O agente principal cria **um subagente por brief**, despachados em
    ondas (ex.: até 8 por bloco de chamadas) para não estourar rate limit. Cada watchdog recebe
    apenas o seu contexto — nunca o dos outros.
@@ -124,6 +125,25 @@ flowchart LR
   **pré-análise, nunca gate**. Para desligar: `houndsman --no-jev`.
 
 Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consolida.**
+
+### Escopo do diff (símbolos alterados)
+
+Revisar o arquivo inteiro faz o watchdog reportar problemas **pré-existentes**, fora do que a
+PR mudou. O motor calcula um escopo determinístico no `prepare` e o injeta no brief, nos
+prompts do harness e na pré-análise:
+
+- **Âncoras:** `git diff -U0` (sem truncar) — linhas adicionadas + posição no lado novo das
+  linhas removidas (mudança puramente de remoção também conta).
+- **Símbolos:** para cada âncora, o **menor símbolo folha** do AST que a contém
+  (função/método/tipo/enum/propriedade/interface). Containers (classe/interface/enum) não
+  expandem sozinhos; âncoras fora de símbolo (imports, topo do módulo) viram faixas avulsas.
+- **Fallback:** sem grammar ou com `--no-ast`, valem as faixas dos hunks.
+- **Persistência:** o escopo fica em `classification.json` (`changedScope`) e é a fonte única
+  do brief, da tool `review_scope` e dos prompts.
+
+> Um finding só é válido com `line` dentro das faixas. Código fora delas é contexto para
+> entender o impacto. Se a mudança quebra algo não alterado, o finding ancora na linha
+> alterada que causou o problema.
 
 ### AST determinístico (TS/JS)
 

@@ -46,6 +46,8 @@ Regras:
 - Draft sem evidência válida é descartado (`FindingCritic`).
 - Toda regra termina em `checked`, `not_applicable` ou `skipped` com motivo.
 - Budget de IA/tools esgotado interrompe com `skipped`, nunca inventa achado.
+- **Escopo do diff é obrigatório:** só drafts com `line` nas faixas alteradas são válidos;
+  código fora delas é contexto. Sem AST, valem as faixas dos hunks (`-U0`).
 
 ## Catálogo de tools
 
@@ -55,6 +57,7 @@ redaction de segredos.
 | Tool | Para quê | Limites |
 |---|---|---|
 | `pr_context` | contexto resumido da PR | já compactado |
+| `review_scope` | faixas/símbolos alterados (só o que pode virar finding) | por arquivo do domínio |
 | `list_files` | listar arquivos rastreados | 200 |
 | `file_outline` | mapa de símbolos/imports/exports | sem corpo |
 | `read_file_range` | ler trecho explícito | 200 linhas / 32 KB |

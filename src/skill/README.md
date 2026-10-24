@@ -18,7 +18,8 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 
 - **houndsman** — o orquestrador/treinador (CLI + motor).
 - **watchdog** — cada agente especialista por domínio que audita o diff.
-- **brief** — instruções prontas para um watchdog (o prompt do subagente).
+- **brief** — instruções prontas para um watchdog (o prompt do subagente), incluindo o
+  **escopo do diff** (faixas/símbolos alterados que podem virar finding).
 - **findings** — os achados que o subagente grava em JSON (único output consumido).
 - **candidato (Jev)** — indício automático; **não** é achado (o watchdog confirma ou refuta).
 - **churn** — linhas adicionadas/removidas por arquivo; usado para priorizar a leitura.

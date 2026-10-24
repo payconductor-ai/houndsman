@@ -6,6 +6,7 @@
  */
 
 import type { AstDelta } from "./ast/types";
+import { formatRanges, formatSymbols } from "./changed-scope";
 import {
 	type Rule,
 	SEVERITY_EMOJI,
@@ -21,10 +22,10 @@ import {
  */
 export const PROCEDURE: readonly string[] = [
 	"1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).",
-	"2. **READ HEAD** — leia os arquivos seletivamente (primeiras ~30 linhas). NUNCA o diff completo.",
-	"3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações.",
-	"4. **DEEP-READ** — aprofunde apenas os arquivos com suspeita de violação.",
-	'5. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
+	"2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.",
+	"3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.",
+	"4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.",
+	'5. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
 /** Limites do contexto injetado em cada brief (o resumo final é maior). */
@@ -78,6 +79,52 @@ export function renderBriefCandidates(
 			`- [ ] \`${candidate.file}\` · **${candidate.severity}** · confiança ${candidate.confidence.toFixed(2)}`,
 			`  Regra: ${candidate.rule}`,
 		);
+	}
+	lines.push("");
+	return lines;
+}
+
+/**
+ * Escopo do diff — as únicas faixas que podem virar finding.
+ *
+ * Sem ele, o watchdog tende a revisar o arquivo inteiro e reportar problemas
+ * pré-existentes (fora do que a PR alterou).
+ */
+function changedScopeSection(args: WatchdogRenderArgs): string[] {
+	const scope = args.changedScope;
+	if (!scope) return [];
+	const files = args.files.filter((file) => scope[file]);
+	if (files.length === 0) return [];
+	const lines: string[] = [
+		"## Escopo do diff (símbolos alterados)",
+		"",
+		"> **Regra de escopo:** um finding só é válido quando a `line` está nas faixas",
+		"> abaixo. Código fora delas é contexto — use para entender o impacto, nunca",
+		"> como achado. Se a mudança quebra código não alterado, ancore o finding na",
+		"> linha alterada que causou o problema.",
+		"",
+	];
+	let rendered = 0;
+	for (const file of files) {
+		const entry = scope[file];
+		if (!entry) continue;
+		if (entry.ranges.length === 0) {
+			lines.push(
+				`- \`${file}\` — sem linhas alteradas (renomeado/binário): não reportar`,
+			);
+			rendered++;
+			if (rendered >= 40) break;
+			continue;
+		}
+		const fallback = entry.source === "hunks" ? " _(faixas do diff)_" : "";
+		lines.push(`- \`${file}\` — linhas ${formatRanges(entry.ranges)}${fallback}`);
+		const symbols = formatSymbols(entry.symbols);
+		if (symbols) lines.push(`  símbolos: ${symbols}`);
+		rendered++;
+		if (rendered >= 40) break;
+	}
+	if (files.length > rendered) {
+		lines.push(`- … +${files.length - rendered} arquivo(s)`);
 	}
 	lines.push("");
 	return lines;
@@ -293,7 +340,9 @@ export function defaultRenderBrief(
 	];
 
 	if (def.description) lines.push("## Objetivo", "", def.description, "");
-	lines.push("## Escopo", "", def.scope, "");
+	lines.push("## Escopo do domínio", "", def.scope, "");
+
+	lines.push(...changedScopeSection(args));
 
 	if (args.context) lines.push(...renderBriefContext(args.context));
 

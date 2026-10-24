@@ -16,7 +16,7 @@
  * review.<watchdog>.md, context e context-summary.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AiClient } from "./ai/ai-client";
 import { AiBriefEnricher } from "./ai/features/brief-enricher";
@@ -28,6 +28,7 @@ import type { BriefPlan } from "./ai/schemas";
 import { assetPath, OUTPUT_FORMAT_FILE } from "./assets";
 import type { AstService } from "./ast/service";
 import type { AstAnalysis, AstFileBrief, AstImpact } from "./ast/types";
+import { summarizeScope } from "./changed-scope";
 import {
 	type HoundsmanConfig,
 	resolveJevConcurrency,
@@ -231,7 +232,7 @@ function writeManifest(
 
 function writeBriefs(
 	activeIds: string[],
-	classification: ClassificationResult,
+	classification: RunClassification,
 	ctx: ReviewContext,
 	branch: string,
 	context: ContextSummary | null,
@@ -276,6 +277,7 @@ function writeBriefs(
 			candidates: candidates.filter((c) => c.watchdogId === id),
 			ast: astFiles,
 			aiPlan: aiPlans?.get(id),
+			changedScope: classification.changedScope,
 		});
 		const content = `${brief}\n`;
 		work.writeBrief(id, content);
@@ -322,7 +324,9 @@ async function resolveCandidates(
 				const def = findWatchdog(config, id);
 				if (!def) continue;
 				const inputs = files.slice(0, 5).flatMap((file) => {
-					const snippet = readSnippet(ctx.root, file);
+					// Só o trecho alterado: candidato fora do diff vira ruído de código
+					// pré-existente no brief do watchdog.
+					const snippet = diff.byFile.get(file);
 					return snippet ? [{ file, snippet }] : [];
 				});
 				candidates.push(
@@ -406,6 +410,16 @@ function discoveryMessages(
 	return messages;
 }
 
+/** Resumo do escopo — lembra que só as faixas alteradas são revisáveis. */
+function changedScopeMessage(classification: RunClassification): string[] {
+	const scope = classification.changedScope;
+	if (!scope) return [];
+	const totals = summarizeScope(scope);
+	return [
+		`Escopo: ${totals.files} arquivo(s), ${totals.symbols} símbolo(s) em ${totals.ranges} faixa(s) alterada(s).`,
+	];
+}
+
 /** Resumo do orçamento — só quando algum arquivo ficou de fora (PR grande). */
 function budgetMessage(
 	classification: ClassificationResult,
@@ -420,16 +434,6 @@ function budgetMessage(
 	return [
 		`Orçamento: ${maxFiles} arquivo(s)/brief — ${overflow} fora do orçamento (menor churn; registrar em skipped).`,
 	];
-}
-
-/** Primeiras 80 linhas de um arquivo (pré-análise por IA; fail-open). */
-function readSnippet(root: string, file: string): string | null {
-	try {
-		const path = join(root, file);
-		return readFileSync(path, "utf8").split("\n").slice(0, 80).join("\n");
-	} catch {
-		return null;
-	}
 }
 
 /** Resultado do prepare — mensagens para o CLI imprimir. */
@@ -806,6 +810,7 @@ export async function prepare(
 	messages.push(
 		...discoveryMessages(activeIds, classification, ctx.work.briefsDir),
 		...budgetMessage(classification, config),
+		...changedScopeMessage(classification),
 		...jevSummary(jev),
 	);
 	if (astAnalyses) {

@@ -26,7 +26,14 @@ export {
 } from "./core/ai";
 export { ArgParser } from "./core/arg-parser";
 export { assetPath, OUTPUT_FORMAT_FILE } from "./core/assets";
-export { computeDelta, emptyDelta, parseHunks } from "./core/ast/diff";
+export {
+	changedAnchorLines,
+	changedAnchors,
+	changedNewLines,
+	computeDelta,
+	emptyDelta,
+	parseHunks,
+} from "./core/ast/diff";
 export { buildImpact, resolveImport } from "./core/ast/impact";
 export { AstParser, languageForPath } from "./core/ast/parser";
 export { AstService } from "./core/ast/service";
@@ -44,6 +51,23 @@ export type {
 	AstSymbolKind,
 } from "./core/ast/types";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
+export type {
+	BuildChangedScopeInput,
+	ChangedScope,
+	ChangedScopeSource,
+	ChangedSymbol,
+	FileChangedScope,
+	LineRange,
+	ScopeEntry,
+} from "./core/changed-scope";
+export {
+	buildChangedScope,
+	formatRanges,
+	formatSymbols,
+	isLineInScope,
+	mergeRanges,
+	summarizeScope,
+} from "./core/changed-scope";
 export type { FindingsCommandResult } from "./core/commands/findings";
 export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export { ProjectScaffolder } from "./core/commands/scaffold";

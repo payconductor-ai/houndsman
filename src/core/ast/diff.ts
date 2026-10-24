@@ -14,7 +14,7 @@ import type {
 	AstSymbol,
 } from "./types";
 
-/** Um hunk do patch, com as linhas novas adicionadas. */
+/** Um hunk do patch, com as linhas novas adicionadas e as âncoras de remoção. */
 export type AstHunk = {
 	oldStart: number;
 	oldLines: number;
@@ -22,6 +22,11 @@ export type AstHunk = {
 	newLines: number;
 	/** Linhas novas (1-based) introduzidas pelo hunk. */
 	addedLines: number[];
+	/**
+	 * Posições (1-based, no lado novo) onde linhas foram removidas. Uma remoção
+	 * pura não tem linha nova, mas marca o ponto do arquivo que ela alterou.
+	 */
+	deletedAt: number[];
 };
 
 /** Regex do cabeçalho de hunk (`@@ -a,b +c,d @@`). */
@@ -52,6 +57,7 @@ export function parseHunks(patch: string): AstHunk[] {
 				newStart: Number.parseInt(match[3], 10),
 				newLines: countOf(match[4]),
 				addedLines: [],
+				deletedAt: [],
 			};
 			newLine = current.newStart;
 			hunks.push(current);
@@ -68,7 +74,11 @@ export function parseHunks(patch: string): AstHunk[] {
 			newLine++;
 			continue;
 		}
-		if (line.startsWith("-")) continue;
+		if (line.startsWith("-")) {
+			// Remoção pura não consome linha nova: ancora no ponto atual do arquivo.
+			current.deletedAt.push(Math.max(1, newLine));
+			continue;
+		}
 		if (line.startsWith("\\")) continue;
 		if (line.startsWith(" ")) newLine++;
 	}
@@ -83,6 +93,31 @@ export function changedNewLines(patch: string): Set<number> {
 		for (const line of hunk.addedLines) lines.add(line);
 	}
 	return lines;
+}
+
+/** Âncoras de alteração do patch: adições e posições de remoção no lado novo. */
+export type ChangedAnchors = {
+	/** Linhas novas (1-based) adicionadas. */
+	added: Set<number>;
+	/** Posições (1-based, lado novo) onde houve remoção. */
+	deletedAt: Set<number>;
+};
+
+/** Extrai as âncoras de alteração de um patch (falha aberta: patch vazio → vazio). */
+export function changedAnchors(patch: string): ChangedAnchors {
+	const added = new Set<number>();
+	const deletedAt = new Set<number>();
+	for (const hunk of parseHunks(patch)) {
+		for (const line of hunk.addedLines) added.add(line);
+		for (const line of hunk.deletedAt) deletedAt.add(line);
+	}
+	return { added, deletedAt };
+}
+
+/** União das âncoras (adições + remoções) — o que a mudança tocou no arquivo. */
+export function changedAnchorLines(patch: string): Set<number> {
+	const { added, deletedAt } = changedAnchors(patch);
+	return new Set([...added, ...deletedAt]);
 }
 
 /** Chave estável de um símbolo (espécie + nome). */

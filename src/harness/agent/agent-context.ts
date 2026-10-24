@@ -3,6 +3,7 @@
  */
 
 import type { AstAnalysis, AstImpact } from "../../core/ast/types";
+import type { ChangedScope } from "../../core/changed-scope";
 import type { DiffSource } from "../../core/diff-source";
 import type { Watchdog } from "../../core/domain/watchdog";
 import type { WatchdogRenderContext } from "../../core/types";
@@ -28,6 +29,8 @@ export type AgentContext = {
 	maxCalls: number;
 	repoRoot: string;
 	diff: DiffSource;
+	/** Escopo do diff: faixas/símbolos que podem virar finding. */
+	changedScope: ChangedScope;
 	/** Análises determinísticas das regras do watchdog. */
 	rules: readonly RuleAnalysis[];
 };

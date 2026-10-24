@@ -86,6 +86,7 @@ src/
 │   ├── verify.ts            # verificação de findings (tier local + Jev)
 │   ├── fix-batch.ts         # agrupamento/paginação do lote (puro)
 │   ├── file-classifier.ts   # classificação via `classify` + churn (puro)
+│   ├── changed-scope.ts     # escopo do diff (símbolos alterados + fallback hunks)
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes
 │   ├── git-revision.ts      # refs/ancestralidade + arquivo por commit + diff
 │   ├── git-runner.ts        # único wrapper de `Bun.spawnSync(["git", ...])`
@@ -136,6 +137,11 @@ de agentes do hunt; `server/` = servidor local; `skill/` = markdown embarcado; `
   fallback e `unclassified` continua existindo. As grammars wasm vivem em `assets/grammars/` e
   são resolvidas por `import.meta.dir` (`core/assets.ts`), nunca pelo cwd. O `setup`/`update`
   copiam os wasm para `.houndsman/core/grammars/`; o consumidor **não** roda sync manual.
+- **Escopo do diff é obrigatório.** O `prepare` calcula `changedScope` por arquivo — o menor
+  símbolo folha do AST que contém cada âncora do `git diff -U0` + âncoras soltas; sem AST,
+  caem para os hunks — e o injeta no brief, nos prompts do harness e na pré-análise. Finding
+  com `line` fora das faixas é código pré-existente, não escopo da revisão. Nunca volte a
+  mandar o watchdog "ler o arquivo inteiro".
 - **Composition root:** `HoundsmanEngine` injeta a config e os colaboradores (`GitRepository`,
   `FileClassifier`, `Verifier`, `FixBatchBuilder`). Pipelines não instanciam dependências
   diretamente; a CLI só conhece `Command`/`CommandRegistry`.

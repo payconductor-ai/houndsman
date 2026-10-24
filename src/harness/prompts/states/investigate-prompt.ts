@@ -20,6 +20,7 @@ export function investigatePrompt(
 		"## Como investigar",
 		"- Use file_outline/symbol_context/find_references em vez de ler arquivos inteiros.",
 		"- Registre evidência para cada draft (evidenceIds).",
+		"- Só proponha draft com `line` dentro do escopo do diff; código fora é contexto.",
 		"- Prefira não concluir quando faltar evidência: use coverage 'skipped' com motivo.",
 		"- Não cite arquivos fora do domínio/impacto.",
 		"",

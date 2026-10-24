@@ -7,6 +7,7 @@
 
 import type { AstService } from "../ast/service";
 import type { AstAnalysis, AstFacts } from "../ast/types";
+import { buildChangedScope, type ChangedScope, type ScopeEntry } from "../changed-scope";
 import type { HoundsmanConfig } from "../config";
 import { churnToRecord, type DiffSource } from "../diff-source";
 import { type ClassificationResult, parseEntries } from "../file-classifier";
@@ -34,6 +35,8 @@ export type RunClassification = ClassificationResult & {
 	reviewedFrom?: string;
 	/** Findings preservados do review anterior (arquivos inalterados). */
 	carryover?: MergedFinding[];
+	/** Faixas revisáveis por arquivo (símbolos alterados; hunks como fallback). */
+	changedScope?: ChangedScope;
 };
 
 /** Resultado da resolução de escopo: revisar ou nada a fazer. */
@@ -104,19 +107,30 @@ export class ReviewScopeResolver {
 			const baseRef =
 				this.git.mergeBase(this.options.base, this.options.head) ??
 				this.options.base;
+			// Patch `-U0` sem truncar: mais preciso para delta AST e escopo.
+			const scopeDiff = this.zeroContext(
+				`${this.options.base}...${this.options.head}`,
+				diff,
+			);
 			const ast = this.ast
-				? await this.ast.analyze(entries, diff, baseRef)
+				? await this.ast.analyze(entries, scopeDiff, baseRef)
 				: undefined;
+			const result = this.classifier
+				.classify(entries, churnToRecord(diff.churn), factsOf(ast))
+				.toJSON();
 			return {
 				kind: "review",
 				diff,
 				ast,
 				classification: {
-					...this.classifier
-						.classify(entries, churnToRecord(diff.churn), factsOf(ast))
-						.toJSON(),
+					...result,
 					headSha,
 					mode: "full",
+					changedScope: buildChangedScope({
+						entries: scopeEntries(entries, result),
+						diff: scopeDiff,
+						ast,
+					}),
 				},
 			};
 		}
@@ -125,19 +139,38 @@ export class ReviewScopeResolver {
 		const diff = this.git.collectDiffSince(prevSha, headSha);
 		const entries = parseEntries(this.git.run(["diff", range, "--name-status"]));
 		const changedPaths = new Set(entries.map((entry) => entry.path));
-		const ast = this.ast ? await this.ast.analyze(entries, diff, prevSha) : undefined;
+		const scopeDiff = this.zeroContext(range, diff);
+		const ast = this.ast
+			? await this.ast.analyze(entries, scopeDiff, prevSha)
+			: undefined;
+		const result = this.classifier
+			.classify(entries, churnToRecord(diff.churn), factsOf(ast))
+			.toJSON();
 		const classification: RunClassification = {
-			...this.classifier
-				.classify(entries, churnToRecord(diff.churn), factsOf(ast))
-				.toJSON(),
+			...result,
 			base: prevSha,
 			head: this.options.head,
 			headSha,
 			mode: "incremental",
 			reviewedFrom: prevSha,
 			carryover: buildCarryover(previous, changedPaths),
+			changedScope: buildChangedScope({
+				entries: scopeEntries(entries, result),
+				diff: scopeDiff,
+				ast,
+			}),
 		};
 		return { kind: "review", classification, diff, reviewedFrom: prevSha, ast };
+	}
+
+	/** Patch `-U0` do intervalo; falha aberta cai no diff já coletado. */
+	private zeroContext(range: string, fallback: DiffSource): DiffSource {
+		try {
+			const byFile = this.git.patchZeroContext(range);
+			return byFile.size > 0 ? { byFile, churn: fallback.churn } : fallback;
+		} catch {
+			return fallback;
+		}
 	}
 }
 
@@ -151,4 +184,18 @@ function factsOf(
 		if (!analysis.deleted) facts.set(path, analysis.facts);
 	}
 	return facts;
+}
+
+/**
+ * Entradas revisáveis do `--name-status`: exclui arquivos do `exclusions` e
+ * deletados (não há código atual para ancorar finding).
+ */
+function scopeEntries(
+	entries: ReturnType<typeof parseEntries>,
+	result: ClassificationResult,
+): ScopeEntry[] {
+	const excluded = new Set(result.excluded);
+	return entries
+		.filter((entry) => entry.status !== "deleted" && !excluded.has(entry.path))
+		.map((entry) => ({ path: entry.path, status: entry.status }));
 }
