@@ -11,6 +11,7 @@ import { createGitRunner } from "../git-runner";
 import {
 	type FinalizeResult,
 	finalize,
+	type PrepareProgress,
 	type PrepareResult,
 	prepare,
 	type ReviewContext,
@@ -104,7 +105,7 @@ export class ReviewSession {
 	}
 
 	/** Passo 1 — preparar. */
-	prepare(): Promise<PrepareResult> {
+	prepare(onProgress?: PrepareProgress): Promise<PrepareResult> {
 		return prepare(
 			this.options,
 			this.branch,
@@ -112,6 +113,7 @@ export class ReviewSession {
 			this.context,
 			this.ast,
 			this.ai,
+			onProgress,
 		);
 	}
 
@@ -121,7 +123,9 @@ export class ReviewSession {
 	}
 
 	/** Executa o passo escolhido em `--finalize`. */
-	run(): Promise<PrepareResult | FinalizeResult> {
-		return this.options.finalize ? Promise.resolve(this.finalize()) : this.prepare();
+	run(onProgress?: PrepareProgress): Promise<PrepareResult | FinalizeResult> {
+		return this.options.finalize
+			? Promise.resolve(this.finalize())
+			: this.prepare(onProgress);
 	}
 }

@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { AstService } from "../core/ast/service";
 import { ReviewScopeResolver, type ScopeOptions } from "../core/engine/review-scope";
 import type { FindingState, FindingsStateFile } from "../core/findings-state";
+import type { PrepareProgressEvent } from "../core/orchestrator";
 import { defaultOptions, finalize, prepare, reviewContext } from "../core/orchestrator";
 import { resolveRepoIdentity } from "../core/storage/repo-identity";
 import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
@@ -391,6 +392,67 @@ describe("prepare sem alterações", () => {
 			);
 			expect(storage.getReview(kept.id)?.status).toBe("review_done");
 			expect(storage.readArtifact(kept.id, "context.json")).not.toBeNull();
+		} finally {
+			storage?.close();
+			process.chdir(originalCwd);
+			if (originalHome === undefined) delete process.env.HOUNDSMAN_HOME;
+			else process.env.HOUNDSMAN_HOME = originalHome;
+			repo.cleanup();
+		}
+	}, 30_000);
+});
+
+// ---------------------------------------------------------------------------
+// Progresso do prepare
+// ---------------------------------------------------------------------------
+
+describe("prepare — progresso", () => {
+	test("emite início/fim das etapas que realmente rodam", async () => {
+		const repo = makeRepo();
+		const originalCwd = process.cwd();
+		const originalHome = process.env.HOUNDSMAN_HOME;
+		let storage: SQLiteStorageProvider | null = null;
+
+		try {
+			process.env.HOUNDSMAN_HOME = join(repo.cwd, ".home");
+			process.chdir(repo.cwd);
+
+			storage = new SQLiteStorageProvider(join(repo.cwd, "houndsman.db"));
+			const record = storage.getOrCreateReview({
+				repo: resolveRepoIdentity(),
+				branch: "main",
+				slug: "main",
+			});
+			const opts = {
+				...defaultOptions(),
+				base: repo.base,
+				head: "HEAD",
+				noJev: true,
+				noAst: true,
+			};
+
+			const events: PrepareProgressEvent[] = [];
+			await prepare(
+				opts,
+				"main",
+				fakeHoundsmanConfig,
+				reviewContext(storage, record),
+				undefined,
+				undefined,
+				(event) => events.push(event),
+			);
+
+			const starts = events
+				.filter((event) => event.type === "start")
+				.map((event) => event.stage);
+			expect(starts).toEqual(["diff", "classify", "briefs", "manifest"]);
+			const done = events.filter((event) => event.type === "done");
+			expect(done.map((event) => event.stage)).toEqual(starts);
+			for (const event of done) {
+				if (event.type === "done") {
+					expect(event.durationMs).toBeGreaterThanOrEqual(0);
+				}
+			}
 		} finally {
 			storage?.close();
 			process.chdir(originalCwd);

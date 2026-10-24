@@ -10,7 +10,7 @@ import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineHoundsmanConfig } from "../core/config";
-import { HuntRunner } from "../core/hunt/hunt-runner";
+import { type HuntEvent, HuntRunner } from "../core/hunt/hunt-runner";
 import { requireMakiModel, resolveMakiModel } from "../core/hunt/maki-model";
 import { renderHuntPrompt } from "../core/hunt/maki-prompt";
 import {
@@ -287,6 +287,58 @@ describe("HuntRunner", () => {
 			expect(report.watchdogs[0].attempts).toBe(2);
 			expect(report.watchdogs[0].status).toBe("done");
 			expect(prompts[1]).toContain("Correção obrigatória");
+		} finally {
+			staging.cleanup();
+		}
+	});
+
+	test("emite evento de retry antes da segunda tentativa", async () => {
+		const staging = makeWork(["alpha"]);
+		try {
+			const events: HuntEvent[] = [];
+			let calls = 0;
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 1,
+				onEvent: (event) => events.push(event),
+				runner: {
+					run: async () => {
+						calls++;
+						return calls === 1
+							? {
+									ok: true,
+									text: "não é json",
+									metrics: { durationMs: 5 },
+									stderr: "",
+									exitCode: 0,
+								}
+							: {
+									ok: true,
+									text: reportJson("alpha"),
+									metrics: { durationMs: 5 },
+									stderr: "",
+									exitCode: 0,
+								};
+					},
+				},
+			});
+
+			await runner.run(["alpha"]);
+			const retry = events.find((event) => event.type === "retry");
+			expect(retry).toMatchObject({
+				type: "retry",
+				watchdogId: "alpha",
+				attempt: 1,
+				maxAttempts: 2,
+			});
+			expect(events.some((event) => event.type === "done")).toBe(true);
 		} finally {
 			staging.cleanup();
 		}

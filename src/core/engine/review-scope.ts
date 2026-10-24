@@ -57,23 +57,37 @@ export type ReviewScope =
 			ast?: Map<string, AstAnalysis>;
 	  };
 
+/** Etapas da resolução de escopo reportadas ao CLI (sem log no core). */
+export type ScopeStage = "diff" | "ast" | "classify";
+
+/** Evento de progresso de uma etapa do escopo. */
+export type ScopeProgressEvent =
+	| { type: "start"; stage: ScopeStage }
+	| { type: "done"; stage: ScopeStage; durationMs: number };
+
+/** Callback de progresso (falhas do callback são ignoradas). */
+export type ScopeProgress = (event: ScopeProgressEvent) => void;
+
 /** Decide entre review completo e incremental. */
 export class ReviewScopeResolver {
 	private readonly options: ScopeOptions;
 	private readonly classifier: FileClassifier;
 	private readonly ast?: AstService;
 	private readonly git: GitRepository;
+	private readonly onProgress?: ScopeProgress;
 
 	constructor(
 		options: ScopeOptions,
 		config: HoundsmanConfig,
 		ast?: AstService,
 		git: GitRepository = new GitRepository(),
+		onProgress?: ScopeProgress,
 	) {
 		this.options = options;
 		this.classifier = new FileClassifier(config);
 		this.ast = ast;
 		this.git = git;
+		this.onProgress = onProgress;
 	}
 
 	/**
@@ -100,24 +114,33 @@ export class ReviewScopeResolver {
 			!prevSha ||
 			!this.git.isAncestor(prevSha, headSha)
 		) {
-			const diff = this.git.collectDiff(this.options.base, this.options.head);
-			const entries = parseEntries(
-				this.git.diffNameStatus(this.options.base, this.options.head),
-			);
-			const baseRef =
-				this.git.mergeBase(this.options.base, this.options.head) ??
-				this.options.base;
-			// Patch `-U0` sem truncar: mais preciso para delta AST e escopo.
-			const scopeDiff = this.zeroContext(
-				`${this.options.base}...${this.options.head}`,
-				diff,
-			);
-			const ast = this.ast
-				? await this.ast.analyze(entries, scopeDiff, baseRef)
+			const diffData = this.step("diff", () => {
+				const diff = this.git.collectDiff(this.options.base, this.options.head);
+				const entries = parseEntries(
+					this.git.diffNameStatus(this.options.base, this.options.head),
+				);
+				const baseRef =
+					this.git.mergeBase(this.options.base, this.options.head) ??
+					this.options.base;
+				// Patch `-U0` sem truncar: mais preciso para delta AST e escopo.
+				const scopeDiff = this.zeroContext(
+					`${this.options.base}...${this.options.head}`,
+					diff,
+				);
+				return { diff, entries, baseRef, scopeDiff };
+			});
+			const { diff, entries, baseRef, scopeDiff } = diffData;
+			const astService = this.ast;
+			const ast = astService
+				? await this.stepAsync("ast", () =>
+						astService.analyze(entries, scopeDiff, baseRef),
+					)
 				: undefined;
-			const result = this.classifier
-				.classify(entries, churnToRecord(diff.churn), factsOf(ast))
-				.toJSON();
+			const result = this.step("classify", () =>
+				this.classifier
+					.classify(entries, churnToRecord(diff.churn), factsOf(ast))
+					.toJSON(),
+			);
 			return {
 				kind: "review",
 				diff,
@@ -136,16 +159,25 @@ export class ReviewScopeResolver {
 		}
 
 		const range = `${prevSha}..${headSha}`;
-		const diff = this.git.collectDiffSince(prevSha, headSha);
-		const entries = parseEntries(this.git.run(["diff", range, "--name-status"]));
+		const diffData = this.step("diff", () => {
+			const diff = this.git.collectDiffSince(prevSha, headSha);
+			const entries = parseEntries(this.git.run(["diff", range, "--name-status"]));
+			const scopeDiff = this.zeroContext(range, diff);
+			return { diff, entries, scopeDiff };
+		});
+		const { diff, entries, scopeDiff } = diffData;
 		const changedPaths = new Set(entries.map((entry) => entry.path));
-		const scopeDiff = this.zeroContext(range, diff);
-		const ast = this.ast
-			? await this.ast.analyze(entries, scopeDiff, prevSha)
+		const astService = this.ast;
+		const ast = astService
+			? await this.stepAsync("ast", () =>
+					astService.analyze(entries, scopeDiff, prevSha),
+				)
 			: undefined;
-		const result = this.classifier
-			.classify(entries, churnToRecord(diff.churn), factsOf(ast))
-			.toJSON();
+		const result = this.step("classify", () =>
+			this.classifier
+				.classify(entries, churnToRecord(diff.churn), factsOf(ast))
+				.toJSON(),
+		);
 		const classification: RunClassification = {
 			...result,
 			base: prevSha,
@@ -161,6 +193,41 @@ export class ReviewScopeResolver {
 			}),
 		};
 		return { kind: "review", classification, diff, reviewedFrom: prevSha, ast };
+	}
+
+	/**
+	 * Executa uma etapa síncrona reportando início/fim. O callback de progresso
+	 * é diagnóstico: nunca derruba a resolução.
+	 */
+	private step<T>(stage: ScopeStage, run: () => T): T {
+		if (!this.onProgress) return run();
+		const started = Date.now();
+		this.report({ type: "start", stage });
+		try {
+			return run();
+		} finally {
+			this.report({ type: "done", stage, durationMs: Date.now() - started });
+		}
+	}
+
+	/** Versão assíncrona de `step`. */
+	private async stepAsync<T>(stage: ScopeStage, run: () => Promise<T> | T): Promise<T> {
+		if (!this.onProgress) return run();
+		const started = Date.now();
+		this.report({ type: "start", stage });
+		try {
+			return await run();
+		} finally {
+			this.report({ type: "done", stage, durationMs: Date.now() - started });
+		}
+	}
+
+	private report(event: ScopeProgressEvent): void {
+		try {
+			this.onProgress?.(event);
+		} catch {
+			// Progresso nunca derruba a revisão.
+		}
 	}
 
 	/** Patch `-U0` do intervalo; falha aberta cai no diff já coletado. */

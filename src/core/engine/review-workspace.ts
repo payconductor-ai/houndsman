@@ -35,6 +35,8 @@ export type WorkspaceDeps = {
 	worktreesLocation?: string;
 	/** Override explícito da raiz de worktrees (testes). */
 	worktreesRoot?: string;
+	/** Passos longos (gh/worktree) reportados ao CLI; nunca lança. */
+	onProgress?: (message: string) => void;
 };
 
 /** Workspace resolvido para a revisão. */
@@ -85,6 +87,14 @@ export function resolveReviewWorkspace(
 	deps: WorkspaceDeps = {},
 ): ResolvedWorkspace {
 	const messages: string[] = [];
+	/** Progresso é diagnóstico: nunca derruba a resolução. */
+	const report = (message: string): void => {
+		try {
+			deps.onProgress?.(message);
+		} catch {
+			// Progresso nunca derruba a revisão.
+		}
+	};
 	const cwdGit = repoAt(request.cwd);
 	const cwdRoot = resolve(cwdGit.rootPath() ?? request.cwd);
 	const mainRoot = resolve(mainRootOf(cwdGit, cwdRoot));
@@ -108,6 +118,7 @@ export function resolveReviewWorkspace(
 		// A camada gerada não vem no checkout; sem ela os comandos no worktree
 		// não carregam a config (`../core/types`).
 		const explicitMainRoot = mainRootOf(git, repo.root);
+		report("Sincronizando a camada gerada no worktree…");
 		syncProjectLayer(explicitMainRoot, root);
 		return {
 			root,
@@ -129,6 +140,7 @@ export function resolveReviewWorkspace(
 			deps.ghRunner ?? createGhRunner(mainRoot),
 			mainGit,
 		);
+		report(`Consultando a PR #${request.pr} via gh…`);
 		const resolved = resolver.resolve(request.pr);
 		if (!resolved.ok) {
 			throw new Error(
@@ -136,6 +148,7 @@ export function resolveReviewWorkspace(
 			);
 		}
 		const { pr } = resolved;
+		report("Buscando as refs da PR…");
 		const refs = resolver.prepareRefs(pr);
 		if (refs.warning) messages.push(`GitHub: ${refs.warning}`);
 
@@ -146,6 +159,7 @@ export function resolveReviewWorkspace(
 				deps.worktreesRoot ??
 				resolveWorktreesRoot(deps.worktreesLocation, mainRoot),
 		});
+		report("Criando/reutilizando o worktree da PR…");
 		const worktree = manager.ensure({ branch: pr.headRefName, ref: refs.head });
 		const worktreePath = resolve(worktree.path);
 		messages.push(

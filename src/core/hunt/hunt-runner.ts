@@ -24,6 +24,13 @@ import { mapPool } from "./pool";
 export type HuntEvent =
 	| { type: "start"; watchdogId: string }
 	| {
+			type: "retry";
+			watchdogId: string;
+			attempt: number;
+			maxAttempts: number;
+			error: string;
+	  }
+	| {
 			type: "done";
 			watchdogId: string;
 			findings: number;
@@ -169,12 +176,14 @@ export class HuntRunner {
 
 			if (!result.ok) {
 				lastError = result.error;
+				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
 
 			const raw = extractJsonObject(result.text);
 			if (raw === null) {
 				lastError = "a resposta final não contém um objeto JSON.";
+				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
 
@@ -184,10 +193,12 @@ export class HuntRunner {
 			);
 			if (!report) {
 				lastError = warnings[0] ?? "JSON fora do schema do watchdog.";
+				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
 			if (report.watchdogId !== watchdogId) {
 				lastError = `watchdogId '${report.watchdogId}' não corresponde a '${watchdogId}'.`;
+				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
 
@@ -229,6 +240,18 @@ export class HuntRunner {
 		} catch {
 			// Progresso nunca derruba a revisão.
 		}
+	}
+
+	/** Avisa a próxima tentativa (só quando ainda há retry). */
+	private emitRetry(watchdogId: string, attempt: number, error: string): void {
+		if (attempt > this.options.retries) return;
+		this.emit({
+			type: "retry",
+			watchdogId,
+			attempt,
+			maxAttempts: this.options.retries + 1,
+			error,
+		});
 	}
 }
 

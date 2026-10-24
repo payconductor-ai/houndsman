@@ -26,10 +26,12 @@ import {
 	resolveMakiModel,
 } from "../../core/hunt/maki-model";
 import { SpawnMakiRunner } from "../../core/hunt/maki-runner";
+import { formatDuration, ProgressBoard } from "../../core/logging";
 import { displayPath } from "../../core/paths";
 import { ProjectConfig } from "../../core/project-config";
 import { touchRunStatus } from "../../core/run-status";
 import { ArgParser } from "../arg-parser";
+import { prepareProgress, stepDone } from "../progress";
 import type { CliContext, Command } from "./command";
 
 /** Texto de ajuda do subcomando. */
@@ -117,6 +119,8 @@ export class HuntCommand implements Command {
 		}
 
 		const project = new ProjectConfig(config);
+		const harnessStarted = Date.now();
+		context.logger.step("Verificando o binário do maki e o modelo do harness…");
 		let model: ReturnType<typeof requireMakiModel>;
 		let binary: ReturnType<typeof requireMakiBinary>;
 		try {
@@ -126,8 +130,13 @@ export class HuntCommand implements Command {
 			context.err(messageOf(error));
 			return 1;
 		}
-
+		stepDone(
+			context.logger,
+			`Harness pronto: ${model.spec} · ${displayPath(binary.path)}`,
+			harnessStarted,
+		);
 		let workspace: ReturnType<typeof resolveReviewWorkspace>;
+		const workspaceStarted = Date.now();
 		try {
 			workspace = resolveReviewWorkspace(
 				{
@@ -138,20 +147,32 @@ export class HuntCommand implements Command {
 					pr: options.pr,
 					worktree: options.worktree,
 				},
-				{ worktreesLocation: config.worktrees?.location },
+				{
+					worktreesLocation: config.worktrees?.location,
+					onProgress: (message) => context.logger.step(message),
+				},
 			);
 		} catch (error) {
 			context.err(messageOf(error));
 			return 1;
 		}
 		for (const message of workspace.messages) context.logger.info(message);
+		stepDone(
+			context.logger,
+			`Workspace: ${workspace.branch} em ${displayPath(workspace.root)}`,
+			workspaceStarted,
+		);
 
+		const engineStarted = Date.now();
+		context.logger.step("Abrindo o storage da revisão…");
 		const engine = await context.engine({
 			root: workspace.root,
 			mainRoot: workspace.mainRoot,
 		});
+		stepDone(context.logger, "Storage pronto", engineStarted);
 		try {
 			if (options.pr !== undefined && !parser.has("--no-context")) {
+				context.logger.step("Coletando o contexto da PR via gh…");
 				try {
 					const collected = runContextCommand(
 						engine.config,
@@ -183,7 +204,7 @@ export class HuntCommand implements Command {
 				pr: workspace.prNumber,
 				worktreePath: workspace.worktreePath,
 			});
-			const prepared = await session.prepare();
+			const prepared = await session.prepare(prepareProgress(context.logger));
 			for (const message of prepared.messages) {
 				// O CLI despacha os subagentes; os próximos passos da skill não se aplicam.
 				if (SKILL_NEXT_STEPS.test(message)) continue;
@@ -202,6 +223,8 @@ export class HuntCommand implements Command {
 				`Harness local: ${prepared.activeIds.length} watchdog(s) ` +
 					`(${model.spec}, concorrência ${concurrency}).`,
 			);
+			const board = new ProgressBoard({ logger: context.logger });
+			board.start(prepared.activeIds.length);
 			const runner = new HuntRunner({
 				work: session.context.work,
 				root: session.context.root,
@@ -213,7 +236,7 @@ export class HuntCommand implements Command {
 				timeoutMs,
 				retries,
 				runner: new SpawnMakiRunner(binary.path),
-				onEvent: (event) => this.logEvent(context, event),
+				onEvent: (event) => this.logEvent(board, event),
 			});
 			// Runs longas não podem parecer “timeout” na UI: a skill pinga antes de
 			// cada onda; o CLI renova o heartbeat enquanto o maki trabalha.
@@ -229,6 +252,7 @@ export class HuntCommand implements Command {
 				report = await runner.run(prepared.activeIds);
 			} finally {
 				clearInterval(heartbeat);
+				board.stop();
 			}
 			engine.storage.writeArtifact(session.context.review.id, {
 				name: "hunt-report.json",
@@ -279,6 +303,7 @@ export class HuntCommand implements Command {
 				);
 			}
 
+			context.logger.step("Consolidando os findings dos watchdogs…");
 			const finalized = session.finalize();
 			for (const message of finalized.messages) context.logger.info(message);
 			context.logger.success(
@@ -384,24 +409,35 @@ export class HuntCommand implements Command {
 	}
 
 	/** Log de progresso por watchdog. */
-	private logEvent(context: CliContext, event: HuntEvent): void {
+	private logEvent(board: ProgressBoard, event: HuntEvent): void {
 		switch (event.type) {
 			case "start":
-				context.logger.bullet(`${event.watchdogId}: revisando…`);
+				board.add(event.watchdogId, "revisando");
+				return;
+			case "retry":
+				board.retry(
+					event.watchdogId,
+					`tentativa ${event.attempt + 1}/${event.maxAttempts}`,
+					`${event.watchdogId}: ${event.error} Repetindo ` +
+						`(tentativa ${event.attempt + 1}/${event.maxAttempts})…`,
+				);
 				return;
 			case "done": {
 				const cost =
 					event.metrics.costUsd !== undefined
 						? ` · $${event.metrics.costUsd.toFixed(4)}`
 						: "";
-				context.logger.success(
+				board.succeed(
+					event.watchdogId,
 					`${event.watchdogId} — ${event.findings} finding(s), ` +
-						`${event.reviewedFiles} arquivo(s)${cost}`,
+						`${event.reviewedFiles} arquivo(s)${cost} ` +
+						`(${formatDuration(event.metrics.durationMs)})`,
 				);
 				return;
 			}
 			case "failed":
-				context.logger.warn(
+				board.fail(
+					event.watchdogId,
 					`${event.watchdogId} falhou (${event.attempts} tentativa(s)): ${event.error}`,
 				);
 				return;

@@ -39,7 +39,11 @@ import { discoverDocs } from "./doc-discoverer";
 import { Classification } from "./domain/classification";
 import { Watchdog } from "./domain/watchdog";
 import { mergeCarryover } from "./engine/carryover";
-import { ReviewScopeResolver, type RunClassification } from "./engine/review-scope";
+import {
+	ReviewScopeResolver,
+	type RunClassification,
+	type ScopeProgress,
+} from "./engine/review-scope";
 import { ENV_NAMES } from "./env";
 import type { BudgetSelection, ClassificationResult } from "./file-classifier";
 import { buildStateFromFindings, fileReader } from "./findings-state";
@@ -447,6 +451,75 @@ export type PrepareResult = {
 	reviewId?: string;
 };
 
+/** Etapas do prepare reportadas ao CLI (o core não escreve saída). */
+export type PrepareStage =
+	| "diff"
+	| "ast"
+	| "classify"
+	| "impact"
+	| "jev"
+	| "context"
+	| "technical"
+	| "ai-plans"
+	| "briefs"
+	| "manifest";
+
+/** Evento de progresso de uma etapa do prepare. */
+export type PrepareProgressEvent =
+	| { type: "start"; stage: PrepareStage }
+	| { type: "done"; stage: PrepareStage; durationMs: number };
+
+/** Callback de progresso do prepare (falhas do callback são ignoradas). */
+export type PrepareProgress = (event: PrepareProgressEvent) => void;
+
+/** Encaminha o progresso do escopo como etapa do prepare. */
+function scopeProgress(onProgress?: PrepareProgress): ScopeProgress | undefined {
+	if (!onProgress) return undefined;
+	return (event) => emitProgress(onProgress, event);
+}
+
+/** Emite um evento de progresso sem deixar o callback derrubar a revisão. */
+function emitProgress(
+	onProgress: PrepareProgress | undefined,
+	event: PrepareProgressEvent,
+): void {
+	try {
+		onProgress?.(event);
+	} catch {
+		// Progresso nunca derruba a revisão.
+	}
+}
+
+/** Executa uma etapa reportando início/fim (sync ou async). */
+async function runStage<T>(
+	onProgress: PrepareProgress | undefined,
+	stage: PrepareStage,
+	run: () => Promise<T> | T,
+): Promise<T> {
+	if (!onProgress) return run();
+	const started = Date.now();
+	emitProgress(onProgress, { type: "start", stage });
+	try {
+		return await run();
+	} finally {
+		emitProgress(onProgress, {
+			type: "done",
+			stage,
+			durationMs: Date.now() - started,
+		});
+	}
+}
+
+/** Como `runStage`, mas só reporta quando a etapa realmente vai rodar. */
+async function runOptionalStage<T>(
+	onProgress: PrepareProgress | undefined,
+	enabled: boolean,
+	stage: PrepareStage,
+	run: () => Promise<T> | T,
+): Promise<T> {
+	return enabled ? runStage(onProgress, stage, run) : run();
+}
+
 /**
  * Classificação fallback por IA (opcional): atribui arquivos não classificados
  * a watchdogs conhecidos. Fail-open — falha mantém `unclassified`.
@@ -603,6 +676,7 @@ export async function prepare(
 	ctx: ReviewContext,
 	ast?: AstService,
 	ai?: AiClient,
+	onProgress?: PrepareProgress,
 ): Promise<PrepareResult> {
 	const messages: string[] = [];
 	ctx.work.ensure();
@@ -617,6 +691,7 @@ export async function prepare(
 		config,
 		opts.noAst ? undefined : ast,
 		ctx.git,
+		scopeProgress(onProgress),
 	).resolve(previous, headSha);
 
 	// Mesmo commit já revisado: preserva artefatos e triagem, sem re-revisar.
@@ -669,7 +744,10 @@ export async function prepare(
 	});
 
 	const astAnalyses = scope.ast;
-	const astImpact = astAnalyses && ast ? await ast.impact(astAnalyses) : undefined;
+	const astImpact =
+		astAnalyses && ast
+			? await runStage(onProgress, "impact", () => ast.impact(astAnalyses))
+			: undefined;
 	if (astAnalyses && ast?.enabled) {
 		const summary = {
 			enabled: true,
@@ -698,7 +776,13 @@ export async function prepare(
 		}
 	}
 
-	const jev = await resolveCandidates(opts, classification, ctx, config, diff, ai);
+	const jevWillRun = Boolean(
+		(ai && !opts.noAi && new AiPreAnalyzer(ai).enabled) ||
+			(!opts.noJev && new JevClient().isConfigured()),
+	);
+	const jev = await runOptionalStage(onProgress, jevWillRun, "jev", () =>
+		resolveCandidates(opts, classification, ctx, config, diff, ai),
+	);
 
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
@@ -724,15 +808,21 @@ export async function prepare(
 	}
 
 	persistContext(ctx);
-	const context = await resolveContextSummary(ctx, ai, opts);
-	await resolveTechnicalSummary(ctx, ai, opts, {
-		branch,
-		classification,
-		context,
-		ast: astAnalyses,
-		impact: astImpact,
-		domains: activeIds.map((id) => findWatchdog(config, id)?.name ?? id),
-	});
+	const aiContext = ai && !opts.noAi ? new AiContextSummarizer(ai).enabled : false;
+	const context = await runOptionalStage(onProgress, aiContext, "context", () =>
+		resolveContextSummary(ctx, ai, opts),
+	);
+	const aiTechnical = ai && !opts.noAi ? new AiTechnicalSummarizer(ai).enabled : false;
+	await runOptionalStage(onProgress, aiTechnical, "technical", () =>
+		resolveTechnicalSummary(ctx, ai, opts, {
+			branch,
+			classification,
+			context,
+			ast: astAnalyses,
+			impact: astImpact,
+			domains: activeIds.map((id) => findWatchdog(config, id)?.name ?? id),
+		}),
+	);
 
 	const manifestAst: ManifestAst | undefined = astAnalyses
 		? {
@@ -753,15 +843,18 @@ export async function prepare(
 			}
 		: undefined;
 
-	const aiPlans = await buildAiPlans(
-		activeIds,
-		classification,
-		config,
-		context,
-		astAnalyses,
-		astImpact,
-		ai,
-		opts,
+	const aiBriefs = ai && !opts.noAi ? new AiBriefEnricher(ai).enabled : false;
+	const aiPlans = await runOptionalStage(onProgress, aiBriefs, "ai-plans", () =>
+		buildAiPlans(
+			activeIds,
+			classification,
+			config,
+			context,
+			astAnalyses,
+			astImpact,
+			ai,
+			opts,
+		),
 	);
 	if (aiPlans.size > 0) {
 		ctx.storage.writeArtifact(ctx.review.id, {
@@ -791,30 +884,33 @@ export async function prepare(
 				}
 			: undefined;
 
-	writeBriefs(
-		activeIds,
-		classification,
-		ctx,
-		branch,
-		context,
-		jev.candidates,
-		config,
-		astAnalyses,
-		astImpact,
-		aiPlans,
+	await runStage(onProgress, "briefs", () =>
+		writeBriefs(
+			activeIds,
+			classification,
+			ctx,
+			branch,
+			context,
+			jev.candidates,
+			config,
+			astAnalyses,
+			astImpact,
+			aiPlans,
+		),
 	);
-	writeManifest(
-		ctx,
-		config,
-		opts,
-		classification,
-		activeIds,
-		activeIds,
-		jev,
-		manifestAst,
-		manifestAi,
+	await runStage(onProgress, "manifest", () =>
+		writeManifest(
+			ctx,
+			config,
+			opts,
+			classification,
+			activeIds,
+			activeIds,
+			jev,
+			manifestAst,
+			manifestAi,
+		),
 	);
-
 	messages.push(
 		...discoveryMessages(activeIds, classification, ctx.work.briefsDir),
 		...budgetMessage(classification, config),

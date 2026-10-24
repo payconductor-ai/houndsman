@@ -38,6 +38,10 @@ export interface LoggerLike {
 		text: string,
 		run: (spinner: SpinnerLike | null) => Promise<T>,
 	): Promise<T>;
+	/** `true` quando a saída é um TTY e o modo quiet está desligado. */
+	readonly interactive: boolean;
+	/** Stream de saída (usado pelos blocos de progresso). */
+	readonly stream: NodeJS.WritableStream;
 }
 
 /** Opções do logger (injetáveis nos testes). */
@@ -80,6 +84,16 @@ export class Logger implements LoggerLike {
 		this.quiet = options.quiet === true;
 		this.verbose = options.verbose === true;
 		this.tty = options.isTTY ?? Boolean(process.stdout.isTTY);
+	}
+
+	/** Loader/blocos só fazem sentido em terminal interativo. */
+	get interactive(): boolean {
+		return this.tty && !this.quiet;
+	}
+
+	/** Stream dos blocos de progresso. */
+	get stream(): NodeJS.WritableStream {
+		return this.out;
 	}
 
 	/** Só aparece em `--verbose`. */
@@ -164,6 +178,11 @@ export class Logger implements LoggerLike {
 
 /** Logger silencioso para testes/serviços. */
 export class SilentLogger implements LoggerLike {
+	readonly interactive = false;
+	readonly stream: NodeJS.WritableStream = {
+		write: () => true,
+	} as unknown as NodeJS.WritableStream;
+
 	debug(_message?: string): void {}
 	info(_message?: string): void {}
 	success(_message?: string): void {}
