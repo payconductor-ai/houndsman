@@ -238,6 +238,10 @@ especialista por domínio · **finding** = um achado da revisão · **Jev** = pr
 Um argumento extra é o alvo da capability. Escolha a capability pelo que o usuário quer,
 leia o documento correspondente em \`.houndsman/core/skill/<capability>.md\` e siga-o.
 
+> **Harness local (opcional):** para rodar sem agente externo, o operador pode instalar o
+> maki (\`houndsman hunt install\`) e usar \`houndsman hunt --pr 456\`. Isso não muda esta
+> skill: se você é o agente, siga o fluxo normal e não rode \`houndsman hunt\`.
+
 ### Alvo da revisão (PR × branch)
 
 Interprete o alvo em linguagem natural **antes** de rodar o CLI:
@@ -322,6 +326,10 @@ especialista por domínio · **finding** = um achado da revisão · **Jev** = pr
 
 Um argumento extra é o alvo da capability. Escolha a capability pelo que o usuário quer,
 leia o documento correspondente em \`.houndsman/core/skill/<capability>.md\` e siga-o.
+
+> **Harness local (opcional):** para rodar sem agente externo, o operador pode instalar o
+> maki (\`houndsman hunt install\`) e usar \`houndsman hunt --pr 456\`. Isso não muda esta
+> skill: se você é o agente, siga o fluxo normal e não rode \`houndsman hunt\`.
 
 ### Alvo da revisão (PR × branch)
 
@@ -516,6 +524,16 @@ export type HoundsmanAi = {
 	watchdogs?: Record<string, HoundsmanAiWatchdog>;
 };
 
+/** Harness local da capability \`hunt\` (\`houndsman hunt\`) — opcional. */
+export type HoundsmanHunt = {
+	enabled?: boolean;
+	model?: string;
+	concurrency?: number;
+	timeoutMs?: number;
+	retries?: number;
+	binaryPath?: string;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -529,6 +547,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	concurrency?: HoundsmanConcurrency;
 	ast?: HoundsmanAst;
 	ai?: HoundsmanAi;
+	hunt?: HoundsmanHunt;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */
@@ -654,11 +673,11 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "9aadf51b48c7f304",
+    "sha256": "2ecf43f34a624011",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "5e5335870f493aba",
+    "sha256": "5720c48ede6c84ea",
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
@@ -670,7 +689,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "dfaec1a665d7ee65",
+    "sha256": "d31198580d894427",
   },
   {
     "file": ".houndsman/core/skill/train.md",

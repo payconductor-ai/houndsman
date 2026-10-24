@@ -437,7 +437,15 @@ function budgetMessage(
 }
 
 /** Resultado do prepare — mensagens para o CLI imprimir. */
-export type PrepareResult = { messages: string[] };
+export type PrepareResult = {
+	messages: string[];
+	/** Watchdogs ativos neste ciclo (vazio em no-op/sem arquivos). */
+	activeIds: string[];
+	/** Diretório dos briefs do ciclo (ausente quando não há briefs). */
+	briefsDir?: string;
+	/** Review do ciclo (ausente quando nada foi preparado). */
+	reviewId?: string;
+};
 
 /**
  * Classificação fallback por IA (opcional): atribui arquivos não classificados
@@ -626,7 +634,7 @@ export async function prepare(
 				? "Nada novo a preparar — o ciclo em andamento continua; rode `--finalize` quando os findings estiverem gravados."
 				: "Nada a revisar — o relatório anterior foi mantido. Use `--full` para re-revisar.",
 		);
-		return { messages };
+		return { messages, activeIds: [] };
 	}
 
 	const { classification, diff } = scope;
@@ -643,7 +651,7 @@ export async function prepare(
 			messages.push(
 				`Nenhuma alteração entre ${opts.base}...${opts.head} — nenhuma run criada.`,
 			);
-			return { messages };
+			return { messages, activeIds: [] };
 		}
 	}
 
@@ -700,14 +708,14 @@ export async function prepare(
 				? `Nenhuma alteração desde a última revisão (${shortSha(classification.reviewedFrom ?? "")}).`
 				: `Nenhuma alteração entre ${opts.base}...${opts.head}.`,
 		);
-		return { messages };
+		return { messages, activeIds: [] };
 	}
 	if (activeIds.length === 0) {
 		writeRunStatus(ctx.storage, ctx.review.id, { status: "review_done" });
 		messages.push(
 			"Nenhum arquivo revisável (tudo excluído, deletado ou irrelevante).",
 		);
-		return { messages };
+		return { messages, activeIds: [] };
 	}
 	if (classification.mode === "incremental") {
 		messages.push(
@@ -846,7 +854,12 @@ export async function prepare(
 		"Quando os findings estiverem gravados: bun run houndsman --finalize",
 	);
 
-	return { messages };
+	return {
+		messages,
+		activeIds,
+		briefsDir: ctx.work.briefsDir,
+		reviewId: ctx.review.id,
+	};
 }
 /** Persiste o contexto da PR (bruto + resumo) como artefatos, quando existirem. */
 function persistContext(ctx: ReviewContext): void {

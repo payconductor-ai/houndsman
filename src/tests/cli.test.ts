@@ -192,6 +192,7 @@ describe("cli smoke — imports dinâmicos", () => {
 			const result = runCli(project.cwd, ["doctor", "--no-ping"]);
 			expect(result.code).toBe(0);
 			expect(result.stdout).toContain("Validando");
+			expect(result.stdout).toContain("maki (hunt local)");
 		} finally {
 			project.cleanup();
 		}

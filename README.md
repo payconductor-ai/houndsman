@@ -28,9 +28,11 @@ diferente das PRs. O motor só coordena a caçada — as regras são problema se
 - **git** — o diff usa `git diff <base>...<head>`.
 - **gh** (Opcional) — Obtém contexto da PR e dispara comentários para o GitHub
 - **`HOUNDSMAN_TYPE_SAFE_API_KEY`** (opcional) — pré-análise Jev.
-- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — features de IA (briefs, contexto, classificação, resumo técnico).
+- **`HOUNDSMAN_DEEP_SEEK_API_KEY`** (opcional) — features de IA (briefs, contexto, classificação, resumo técnico) e harness local `hunt`.
 - **`HOUNDSMAN_OPENAI_API_KEY`** / **`HOUNDSMAN_ANTHROPIC_API_KEY`** (opcional) — apenas se
   `ai.provider` for `openai`/`anthropic`.
+- **maki** (opcional) — só para o harness local `houndsman hunt`; a skill `/houndsman hunt`
+  não precisa dele. Instale com `houndsman hunt install`.
 
 > Coloque as chaves em um `.env` na raiz do projeto; o Bun carrega automaticamente.
 
@@ -83,6 +85,20 @@ No seu agente (Claude Code / agents), invoque o skill:
 O skill orquestra tudo e persiste o relatório no storage global (SQLite em
 `<HOUNDSMAN_HOME>/houndsman.db`); a UI lê os artefatos direto do storage. Não precisa rodar
 nenhum script à mão.
+
+#### Alternativa: rodar 100% pelo CLI (opcional)
+
+Quem não quer usar um agente externo pode executar a mesma revisão pelo terminal, com o
+maki como harness local. A instalação é única e fica fora do projeto:
+
+```bash
+houndsman hunt install        # baixa o maki fixado em <HOUNDSMAN_HOME>/tools/maki
+houndsman hunt doctor         # diagnóstico (não falha se o maki não existir)
+houndsman hunt --pr 456       # prepare → maki (1 processo por brief) → finalize
+```
+
+Os dois caminhos produzem os mesmos artefatos e usam o mesmo staging. A skill
+`/houndsman hunt` continua sendo o caminho canônico para agentes externos.
 
 ### 7. Várias PRs ao mesmo tempo (worktrees)
 

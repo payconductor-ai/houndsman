@@ -76,6 +76,25 @@ Depois do setup, invoque o skill `/houndsman` no seu harness:
 | `/houndsman train` | Adicionar/ajustar/remover regras dos watchdogs. |
 | `/houndsman fix` | Corrigir os findings marcados como `execute`. |
 
+## Harness local (opcional) — `houndsman hunt`
+
+Quem não quer rodar a skill dentro de um agente externo pode executar a revisão 100% pelo
+CLI. O maki é instalado sob demanda, fora do projeto, e reaproveita a credencial já existente:
+
+```bash
+houndsman hunt install      # baixa o maki fixado (sha256) em <HOUNDSMAN_HOME>/tools/maki
+houndsman hunt doctor       # binário, modelo e credencial (opcional; não falha sem maki)
+houndsman hunt --pr 456     # prepare → maki (um processo por brief) → finalize
+```
+
+- A skill `/houndsman hunt` continua sendo o caminho canônico e não depende do maki.
+- `HOUNDSMAN_MAKI_PATH` aponta um binário já instalado; `HOUNDSMAN_MAKI_VERSION` troca a
+  versão baixada.
+- Config opcional em `houndsman.config.ts`: `hunt: { model?, concurrency?, timeoutMs?,
+  retries?, binaryPath?, enabled? }`.
+- Se algum watchdog falhar, o comando **não finaliza** (preserva o staging); use
+  `--allow-partial` para finalizar com findings vazios registrados em `skipped`.
+
 ## Contrato do motor (`HoundsmanConfig`)
 
 Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.ts` (gerado):
@@ -91,6 +110,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 | `budgets` | **Opcional** — teto de arquivos por brief (`maxFilesPerBrief`, default `40`); o excedente vira "fora do orçamento" (registrar em `skipped`). |
 | `concurrency` | **Opcional** — chamadas Jev simultâneas (`jev`, default `5`). |
 | `ast` | **Opcional** — AST determinístico para TS/JS (`enabled`, `maxFileBytes`, `maxImpactFiles`, `languages`, `aliases`). Default: ligado; falhas são fail-open. |
+| `hunt` | **Opcional** — harness local (`model`, `concurrency`, `timeoutMs`, `retries`, `binaryPath`, `enabled`). Só afeta `houndsman hunt`; a skill não depende. |
 
 > O motor **não contém** ids, paths ou regras do projeto — tudo chega por `HoundsmanConfig`,
 > carregado em runtime a partir de `houndsman.config.ts` (ou `--config <path>`).
@@ -103,7 +123,7 @@ houndsman/
 └── src/
     ├── index.ts              # API pública (defineWatchdog, defineHoundsmanConfig, tipos)
     ├── cli/index.ts          # CLI único — bin `houndsman`
-    ├── core/                 # bibliotecas genéricas (config, orchestrator, brief, jev/, …)
+    ├── core/                 # bibliotecas genéricas (config, orchestrator, brief, jev/, hunt/, …)
     ├── skill/*.md            # assets markdown (embarcados no pacote)
     └── tests/                # suíte da lib (project-agnóstica, "project fake")
 ```

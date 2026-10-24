@@ -235,6 +235,8 @@ repositório (não em uma subpasta) e que o caminho do worktree está sob ela.
 | `houndsman --pr <n>` | Prepara a PR em um worktree dedicado |
 | `houndsman --worktree <path>` | Prepara em um worktree já existente |
 | `houndsman --finalize` | Passo 3 — gera o relatório |
+| `houndsman hunt [--pr <n>]` | Harness local opcional (maki): prepare → watchdogs → finalize |
+| `houndsman hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--rules`, `--json`) |
 | `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`show`/`set`/`done`/`reset`/`sync`/`summary`/`batch`/`verify`/`path`) |
@@ -242,8 +244,9 @@ repositório (não em uma subpasta) e que o caminho do worktree está sob ela.
 
 Flags: `--base <branch>` (default `main`) · `--head <ref>` (default `HEAD`) ·
 `--branch <nome>` · `--pr <n>` · `--worktree <path>` · `--config <path>` · `--clean` ·
-`--full` · `--no-jev` · `--no-ast` · `--fail-on-blocking` (com `--finalize`) ·
-`--editor <auto|vscode|jetbrains|none>` (com `server`).
+`--full` · `--no-jev` · `--no-ast` · `--no-ai` · `--fail-on-blocking` (com `--finalize`) ·
+`--allow-partial` · `--no-context` · `--hunt-model` · `--hunt-concurrency` · `--hunt-timeout`
+(com `hunt`) · `--editor <auto|vscode|jetbrains|none>` (com `server`).
 
 ---
 

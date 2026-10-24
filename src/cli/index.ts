@@ -15,6 +15,7 @@
  *   --finalize           Passo 3 — consolidar os findings em review.md
  *   context              Passo 0 — coletar o contexto da PR via `gh`
  *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/submit/...)
+ *   hunt [flags]         Harness local (maki): prepare → watchdogs via maki → finalize
  *   status [ping]        Mostra o status da run; `ping` renova o heartbeat da execução
  *   server               Sobe a UI local de triagem (Bun.serve)
  *   setup                Cria a configuração inicial do projeto (config + skills)
@@ -38,6 +39,7 @@ import { ContextCommand } from "./commands/context-command";
 import { DoctorCommand } from "./commands/doctor-command";
 import { FindingsCommand } from "./commands/findings-command";
 import { HelpCommand } from "./commands/help-command";
+import { HuntCommand } from "./commands/hunt-command";
 import { CommandRegistry } from "./commands/registry";
 import { ReviewCommand } from "./commands/review-command";
 import { ServerCommand } from "./commands/server-command";
@@ -57,6 +59,7 @@ function buildRegistry(): CommandRegistry {
 	return new CommandRegistry()
 		.register(new ReviewCommand(), { fallback: true })
 		.register(new HelpCommand())
+		.register(new HuntCommand())
 		.register(new ContextCommand())
 		.register(new FindingsCommand())
 		.register(new StatusCommand())

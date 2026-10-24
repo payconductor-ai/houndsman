@@ -6,6 +6,11 @@ Comandos:
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
+  hunt [flags]        Harness local (maki): prepare → watchdogs via maki → finalize
+                      (a skill /houndsman hunt continua existindo p/ agentes externos)
+  hunt install        Baixa o maki fixado para <HOUNDSMAN_HOME>/tools/maki
+  hunt doctor         Diagnóstico do harness local (opcional, não falha sem maki)
+  hunt uninstall      Remove o binário gerenciado
   status [ping]       Mostra o status da run (ping renova o heartbeat da execução)
   worktree <ação>     Lista/cria/remove worktrees de revisão (list · add · remove · prune · path)
   server              Sobe a UI local de triagem (--port, --host, --open, --editor)
@@ -28,6 +33,14 @@ Flags:
   --no-ast            Desativa a análise estrutural (tree-sitter)
   --no-ai             Desativa as features de IA do fluxo normal
   --fail-on-blocking  Exit 1 se houver bloqueantes (com --finalize)
+
+Flags de hunt (harness local):
+  --allow-partial     Finaliza mesmo se algum watchdog maki falhar
+  --no-context        Não coleta o contexto da PR via gh
+  --hunt-model <m>    Modelo do maki (provider/model-id)
+  --hunt-concurrency  Processos maki simultâneos
+  --hunt-timeout      Timeout por watchdog (ms)
+  --no-retry          Não repete saída inválida
 
 Flags de findings:
   --decision <d>      pending | execute | ignore
@@ -62,6 +75,8 @@ Persistência:
 
 Ambiente (o Bun carrega .env automaticamente):
   HOUNDSMAN_TYPE_SAFE_API_KEY   Pré-análise Jev (opcional)
-  HOUNDSMAN_DEEP_SEEK_API_KEY   IA (provider deepseek, opcional)
+  HOUNDSMAN_DEEP_SEEK_API_KEY   IA (provider deepseek, opcional; reusada pelo hunt)
   HOUNDSMAN_OPENAI_API_KEY     IA (provider openai, opcional)
-  HOUNDSMAN_ANTHROPIC_API_KEY  IA (provider anthropic, opcional)`;
+  HOUNDSMAN_ANTHROPIC_API_KEY  IA (provider anthropic, opcional)
+  HOUNDSMAN_MAKI_PATH          Binário do maki (harness local \`hunt\`)
+  HOUNDSMAN_MAKI_VERSION       Versão do maki a instalar (default: fixada no pacote)`;

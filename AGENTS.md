@@ -37,6 +37,8 @@ projeto **autocontida**), carregada em runtime.
 | `bun run grammars:sync` | (dev) atualiza `assets/grammars/`; o `houndsman update` copia para a camada |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
+| `bun run houndsman -- hunt [--pr <n>]` | Harness local: prepare → watchdogs via maki → finalize (opcional) |
+| `bun run houndsman -- hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
 | `bun run houndsman -- --pr <n>` | Revisa a PR em um worktree dedicado (revisões paralelas) |
 | `bun run houndsman -- worktree list` | Lista/cria/remove worktrees (`list`/`add`/`remove`/`prune`/`path`) |
@@ -80,6 +82,7 @@ src/
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
 │   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
 │   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
+│   ├── hunt/                # harness local opcional (maki): install, runner e relatório
 │   ├── report-builder.ts    # dedupe/render do relatório (funções puras)
 │   ├── technical-summary.ts # pontos técnicos estruturais do resumo final
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE (funções puras)
@@ -149,6 +152,10 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   instalação **global** sem dependência local no projeto.
 - **Jev é opcional e falha-aberto.** Sem `HOUNDSMAN_TYPE_SAFE_API_KEY` (ou com `--no-jev`), a revisão roda
   idêntica, sem chamadas de rede. Nunca torne o Jev obrigatório.
+- **O harness local (`hunt`) é opcional e não substitui a skill.** A skill `/houndsman hunt`
+  continua canônica para agentes externos; `houndsman hunt` é o caminho CLI via maki. Ambos
+  usam o mesmo `prepare`/`finalize` e o mesmo schema de findings. Nada em `setup`/`update`
+  pode passar a exigir o maki.
 - **IA do fluxo normal é opcional e falha-aberto.** Sem `HOUNDSMAN_DEEP_SEEK_API_KEY`
   (ou com `--no-ai`), briefs/contexto/classificação/verify seguem sem rede.
 - **`fallback: true` é último recurso.** Um watchdog fallback só assume arquivos que

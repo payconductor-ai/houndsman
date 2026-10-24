@@ -242,6 +242,16 @@ export type HoundsmanAi = {
 	watchdogs?: Record<string, HoundsmanAiWatchdog>;
 };
 
+/** Harness local da capability \`hunt\` (\`houndsman hunt\`) — opcional. */
+export type HoundsmanHunt = {
+	enabled?: boolean;
+	model?: string;
+	concurrency?: number;
+	timeoutMs?: number;
+	retries?: number;
+	binaryPath?: string;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -255,6 +265,7 @@ export type HoundsmanConfig<TId extends string = string> = {
 	concurrency?: HoundsmanConcurrency;
 	ast?: HoundsmanAst;
 	ai?: HoundsmanAi;
+	hunt?: HoundsmanHunt;
 };
 
 /** Helper de autoria (identidade) — apenas tipagem. */

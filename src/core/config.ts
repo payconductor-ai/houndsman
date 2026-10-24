@@ -19,7 +19,11 @@ export {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
 	DEFAULT_AST_MAX_FILE_BYTES,
 	DEFAULT_AST_MAX_IMPACT_FILES,
+	DEFAULT_HUNT_CONCURRENCY,
+	DEFAULT_HUNT_RETRIES,
+	DEFAULT_HUNT_TIMEOUT_MS,
 	DEFAULT_JEV_CONCURRENCY,
+	DEFAULT_MAKI_VERSION,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 } from "./defaults";
 
@@ -122,6 +126,28 @@ export type HoundsmanWorktrees = {
 	location?: "home" | "workspace" | string;
 };
 
+/**
+ * Harness local da capability `hunt` (`houndsman hunt`) — opcional.
+ *
+ * Sem esta config, o comando usa defaults seguros: modelo derivado de `ai`,
+ * 4 processos simultâneos e timeout de 15 min por watchdog. A skill
+ * `/houndsman hunt` (harness externo) não depende deste bloco.
+ */
+export type HoundsmanHunt = {
+	/** Desliga o harness local sem desinstalar o binário (default: ligado). */
+	enabled?: boolean;
+	/** Modelo no formato do maki (`provider/model-id`). Default: derivado de `ai`. */
+	model?: string;
+	/** Processos maki simultâneos (default: 4). */
+	concurrency?: number;
+	/** Timeout por watchdog em ms (default: 900_000). */
+	timeoutMs?: number;
+	/** Tentativas extras quando a saída do watchdog é inválida (default: 1). */
+	retries?: number;
+	/** Caminho explícito do binário (`HOUNDSMAN_MAKI_PATH` tem precedência). */
+	binaryPath?: string;
+};
+
 /** Backend de persistência (reviews, findings e artefatos). */
 export type HoundsmanStorage = {
 	/**
@@ -169,6 +195,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	ast?: HoundsmanAst;
 	/** Camada de IA (briefs, contexto, classificação, pré-análise e verify). */
 	ai?: HoundsmanAi;
+	/** Harness local da capability `hunt` (maki) — opcional. */
+	hunt?: HoundsmanHunt;
 };
 
 /** Entrada de `defineHoundsmanConfig` — `watchdogIds` é derivado, não informado. */

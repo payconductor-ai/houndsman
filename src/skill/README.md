@@ -14,6 +14,16 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 | `fix` | Correção dos findings marcados como `execute`. |
 | `verify` | Confere se as violações foram resolvidas, sem re-revisar a PR. |
 
+## Dois caminhos para o `hunt`
+
+| Caminho | Quem usa | Requisitos |
+|---|---|---|
+| Skill `/houndsman hunt` | agente externo (Copilot/Claude/etc.) | nenhum |
+| CLI `houndsman hunt` | operador/CI, sem agente | `houndsman hunt install` |
+
+Os dois usam o mesmo `prepare`/`finalize`, o mesmo staging e o mesmo schema de findings.
+O CLI só substitui o despacho manual dos subagentes por processos maki headless.
+
 ## Terminologia
 
 - **houndsman** — o orquestrador/treinador (CLI + motor).
@@ -53,6 +63,8 @@ Um único skill (`/houndsman`), quatro capabilities (detalhadas em `hunt.md`, `t
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --pr <n>` | Passo 1 em worktree dedicado (revisões paralelas) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório (`--pr <n>` reusa o worktree) |
+| `houndsman hunt [--pr <n>]` | Harness local opcional (maki): prepare → watchdogs → finalize |
+| `houndsman hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
 | `houndsman findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |

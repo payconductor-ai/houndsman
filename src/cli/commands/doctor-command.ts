@@ -1,9 +1,11 @@
 /** Comando `doctor` (alias `check`) — valida config, ambiente e credenciais. */
 
+import { existsSync } from "node:fs";
 import type { AiClient } from "../../core/ai/ai-client";
 import { ArgParser } from "../../core/arg-parser";
 import type { AiProviderKind } from "../../core/config";
 import { ENV_NAMES, env } from "../../core/env";
+import { displayPath } from "../../core/paths";
 import { checkRegistry } from "../../core/registry-check";
 import { storageLocation } from "../../core/storage/paths";
 import type { CliContext, Command } from "./command";
@@ -65,6 +67,26 @@ export class DoctorCommand implements Command {
 		logger.bullet(`${Bun.which("gh") ? "✅" : "⚠️ "} gh (opcional — contexto da PR)`);
 		const ast = await engine.ast.check();
 		logger.bullet(`${ast.ok ? "✅" : "⚠️ "} AST: ${ast.detail}`);
+
+		// Harness local é opcional: a ausência do maki nunca falha o doctor.
+		const { makiSourceLabel, probeMakiVersion, resolveMakiBinary } = await import(
+			"../../core/hunt/maki-install"
+		);
+		const maki = resolveMakiBinary(engine.config.hunt?.binaryPath);
+		if (!maki) {
+			logger.bullet(
+				"⚠️  maki (hunt local): não instalado (opcional — `houndsman hunt install`).",
+			);
+		} else {
+			const exists = existsSync(maki.path);
+			const version = exists
+				? (maki.version ?? probeMakiVersion(maki.path))
+				: undefined;
+			logger.bullet(
+				`${exists ? "✅" : "❌"} maki (hunt local): ${displayPath(maki.path)} ` +
+					`(${makiSourceLabel(maki.source)}${version ? `, v${version}` : ""}).`,
+			);
+		}
 
 		const provider = engine.ai.projectConfig.aiProvider;
 		const key = keyFor(provider);

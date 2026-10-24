@@ -13,6 +13,7 @@ import type {
 	HoundsmanAiFeatures,
 	HoundsmanAst,
 	HoundsmanConfig,
+	HoundsmanHunt,
 	HoundsmanStorage,
 	HoundsmanWorktrees,
 } from "./config";
@@ -25,6 +26,9 @@ import {
 	DEFAULT_ALWAYS_INCLUDE_DOCS,
 	DEFAULT_AST_MAX_FILE_BYTES,
 	DEFAULT_AST_MAX_IMPACT_FILES,
+	DEFAULT_HUNT_CONCURRENCY,
+	DEFAULT_HUNT_RETRIES,
+	DEFAULT_HUNT_TIMEOUT_MS,
 	DEFAULT_JEV_CONCURRENCY,
 	DEFAULT_MAX_FILES_PER_BRIEF,
 	DEFAULT_WORKTREES_LOCATION,
@@ -161,6 +165,40 @@ export class ProjectConfig<TId extends string = string> {
 	aiModelFor(watchdogId: string): string {
 		const override = this.ai.watchdogs?.[watchdogId]?.model?.trim();
 		return override && override.length > 0 ? override : this.aiModel;
+	}
+
+	/** Config do harness local (objeto vazio quando ausente). */
+	get hunt(): HoundsmanHunt {
+		return this.raw.hunt ?? {};
+	}
+
+	/** Harness local habilitado (default: ligado; sem binário é fail-closed no comando). */
+	get huntEnabled(): boolean {
+		return this.hunt.enabled !== false;
+	}
+
+	/** Processos maki simultâneos. */
+	get huntConcurrency(): number {
+		return positive(this.hunt.concurrency, DEFAULT_HUNT_CONCURRENCY);
+	}
+
+	/** Timeout por watchdog (ms). */
+	get huntTimeoutMs(): number {
+		return positive(this.hunt.timeoutMs, DEFAULT_HUNT_TIMEOUT_MS);
+	}
+
+	/** Retentativas extras (0 desliga; valores negativos caem no default). */
+	get huntRetries(): number {
+		const value = this.hunt.retries;
+		return value !== undefined && Number.isInteger(value) && value >= 0
+			? value
+			: DEFAULT_HUNT_RETRIES;
+	}
+
+	/** Modelo base do harness local (sem prefixo de provider). */
+	get huntModel(): string {
+		const value = this.hunt.model?.trim();
+		return value && value.length > 0 ? value : this.aiModel;
 	}
 }
 

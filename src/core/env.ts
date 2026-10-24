@@ -19,6 +19,8 @@ export const ENV_NAMES = {
 	deepSeekApiKey: "HOUNDSMAN_DEEP_SEEK_API_KEY",
 	openAiApiKey: "HOUNDSMAN_OPENAI_API_KEY",
 	anthropicApiKey: "HOUNDSMAN_ANTHROPIC_API_KEY",
+	makiPath: "HOUNDSMAN_MAKI_PATH",
+	makiVersion: "HOUNDSMAN_MAKI_VERSION",
 	home: "HOUNDSMAN_HOME",
 	localAppData: "LOCALAPPDATA",
 	xdgDataHome: "XDG_DATA_HOME",
@@ -33,6 +35,10 @@ export type HoundsmanEnv = {
 	deepSeekApiKey?: string;
 	openAiApiKey?: string;
 	anthropicApiKey?: string;
+	/** Caminho explícito do binário do maki (harness local `hunt`). */
+	makiPath?: string;
+	/** Versão do maki a instalar (default: a fixada pelo pacote). */
+	makiVersion?: string;
 	home?: string;
 	localAppData?: string;
 	xdgDataHome?: string;
@@ -54,6 +60,8 @@ export function readEnv(): HoundsmanEnv {
 		deepSeekApiKey: read(ENV_NAMES.deepSeekApiKey),
 		openAiApiKey: read(ENV_NAMES.openAiApiKey),
 		anthropicApiKey: read(ENV_NAMES.anthropicApiKey),
+		makiPath: read(ENV_NAMES.makiPath),
+		makiVersion: read(ENV_NAMES.makiVersion),
 		home: read(ENV_NAMES.home),
 		localAppData: read(ENV_NAMES.localAppData),
 		xdgDataHome: read(ENV_NAMES.xdgDataHome),
@@ -79,6 +87,12 @@ export const env = {
 	},
 	get anthropicApiKey(): string | undefined {
 		return read(ENV_NAMES.anthropicApiKey);
+	},
+	get makiPath(): string | undefined {
+		return read(ENV_NAMES.makiPath);
+	},
+	get makiVersion(): string | undefined {
+		return read(ENV_NAMES.makiVersion);
 	},
 	get home(): string | undefined {
 		return read(ENV_NAMES.home);

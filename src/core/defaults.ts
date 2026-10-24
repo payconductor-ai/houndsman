@@ -46,3 +46,18 @@ export const DEFAULT_AI_TIMEOUT_MS = 120_000;
 
 /** Teto default de chamadas de IA por review. */
 export const DEFAULT_AI_MAX_CALLS_PER_REVIEW = 40;
+
+/** Processos maki simultâneos no harness local (`houndsman hunt`). */
+export const DEFAULT_HUNT_CONCURRENCY = 4;
+
+/** Timeout default de um watchdog no harness local (15 min). */
+export const DEFAULT_HUNT_TIMEOUT_MS = 900_000;
+
+/** Retentativas default quando a saída do watchdog é inválida. */
+export const DEFAULT_HUNT_RETRIES = 1;
+
+/**
+ * Versão do maki fixada pelo houndsman. O binário é baixado por
+ * `houndsman hunt install`; `HOUNDSMAN_MAKI_VERSION` sobrescreve.
+ */
+export const DEFAULT_MAKI_VERSION = "0.6.5";

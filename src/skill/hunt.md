@@ -8,6 +8,20 @@ Invocação: `/houndsman` (default), `/houndsman hunt` ou `/houndsman hunt pr 45
 O motor é o CLI **`houndsman`**; as regras do projeto ficam em `houndsman.config.ts` +
 `.houndsman/`.
 
+## Dois modos de execução
+
+| Modo | Quem usa | Requisitos | Quem despacha os briefs |
+|---|---|---|---|
+| **Skill `/houndsman hunt`** (padrão) | agente externo (Copilot/Claude/etc.) | nenhum | o próprio agente, via subagentes |
+| **CLI `houndsman hunt`** | operador/CI, sem agente | `houndsman hunt install` uma vez | o houndsman, via maki headless |
+
+Os dois modos produzem os mesmos artefatos, usam o mesmo staging e o mesmo ciclo
+`prepare → findings → finalize`. Nada muda no fluxo abaixo para quem usa a skill.
+
+> **Se você é o agente executando esta skill, NÃO rode `houndsman hunt`.** Ele instala/usa o
+> maki e despacha outro harness. Siga os passos 0–3 normalmente; o comando CLI é para quem
+> quer rodar tudo no terminal.
+
 ## Alvo da revisão
 
 Traduza o pedido do usuário para flags **antes** de começar:
@@ -303,6 +317,28 @@ completo) · `--no-jev` · `--no-ast` · `--fail-on-blocking` (com `--finalize`)
 > Persistência: SQLite global em `<HOUNDSMAN_HOME>/houndsman.db`. O staging dos subagentes
 > (`briefs/`, `findings/`, contexto) vive em `<HOUNDSMAN_HOME>/work/<reviewId>/` e é limpo
 > depois do `--finalize`.
+
+---
+
+## Harness local (opcional, fora da skill)
+
+Para rodar a revisão inteira pelo terminal, sem agente externo, o mesmo `hunt` existe como
+comando. A instalação é única e fica fora do projeto:
+
+```bash
+houndsman hunt install            # baixa o maki fixado em <HOUNDSMAN_HOME>/tools/maki
+houndsman hunt doctor             # diagnóstico (não falha se o maki não existir)
+houndsman hunt --pr 456           # prepare → um processo maki por brief → finalize
+houndsman hunt --pr 456 --allow-partial  # finaliza mesmo se algum watchdog falhar
+```
+
+- Reaproveita a credencial já configurada (`HOUNDSMAN_DEEP_SEEK_API_KEY` → `DEEPSEEK_API_KEY`)
+  e o modelo de `ai.model` (default `deepseek/deepseek-v4-pro`).
+- O watchdog **não recebe escrita**: o maki devolve o JSON na resposta final e o houndsman
+  valida e grava `findings/<watchdog>.json`. `bash`, rede e edição ficam negados.
+- Sem maki instalado, nada muda para a skill: `setup`, `doctor` e `/houndsman hunt` seguem
+  funcionando.
+- O relatório do harness fica em `hunt-report.json` (sessões, custo e tokens por watchdog).
 
 ---
 

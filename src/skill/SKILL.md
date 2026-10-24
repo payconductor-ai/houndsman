@@ -38,6 +38,10 @@ especialista por domínio · **finding** = um achado da revisão · **Jev** = pr
 Um argumento extra é o alvo da capability. Escolha a capability pelo que o usuário quer,
 leia o documento correspondente em `.houndsman/core/skill/<capability>.md` e siga-o.
 
+> **Harness local (opcional):** para rodar sem agente externo, o operador pode instalar o
+> maki (`houndsman hunt install`) e usar `houndsman hunt --pr 456`. Isso não muda esta
+> skill: se você é o agente, siga o fluxo normal e não rode `houndsman hunt`.
+
 ### Alvo da revisão (PR × branch)
 
 Interprete o alvo em linguagem natural **antes** de rodar o CLI:
