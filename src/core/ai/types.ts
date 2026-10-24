@@ -50,6 +50,8 @@ export type ModelResponse<T> = {
 	output: T;
 	usage: AiUsage;
 	finishReason: string;
+	/** Avisos do provider já normalizados em texto (ex.: modo de compatibilidade). */
+	warnings?: string[];
 };
 
 /** Provider de modelo (adaptador do AI SDK ou fake nos testes). */

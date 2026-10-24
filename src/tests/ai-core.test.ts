@@ -6,7 +6,11 @@ import { describe, expect, test } from "bun:test";
 import type { LanguageModel } from "ai";
 import { z } from "zod";
 import { AiClient, AiUsageBudget, AiUsageRecorder } from "../core/ai";
-import { buildGenerateTextArgs } from "../core/ai/ai-sdk-model-provider";
+import {
+	buildGenerateTextArgs,
+	formatSdkWarning,
+	formatSdkWarnings,
+} from "../core/ai/ai-sdk-model-provider";
 import { temperatureApplies } from "../core/ai/provider-capabilities";
 import { defineHoundsmanConfig } from "../core/config";
 import { DEFAULT_AI_MODEL } from "../core/defaults";
@@ -150,6 +154,39 @@ describe("temperature e providerOptions", () => {
 		expect(provider.requests[0]?.providerOptions).toEqual({
 			deepseek: { thinking: { type: "disabled" } },
 		});
+	});
+});
+
+describe("avisos do AI SDK", () => {
+	test("normaliza os avisos do provider em texto", () => {
+		expect(
+			formatSdkWarning({
+				type: "compatibility",
+				feature: "responseFormat JSON schema",
+				details: "JSON response schema is injected into the system message.",
+			}),
+		).toBe(
+			"compatibility: responseFormat JSON schema — JSON response schema is injected into the system message.",
+		);
+		expect(
+			formatSdkWarning({
+				type: "unsupported",
+				feature: "user message part type: image",
+			}),
+		).toBe("unsupported: user message part type: image");
+		expect(
+			formatSdkWarning({
+				type: "deprecated",
+				setting: "temperature",
+				message: "gone",
+			}),
+		).toBe("deprecated: temperature — gone");
+		expect(formatSdkWarning(null)).toBe("aviso");
+		expect(formatSdkWarnings(undefined)).toEqual([]);
+	});
+
+	test("logger default do SDK fica silencioso após carregar o adapter", () => {
+		expect(typeof globalThis.AI_SDK_LOG_WARNINGS).toBe("function");
 	});
 });
 

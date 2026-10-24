@@ -31,6 +31,43 @@ function numberOrZero(value: unknown): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+/**
+ * Silencia o emissor default de avisos do AI SDK.
+ *
+ * O default usa `process.emitWarning` — com stack trace — a cada chamada, o que
+ * polui o stderr do CLI. Os avisos continuam disponíveis no resultado da
+ * chamada (`ModelResponse.warnings`). Um chamador que queira o comportamento
+ * original basta definir `AI_SDK_LOG_WARNINGS` antes de usar o SDK.
+ */
+function installWarningSink(): void {
+	if (globalThis.AI_SDK_LOG_WARNINGS === undefined) {
+		globalThis.AI_SDK_LOG_WARNINGS = () => {};
+	}
+}
+
+installWarningSink();
+
+/** Normaliza um aviso do provider em texto legível (puro). */
+export function formatSdkWarning(raw: unknown): string {
+	const warning = (raw ?? {}) as Record<string, unknown>;
+	const label = [warning.type, warning.feature, warning.setting]
+		.filter((value): value is string => typeof value === "string" && value !== "")
+		.join(": ");
+	const detail =
+		typeof warning.details === "string"
+			? warning.details
+			: typeof warning.message === "string"
+				? warning.message
+				: "";
+	const head = label || "aviso";
+	return detail ? `${head} — ${detail}` : head;
+}
+
+/** Lista de avisos do provider em texto (puro). */
+export function formatSdkWarnings(raw: unknown): string[] {
+	return Array.isArray(raw) ? raw.map(formatSdkWarning) : [];
+}
+
 /** Argumentos aceitos por `generateText` (inclui `providerOptions` do SDK). */
 type GenerateTextArgs = Parameters<typeof generateText>[0];
 
@@ -86,10 +123,12 @@ export class AiSdkModelProvider implements ModelProvider {
 			const output = request.outputSchema
 				? (result.output as T)
 				: ((result.text ?? "") as unknown as T);
+			const warnings = formatSdkWarnings(result.warnings);
 			return {
 				output,
 				usage: mapUsage(result.usage),
 				finishReason: result.finishReason ?? "unknown",
+				...(warnings.length > 0 ? { warnings } : {}),
 			};
 		} catch (error) {
 			if (error instanceof Error && error.name === "AbortError") {

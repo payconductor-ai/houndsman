@@ -10,7 +10,12 @@ export type {
 	TextRequest,
 } from "./ai-client";
 export { AiClient } from "./ai-client";
-export { AiSdkModelProvider, mapUsage } from "./ai-sdk-model-provider";
+export {
+	AiSdkModelProvider,
+	formatSdkWarning,
+	formatSdkWarnings,
+	mapUsage,
+} from "./ai-sdk-model-provider";
 export {
 	AiBudgetError,
 	AiConfigurationError,
