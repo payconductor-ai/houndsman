@@ -6,6 +6,7 @@
  */
 
 import type { AstDelta } from "./ast/types";
+import { type BusinessSummary, renderBusinessLines } from "./business-summary";
 import { formatRanges, formatSymbols } from "./changed-scope";
 import {
 	type Rule,
@@ -19,13 +20,17 @@ import {
 
 /**
  * Procedimento de revisão — compartilhado por todos os watchdogs.
+ *
+ * O eixo é intenção → escopo → rastreio → prova: as regras continuam sendo o
+ * piso, mas a revisão começa entendendo o que a mudança deve entregar.
  */
 export const PROCEDURE: readonly string[] = [
-	"1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).",
-	"2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.",
-	"3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.",
-	"4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.",
-	'5. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
+	"1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.",
+	"2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.",
+	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).",
+	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.",
+	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.",
+	'6. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
 /** Limites do contexto injetado em cada brief (o resumo final é maior). */
@@ -227,6 +232,94 @@ function deltaLines(delta: AstDelta): string[] {
 	return lines;
 }
 
+/** Rótulo curto da fonte do modelo de intenção. */
+const BUSINESS_SOURCE_LABEL: Record<BusinessSummary["source"], string> = {
+	ai: "IA",
+	reviewer: "revisor de fluxo",
+	deterministic: "determinístico",
+};
+
+/**
+ * Modelo de intenção da PR — o contrato esperado antes de julgar o código.
+ *
+ * Injetado em todos os briefs; o revisor `general` é quem o reconstrói.
+ */
+function businessSection(args: WatchdogRenderArgs): string[] {
+	const business = args.business;
+	if (!business) return [];
+	const lines = [
+		"## Modelo de intenção (negócio)",
+		"",
+		`> Fonte: ${BUSINESS_SOURCE_LABEL[business.source]}` +
+			(args.businessSummaryPath
+				? ` · \`${args.businessSummaryPath}\` (versão canônica no staging)`
+				: "") +
+			". Use para saber o que a mudança **deve** entregar; não é achado.",
+		"",
+	];
+	const rendered = renderBusinessLines(business);
+	while (rendered[0] === "") rendered.shift();
+	lines.push(...rendered, "");
+	return lines;
+}
+
+/** Trechos alterados (diff) — só o revisor de fluxo recebe o patch no brief. */
+function snippetsSection(args: WatchdogRenderArgs): string[] {
+	const snippets = args.snippets ?? [];
+	if (snippets.length === 0) return [];
+	const lines = [
+		"## Trechos alterados (diff)",
+		"",
+		"> Apenas as linhas alteradas. O restante do arquivo é contexto; um finding",
+		"> só é válido quando a `line` está nas faixas do escopo.",
+		"",
+	];
+	for (const item of snippets) {
+		lines.push(
+			`### \`${item.file}\``,
+			"",
+			"```diff",
+			item.snippet.trimEnd(),
+			"```",
+			"",
+		);
+	}
+	return lines;
+}
+
+/**
+ * Obrigação de output do revisor de fluxo: ele reconstrói e persiste o modelo
+ * de intenção (ou devolve `businessSummary` no harness local).
+ */
+function flowReviewSection(args: WatchdogRenderArgs): string[] {
+	if (!args.flowReview) return [];
+	const output = args.businessSummaryPath ?? "business-summary.json";
+	return [
+		"## Obrigação de output (fluxo)",
+		"",
+		"1. **Recomece pelo modelo**: leia o diff e reconstrua intenção, fluxos, invariantes,",
+		"   contratos e estados. Se o modelo existente estiver incompleto, corrija-o.",
+		`2. **Persista** o modelo em \`${output}\` com \`source: "reviewer"\`.`,
+		"   No harness local (maki), devolva o mesmo objeto em `businessSummary` no JSON.",
+		"3. **Prove cada gap**: fora de regra, preencha `scenario` (gatilho concreto),",
+		"   `impact` (consequência observável) e `evidence` (trecho). Sem `scenario` + `evidence`,",
+		"   a severidade máxima é `attention`.",
+		"",
+	];
+}
+
+/** Linha de verificação (string legada ou objeto ancorado). */
+function checkItem(
+	item:
+		| string
+		| { statement: string; file?: string; symbol?: string; invariant?: string },
+): string {
+	if (typeof item === "string") return `- ${item}`;
+	const anchor = [item.file, item.symbol].filter(Boolean).join(" · ");
+	const invariant = item.invariant ? ` (invariante: ${item.invariant})` : "";
+	return `- ${item.statement}${anchor ? ` — \`${anchor}\`` : ""}${invariant}`;
+}
+
 /**
  * Plano de revisão sugerido por IA — complementa (nunca substitui) as regras.
  */
@@ -271,12 +364,12 @@ function aiPlanSection(args: WatchdogRenderArgs): string[] {
 	}
 	if (logic.length > 0) {
 		lines.push("**Consistência lógica:**", "");
-		for (const item of logic.slice(0, 3)) lines.push(`- ${item}`);
+		for (const item of logic.slice(0, 4)) lines.push(checkItem(item));
 		lines.push("");
 	}
 	if (domain.length > 0) {
 		lines.push("**Domínio de negócio:**", "");
-		for (const item of domain.slice(0, 3)) lines.push(`- ${item}`);
+		for (const item of domain.slice(0, 4)) lines.push(checkItem(item));
 		lines.push("");
 	}
 	return lines;
@@ -346,6 +439,9 @@ export function defaultRenderBrief(
 
 	if (args.context) lines.push(...renderBriefContext(args.context));
 
+	lines.push(...businessSection(args));
+	lines.push(...snippetsSection(args));
+	lines.push(...flowReviewSection(args));
 	lines.push(...aiPlanSection(args));
 	lines.push(...astSection(args));
 	lines.push(...optionalList("Prioridade de leitura", def.reviewFocus));

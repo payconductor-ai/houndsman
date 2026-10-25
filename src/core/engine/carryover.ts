@@ -34,6 +34,10 @@ export function buildCarryover(
 			message: finding.message,
 			action: finding.action,
 			evidence: finding.evidence,
+			scenario: finding.scenario,
+			impact: finding.impact,
+			confidence: finding.confidence,
+			basis: finding.basis,
 			foundAtSha: finding.foundAtSha,
 			watchdogs: [...finding.watchdogIds],
 		}));

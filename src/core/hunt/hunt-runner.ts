@@ -8,9 +8,12 @@
  */
 
 import { readFileSync } from "node:fs";
+import { GENERAL_WATCHDOG_ID } from "../builtins";
+import { type BusinessSummary, parseBusinessSummary } from "../business-summary";
 import { parseWatchdogReport } from "../report-builder";
 import { systemClock } from "../services/clock";
 import type { ReviewWorkArea } from "../storage/work-area";
+import { renderHuntIntentPrompt, renderIntentRetrySuffix } from "./maki-intent-prompt";
 import { renderHuntPrompt, renderRetrySuffix } from "./maki-prompt";
 import {
 	extractJsonObject,
@@ -22,6 +25,12 @@ import { mapPool } from "./pool";
 
 /** Evento de progresso (CLI loga; core não escreve saída). */
 export type HuntEvent =
+	| {
+			type: "intent";
+			status: "start" | "done" | "skipped" | "failed";
+			source?: BusinessSummary["source"];
+			error?: string;
+	  }
 	| { type: "start"; watchdogId: string }
 	| {
 			type: "retry";
@@ -78,6 +87,8 @@ export type HuntReport = {
 	version: 1;
 	engine: "maki";
 	model: string;
+	/** Fonte do modelo de intenção usado na revisão. */
+	business?: BusinessSummary["source"];
 	startedAt: string;
 	finishedAt: string;
 	durationMs: number;
@@ -114,6 +125,9 @@ export class HuntRunner {
 	async run(activeIds: readonly string[]): Promise<HuntReport> {
 		const startedAt = systemClock();
 		const startedMs = Date.now();
+		// Intenção primeiro: o revisor `general` e os demais watchdogs leem o
+		// mesmo `business-summary.json` do staging.
+		const business = await this.runIntent();
 		const watchdogs = await mapPool(activeIds, this.options.concurrency, (id) =>
 			this.runOne(id),
 		);
@@ -122,12 +136,76 @@ export class HuntRunner {
 			version: 1,
 			engine: "maki",
 			model: this.options.model,
+			business,
 			startedAt,
 			finishedAt,
 			durationMs: Date.now() - startedMs,
 			watchdogs,
 			totals: totalsOf(watchdogs),
 		};
+	}
+
+	/**
+	 * Pré-passe de intenção (IA embutida). Pula quando o prepare já gerou o
+	 * modelo com IA; falha mantém o determinístico (fail-open).
+	 */
+	private async runIntent(): Promise<BusinessSummary["source"] | undefined> {
+		const existing = this.options.work.readBusinessSummary();
+		if (existing?.source === "ai") {
+			this.emit({ type: "intent", status: "skipped", source: "ai" });
+			return "ai";
+		}
+
+		let brief: string;
+		try {
+			brief = readFileSync(this.options.work.businessPaths.brief, "utf8");
+		} catch {
+			return existing?.source;
+		}
+
+		this.emit({ type: "intent", status: "start" });
+		const basePrompt = renderHuntIntentPrompt({
+			projectName: this.options.projectName,
+			brief,
+		});
+		let lastError = "";
+		for (let attempt = 0; attempt <= this.options.retries; attempt++) {
+			const prompt =
+				attempt === 0
+					? basePrompt
+					: `${basePrompt}\n${renderIntentRetrySuffix(lastError)}`;
+			const result = await this.options.runner.run({
+				prompt,
+				cwd: this.options.root,
+				model: this.options.model,
+				apiKeyEnv: this.options.apiKeyEnv,
+				apiKey: this.options.apiKey,
+				timeoutMs: this.options.timeoutMs,
+			});
+			if (!result.ok) {
+				lastError = result.error;
+				continue;
+			}
+			const raw = extractJsonObject(result.text);
+			if (raw === null) {
+				lastError = "a resposta final não contém um objeto JSON.";
+				continue;
+			}
+			const summary = parseBusinessSummary(
+				{ ...raw, source: "reviewer" },
+				"reviewer",
+			);
+			if (!summary) {
+				lastError = "JSON fora do schema do modelo de intenção.";
+				continue;
+			}
+			this.options.work.writeBusinessSummary(summary);
+			this.emit({ type: "intent", status: "done", source: "reviewer" });
+			return "reviewer";
+		}
+
+		this.emit({ type: "intent", status: "failed", error: lastError });
+		return existing?.source ?? "deterministic";
 	}
 
 	private async runOne(watchdogId: string): Promise<HuntWatchdogResult> {
@@ -200,6 +278,18 @@ export class HuntRunner {
 				lastError = `watchdogId '${report.watchdogId}' não corresponde a '${watchdogId}'.`;
 				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
+			}
+
+			// O revisor de fluxo devolve o modelo de intenção no JSON (maki não escreve).
+			if (watchdogId === GENERAL_WATCHDOG_ID) {
+				const summary = (raw as Record<string, unknown>).businessSummary;
+				if (typeof summary === "object" && summary !== null) {
+					const parsed = parseBusinessSummary(
+						{ ...(summary as Record<string, unknown>), source: "reviewer" },
+						"reviewer",
+					);
+					if (parsed) this.options.work.writeBusinessSummary(parsed);
+				}
 			}
 
 			this.options.work.writeFinding(

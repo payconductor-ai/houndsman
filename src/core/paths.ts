@@ -47,6 +47,12 @@ export const CONTEXT_SUMMARY_FILE = "context-summary.json";
 /** Brief do subagente que resume o contexto da PR. */
 export const CONTEXT_BRIEF_FILE = "context-brief.md";
 
+/** Modelo de intenção da PR (negócio) — insumo obrigatório do revisor `general`. */
+export const BUSINESS_SUMMARY_FILE = "business-summary.json";
+
+/** Brief do passo de intenção (subagente na skill / pré-passe no hunt). */
+export const BUSINESS_BRIEF_FILE = "business-brief.md";
+
 /** Relatório da verificação de findings (artefato `verify.md`). */
 export const VERIFY_FILE = "verify.md";
 

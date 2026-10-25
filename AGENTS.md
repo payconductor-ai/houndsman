@@ -69,6 +69,8 @@ src/
 │   │                        # WorktreeManager, PrResolver
 │   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter, presenters
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
+│   ├── business-summary.ts  # intenção da PR (fluxos/invariantes/contratos)
+│   ├── builtins.ts          # watchdogs embutidos (general) + merge do consumidor
 │   ├── config-loader.ts     # descobre/carrega houndsman.config.* em runtime
 │   ├── project-config.ts    # defaults resolvidos + WatchdogRegistry
 │   ├── defaults.ts          # constantes default do motor
@@ -137,6 +139,12 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   caem para os hunks — e o injeta no brief e na pré-análise. Finding
   com `line` fora das faixas é código pré-existente, não escopo da revisão. Nunca volte a
   mandar o watchdog "ler o arquivo inteiro".
+- **Revisão de lógica é obrigatória.** O `prepare` injeta o watchdog reservado `general` em
+  **todo** ciclo, com todos os arquivos alterados; não há flag de desligar (`--no-ai` não o
+  remove). Ele audita fluxo/capacidade/credencial/estado e emite `Lógica:`/`Domínio:`.
+- **Intenção antes dos briefs.** O `prepare` sempre grava `business-summary.json` +
+  `business-brief.md`. Com IA, a versão é `source: "ai"`; sem chave, o subagente (skill) ou o
+  pré-passe maki (`houndsman hunt`) grava `source: "reviewer"`; o determinístico é o fallback.
 - **Composition root:** `HoundsmanEngine` injeta a config e os colaboradores (`GitRepository`,
   `FileClassifier`, `Verifier`, `FixBatchBuilder`). Pipelines não instanciam dependências
   diretamente; a CLI só conhece `Command`/`CommandRegistry`.
@@ -160,8 +168,9 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   (ou com `--no-ai`), briefs/contexto/classificação/verify seguem sem rede.
 - **`fallback: true` é último recurso.** Um watchdog fallback só assume arquivos que
   nenhum outro casou; `classify` é ignorado e múltiplos fallbacks geram warning.
-- **Findings emergentes são opt-in.** `allowEmergentFindings: true` permite `Lógica:`/
-  `Domínio:` fora das regras, sempre com evidência e severidade máxima `attention`.
+- **Findings emergentes:** o `general` sempre pode emitir. Nos demais watchdogs continuam
+  opt-in (`allowEmergentFindings: true`). Fora de regra, `blocking` só é aceito com
+  `scenario` + `evidence`; sem os dois o motor rebaixa para `attention`.
 - **Env é fonte única e prefixado.** Chaves de integração usam `HOUNDSMAN_`
   (`HOUNDSMAN_DEEP_SEEK_API_KEY`, `HOUNDSMAN_OPENAI_API_KEY`,
   `HOUNDSMAN_ANTHROPIC_API_KEY`, `HOUNDSMAN_TYPE_SAFE_API_KEY`, `HOUNDSMAN_HOME`).

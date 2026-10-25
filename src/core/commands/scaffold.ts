@@ -215,6 +215,7 @@ export type AiProviderOptions = Record<string, Record<string, unknown>>;
 /** Features de IA do fluxo normal (todas fail-open). */
 export type HoundsmanAiFeatures = {
 	context?: boolean;
+	business?: boolean;
 	brief?: boolean;
 	technical?: boolean;
 	classification?: boolean;
@@ -365,6 +366,9 @@ import { exampleWatchdog } from "./example";
 /**
  * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
  * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
+ *
+ * NÃO declare um watchdog com id \`general\`: ele é reservado pelo motor
+ * (revisor de fluxo obrigatório) e é injetado em todo ciclo.
  */
 export const WATCHDOG_DEFINITIONS = {
 	default: defaultWatchdog,

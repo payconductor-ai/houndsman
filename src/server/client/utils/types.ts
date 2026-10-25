@@ -32,6 +32,14 @@ export type Finding = {
 	message: string;
 	action: string;
 	evidence?: string;
+	/** Gatilho concreto do gap (fora de regra). */
+	scenario?: string;
+	/** Consequência observável do gap. */
+	impact?: string;
+	/** Confiança do revisor (0–1). */
+	confidence?: number;
+	/** Origem do achado: regra, lógica ou domínio. */
+	basis?: "rule" | "logic" | "domain";
 	count: number;
 	present: boolean;
 	decision: Decision;
@@ -59,6 +67,8 @@ export type ArtifactKind =
 	| "context"
 	| "context-brief"
 	| "context-summary"
+	| "business"
+	| "business-brief"
 	| "finding-report"
 	| "review"
 	| "resume"

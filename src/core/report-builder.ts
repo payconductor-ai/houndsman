@@ -16,6 +16,9 @@ export type WatchdogNameResolver = (watchdogId: string) => string;
 
 const identityName: WatchdogNameResolver = (id) => id;
 
+/** Origem do finding: regra explícita, consistência lógica ou domínio. */
+export type FindingBasis = "rule" | "logic" | "domain";
+
 export type Finding = {
 	/** Id curto do finding (preenchido no `--finalize`; usado pela triagem). */
 	id?: string;
@@ -26,6 +29,14 @@ export type Finding = {
 	message: string;
 	action: string;
 	evidence?: string;
+	/** Gatilho concreto que expõe o gap (obrigatório para `blocking` fora de regra). */
+	scenario?: string;
+	/** Consequência observável do gap. */
+	impact?: string;
+	/** Confiança do revisor (0–1). */
+	confidence?: number;
+	/** Origem do achado; inferida pelo prefixo `Lógica:`/`Domínio:` quando ausente. */
+	basis?: FindingBasis;
 	/**
 	 * Commit em que o achado foi observado (interno). Preenchido nos carry-over
 	 * do review incremental — preserva a referência para a verificação (verify).
@@ -102,8 +113,52 @@ function isFinding(value: unknown): value is Finding {
 		typeof f.file === "string" &&
 		typeof f.message === "string" &&
 		typeof f.action === "string" &&
-		(f.line === undefined || typeof f.line === "number")
+		(f.line === undefined || typeof f.line === "number") &&
+		(f.scenario === undefined || typeof f.scenario === "string") &&
+		(f.impact === undefined || typeof f.impact === "string") &&
+		(f.confidence === undefined || typeof f.confidence === "number") &&
+		(f.basis === undefined ||
+			f.basis === "rule" ||
+			f.basis === "logic" ||
+			f.basis === "domain")
 	);
+}
+
+/** Infere a origem do finding pelo prefixo reservado da regra. */
+export function inferBasis(rule: string): FindingBasis {
+	const text = rule.trim().toLowerCase();
+	if (text.startsWith("lógica:") || text.startsWith("logica:")) return "logic";
+	if (text.startsWith("domínio:") || text.startsWith("dominio:")) return "domain";
+	return "rule";
+}
+
+/**
+ * Normaliza um finding e aplica a política de severidade: fora de regra,
+ * `blocking` exige `scenario` + `evidence`; sem os dois, rebaixa para
+ * `attention`. A regra explícita mantém a severidade declarada pelo watchdog.
+ */
+export function normalizeFinding(
+	finding: Finding,
+	onWarn: (message: string) => void = () => {},
+): Finding {
+	const basis = finding.basis ?? inferBasis(finding.rule);
+	const confidence =
+		finding.confidence === undefined
+			? undefined
+			: Math.min(1, Math.max(0, finding.confidence));
+	const normalized: Finding = { ...finding, basis, confidence };
+	if (basis !== "rule" && normalized.severity === "blocking") {
+		const proven = Boolean(
+			normalized.scenario?.trim() && normalized.evidence?.trim(),
+		);
+		if (!proven) {
+			normalized.severity = "attention";
+			onWarn(
+				`[report-builder] ${finding.file}: finding ${basis} sem cenário+evidência rebaixado para attention.`,
+			);
+		}
+	}
+	return normalized;
 }
 
 /** Valida e normaliza um relatório. Retorna null se inválido. */
@@ -126,13 +181,14 @@ export function parseWatchdogReport(
 		return null;
 	}
 
-	const findings = obj.findings.filter((f) => {
-		if (!isFinding(f)) {
+	const findings: Finding[] = [];
+	for (const item of obj.findings) {
+		if (!isFinding(item)) {
 			onError(`[report-builder] ${source}: finding inválido ignorado`);
-			return false;
+			continue;
 		}
-		return true;
-	});
+		findings.push(normalizeFinding(item, onError));
+	}
 
 	return {
 		watchdogId: obj.watchdogId,
@@ -198,6 +254,16 @@ export function dedupeFindings(reports: WatchdogReport[]): MergedFinding[] {
 					existing.action = finding.action;
 					existing.evidence = finding.evidence ?? existing.evidence;
 				}
+				// Cenário/impacto/confiança nunca se perdem no merge.
+				existing.scenario = existing.scenario ?? finding.scenario;
+				existing.impact = existing.impact ?? finding.impact;
+				if (finding.confidence !== undefined) {
+					existing.confidence = Math.max(
+						existing.confidence ?? 0,
+						finding.confidence,
+					);
+				}
+				existing.basis = existing.basis ?? finding.basis;
 				continue;
 			}
 			map.set(key, { ...finding, watchdogs: [report.watchdogId] });
@@ -222,8 +288,10 @@ function renderFinding(finding: MergedFinding, nameOf: WatchdogNameResolver): st
 	const lines = [
 		`- **${finding.rule}** — \`${location}\` · _${watchdogs}_${id}`,
 		`  ${finding.message}`,
-		`  **Ação:** ${finding.action}`,
 	];
+	if (finding.scenario) lines.push(`  **Cenário:** ${finding.scenario}`);
+	if (finding.impact) lines.push(`  **Impacto:** ${finding.impact}`);
+	lines.push(`  **Ação:** ${finding.action}`);
 	if (finding.evidence) {
 		lines.push(`  **Evidência:** \`${finding.evidence}\``);
 	}
@@ -267,9 +335,9 @@ function renderUnconfirmedCandidates(
 	const pending = candidates.filter((c) => !confirmed.has(`${c.file}|${c.rule}`));
 	if (pending.length === 0) return [];
 	const lines = [
-		"## 🔎 Candidatos não verificados (Jev)",
+		"## 🔎 Candidatos não verificados (pré-análise)",
 		"",
-		"> Indícios automáticos que nenhum watchdog confirmou. Revise manualmente — não bloqueiam.",
+		"> Indícios automáticos (Jev/IA) que nenhum watchdog confirmou. Revise manualmente — não bloqueiam.",
 		"",
 	];
 	for (const c of pending) {

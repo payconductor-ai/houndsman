@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS findings (
 	message TEXT NOT NULL,
 	action TEXT NOT NULL,
 	evidence TEXT,
+	scenario TEXT,
+	impact TEXT,
+	confidence REAL,
+	basis TEXT,
 	anchor TEXT,
 	found_at_sha TEXT,
 	count INTEGER NOT NULL DEFAULT 1,
@@ -106,21 +110,29 @@ export function migrate(db: Database, path: string): void {
 
 	db.transaction(() => {
 		db.exec(DDL);
-		// v2: heartbeat explícito da execução (bancos v1 não tinham a coluna).
-		// v3: worktree/pr da revisão (revisões paralelas).
-		const columns = db.query("PRAGMA table_info(reviews)").all() as {
-			name: string;
-		}[];
-		const missing: [string, string][] = [
+		// v2: heartbeat explícito da execução; v3: worktree/pr da revisão;
+		// v4: cenário/impacto/confiança/origem do finding.
+		const addMissing = (table: string, columns: [string, string][]): void => {
+			const info = db.query(`PRAGMA table_info(${table})`).all() as {
+				name: string;
+			}[];
+			for (const [name, type] of columns) {
+				if (!info.some((column) => column.name === name)) {
+					db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+				}
+			}
+		};
+		addMissing("reviews", [
 			["heartbeat_at", "TEXT"],
 			["worktree_path", "TEXT"],
 			["pr_number", "INTEGER"],
-		];
-		for (const [name, type] of missing) {
-			if (!columns.some((column) => column.name === name)) {
-				db.exec(`ALTER TABLE reviews ADD COLUMN ${name} ${type}`);
-			}
-		}
+		]);
+		addMissing("findings", [
+			["scenario", "TEXT"],
+			["impact", "TEXT"],
+			["confidence", "REAL"],
+			["basis", "TEXT"],
+		]);
 		db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 	})();
 }

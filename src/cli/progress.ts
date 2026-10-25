@@ -20,6 +20,10 @@ export const PREPARE_STAGE_TEXT: Record<PrepareStage, { start: string; done: str
 	impact: { start: "Medindo o impacto nos importadores", done: "Impacto calculado" },
 	jev: { start: "Pré-analisando o diff (Jev/IA)", done: "Pré-análise concluída" },
 	context: { start: "Resumindo o contexto da PR", done: "Contexto resumido" },
+	business: {
+		start: "Reconstruindo a intenção da PR",
+		done: "Intenção reconstruída",
+	},
 	technical: {
 		start: "Consolidando os pontos técnicos",
 		done: "Pontos técnicos prontos",

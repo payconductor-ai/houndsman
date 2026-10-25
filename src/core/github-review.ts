@@ -225,9 +225,10 @@ export function buildCommentBody(finding: FindingState): string {
 		`${SEVERITY_EMOJI[finding.severity]} **${finding.rule}** · _${finding.severity}_`,
 		"",
 		finding.message,
-		"",
-		`**Ação:** ${finding.action}`,
 	];
+	if (finding.scenario) lines.push("", `**Cenário:** ${finding.scenario}`);
+	if (finding.impact) lines.push("", `**Impacto:** ${finding.impact}`);
+	lines.push("", `**Ação:** ${finding.action}`);
 	if (finding.evidence) lines.push("", "```", finding.evidence, "```");
 	lines.push("", "_— houndsman_");
 	return lines.join("\n");
@@ -247,6 +248,8 @@ export function renderGeneralBody(findings: readonly FindingState[]): string {
 			`- ${SEVERITY_EMOJI[finding.severity]} **${finding.severity}** \`${location}\` — ${finding.rule}`,
 			`  ${finding.message}`,
 		);
+		if (finding.scenario) lines.push(`  **Cenário:** ${finding.scenario}`);
+		if (finding.impact) lines.push(`  **Impacto:** ${finding.impact}`);
 	}
 	return lines.join("\n");
 }

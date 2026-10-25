@@ -40,6 +40,8 @@
 
 - **Webhook handler sem verifySignature** — `server/src/services/integrations/acquirer/webhook/handle-charge-event.ts:15` · _Acquirer Integrations, Pagamentos & Integrações_
   Payload processado antes de validar a assinatura do provider.
+  **Cenário:** um POST anônimo em `/webhooks` com payload forjado.
+  **Impacto:** eventos falsos disparam efeitos de domínio (cobrança marcada como paga).
   **Ação:** Validar `verifyWebhookSignature(payload, signature, secret)` antes de qualquer efeito.
   **Evidência:** `const event = JSON.parse(body)`
 

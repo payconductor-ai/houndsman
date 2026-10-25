@@ -7,6 +7,8 @@
  * não altera o brief usado pela skill `/houndsman hunt`.
  */
 
+import { GENERAL_WATCHDOG_ID } from "../builtins";
+
 /** Dados do prompt de um watchdog. */
 export type HuntPromptInput = {
 	projectName: string;
@@ -29,7 +31,11 @@ function outputSchema(watchdogId: string): string {
       "line": 123,
       "message": "o que está errado",
       "action": "o que fazer",
-      "evidence": "trecho que comprova"
+      "evidence": "trecho que comprova",
+      "scenario": "gatilho concreto que expõe o gap (fora de regra)",
+      "impact": "consequência observável",
+      "confidence": 0.8,
+      "basis": "rule | logic | domain"
     }
   ]
 }`;
@@ -48,6 +54,12 @@ export function renderHuntPrompt(input: HuntPromptInput): string {
 		"- Responda **somente** com um objeto JSON válido (sem markdown, sem texto antes/depois).",
 		"- `watchdogId` deve ser exatamente o id acima; use `findings: []` quando não houver achado.",
 		"- `line` deve estar dentro do escopo do diff descrito no brief.",
+		'- Fora de regra, use `basis: "logic" | "domain"`, com `scenario` + `evidence`; sem os dois a severidade máxima é `attention`.',
+		...(input.watchdogId === GENERAL_WATCHDOG_ID
+			? [
+					'- Este é o revisor de fluxo: inclua `businessSummary` (modelo de intenção reconstruído, `source: "reviewer"`) no JSON.',
+				]
+			: []),
 		"",
 		"### Schema",
 		"",

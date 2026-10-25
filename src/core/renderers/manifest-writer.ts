@@ -7,6 +7,7 @@
  */
 
 import type { AiUsage } from "../ai/types";
+import type { BusinessSummary } from "../business-summary";
 import { Classification } from "../domain/classification";
 import type { ClassificationResult } from "../file-classifier";
 import type { JevCandidatesFile } from "../jev";
@@ -42,6 +43,16 @@ export type ManifestAi = {
 	model: string;
 	briefPlans: number;
 	usage: AiUsage;
+};
+
+/** Resumo do modelo de intenção no manifesto. */
+export type ManifestBusiness = {
+	source: BusinessSummary["source"];
+	model?: string;
+	flows: number;
+	invariants: number;
+	contracts: number;
+	states: number;
 };
 
 /** Classificação enriquecida gravada pelo prepare (modo + incremental). */
@@ -81,6 +92,7 @@ export class ManifestWriter {
 		jev: JevCandidatesFile,
 		ast?: ManifestAst,
 		ai?: ManifestAi,
+		business?: ManifestBusiness,
 	): void {
 		const view = Classification.from(classification);
 		const maxFilesPerBrief = this.project.maxFilesPerBrief;
@@ -125,6 +137,7 @@ export class ManifestWriter {
 			context: summary
 				? { summarized: true, source: summary.source ?? null }
 				: { summarized: false, source: null },
+			business: business ?? null,
 			jev: jev.available
 				? {
 						available: true,

@@ -43,17 +43,85 @@ export const TechnicalSummarySchema = z.object({
 });
 export type TechnicalSummaryPlan = z.infer<typeof TechnicalSummarySchema>;
 
+/** Verificação sugerida — sempre ancorada em arquivo/símbolo quando possível. */
+export const BriefCheckSchema = z.object({
+	statement: z.string().min(1).max(240),
+	file: z.string().max(200).optional(),
+	symbol: z.string().max(120).optional(),
+	/** Invariante que a verificação protege (`domain`). */
+	invariant: z.string().max(200).optional(),
+});
+export type BriefCheck = z.infer<typeof BriefCheckSchema>;
+
 /** Plano de revisão sugerido por IA para um brief. */
 export const BriefPlanSchema = z.object({
 	focus: z.array(z.string()).max(5).default([]),
 	questions: z.array(z.string()).max(3).default([]),
 	risks: z.array(z.string()).max(3).default([]),
 	/** Verificações de consistência lógica (fora das regras explícitas). */
-	logic: z.array(z.string()).max(3).default([]),
+	logic: z.array(BriefCheckSchema).max(4).default([]),
 	/** Riscos do domínio de negócio (fora das regras explícitas). */
-	domain: z.array(z.string()).max(3).default([]),
+	domain: z.array(BriefCheckSchema).max(4).default([]),
 });
 export type BriefPlan = z.infer<typeof BriefPlanSchema>;
+
+/** Modelo de intenção da PR (`business-summary.json`). */
+export const BusinessSummarySchema = z.object({
+	intent: z.string().max(800).optional(),
+	flows: z
+		.array(
+			z.object({
+				name: z.string().min(1).max(120),
+				trigger: z.string().max(240).optional(),
+				expected: z.string().max(400).optional(),
+				files: z.array(z.string().max(200)).max(20).optional(),
+			}),
+		)
+		.max(12)
+		.default([]),
+	invariants: z.array(z.string().max(300)).max(12).default([]),
+	contracts: z
+		.array(
+			z.object({
+				name: z.string().min(1).max(120),
+				sides: z.array(z.string().max(160)).max(8).optional(),
+				expectation: z.string().max(400).optional(),
+			}),
+		)
+		.max(12)
+		.default([]),
+	states: z
+		.array(
+			z.object({
+				name: z.string().min(1).max(120),
+				transitions: z.array(z.string().max(200)).max(12).optional(),
+			}),
+		)
+		.max(8)
+		.default([]),
+	nonGoals: z.array(z.string().max(240)).max(8).optional(),
+	openQuestions: z.array(z.string().max(300)).max(8).optional(),
+});
+export type BusinessSummaryPlan = z.infer<typeof BusinessSummarySchema>;
+
+/** Hipóteses de lógica/domínio (candidatos, nunca achados). */
+export const BusinessHypothesesSchema = z.object({
+	hypotheses: z
+		.array(
+			z.object({
+				file: z.string().min(1),
+				kind: z.enum(["logic", "domain"]),
+				statement: z.string().min(1).max(300),
+				invariant: z.string().max(200).optional(),
+				confidence: z.number().min(0).max(1),
+			}),
+		)
+		.max(12)
+		.default([]),
+});
+export type BusinessHypothesis = z.infer<
+	typeof BusinessHypothesesSchema
+>["hypotheses"][number];
 
 /** Classificação de arquivos não classificados. */
 export const ClassificationSchema = z.object({

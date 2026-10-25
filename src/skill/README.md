@@ -46,8 +46,9 @@ O CLI só substitui o despacho manual dos subagentes por processos maki headless
 | Passo | Comando | Quem roda | Resultado |
 |---|---|---|---|
 | 0. Contexto | `bun run houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
-| 1. Preparar | `bun run houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
-| 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (um por watchdog) |
+| 1. Preparar | `bun run houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
+| 1.5. Intenção | *(subagente)* | skill | `business-summary.json` enriquecido (só quando não veio da IA) |
+| 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (inclui o `general`, sempre ativo) |
 | 3. Finalizar | `bun run houndsman --finalize` | skill | `review.md` |
 
 > **Alvo = PR** (ex.: “revise a PR 456”): troque os passos por `houndsman context --pr 456`,
@@ -90,7 +91,8 @@ Runs, findings e artefatos vivem no **storage global** (SQLite em `<HOUNDSMAN_HO
 | findings | Decisão/execução + fingerprint + âncora + histórico + vínculo com o GitHub |
 | `classification.json` | Watchdogs ativados + status (A/M/D/R) + churn |
 | `candidates.json` | Candidatos da pré-análise Jev |
-| `manifest.json` | Resumo (watchdogs, arquivos, deletados, contexto, orçamento, churn) |
+| `business-summary.json` / `business-brief.md` | Modelo de intenção da PR e o brief do passo |
+| `manifest.json` | Resumo (watchdogs, arquivos, deletados, contexto, intenção, orçamento, churn) |
 | `briefs/<watchdog>.md` | Brief enviado a cada sub-agente (auditoria) |
 | `review.md` / `review.<watchdog>.md` | Relatório consolidado e por domínio |
 | `verify.md` | Relatório do `findings verify` |

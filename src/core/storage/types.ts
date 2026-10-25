@@ -99,6 +99,8 @@ export type ArtifactKind =
 	| "context"
 	| "context-brief"
 	| "context-summary"
+	| "business"
+	| "business-brief"
 	| "finding-report"
 	| "review"
 	| "resume"

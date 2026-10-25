@@ -33,7 +33,11 @@ staging global da review:
       "line": 5,
       "message": "Arquivo de rota importa `db` e executa query inline.",
       "action": "Mover a query para o service correspondente.",
-      "evidence": "import { db } from '../db'"
+      "evidence": "import { db } from '../db'",
+      "scenario": "request autenticada em /orders executa a query na rota",
+      "impact": "acoplamento e bypass das regras do service",
+      "confidence": 0.9,
+      "basis": "logic"
     }
   ]
 }
@@ -54,6 +58,10 @@ staging global da review:
 | `findings[].message` | string | ✅ | O que está errado (curto, específico) |
 | `findings[].action` | string | ✅ | O que fazer |
 | `findings[].evidence` | string | — | Trecho que comprova o achado |
+| `findings[].scenario` | string | — | Gatilho concreto que expõe o gap (ex.: "renovação de assinatura Pix sem split") |
+| `findings[].impact` | string | — | Consequência observável (ex.: "cobrança recriada sem o split configurado") |
+| `findings[].confidence` | number | — | Confiança do revisor (0–1) |
+| `findings[].basis` | `"rule" \| "logic" \| "domain"` | — | Origem do achado; inferida pelo prefixo `Lógica:`/`Domínio:` |
 
 ## Severidade
 
@@ -76,14 +84,24 @@ staging global da review:
 - Achado **sem linha** só quando for inerente à alteração (vira comentário de arquivo).
 - Não inventar achados — se não houver violação, o array fica vazio.
 
-## Findings emergentes (opt-in)
+## Findings emergentes (obrigatórios no `general`)
 
-Quando o watchdog declara `allowEmergentFindings: true`, você pode reportar falhas de
-**lógica** ou **domínio** que não correspondem a uma regra explícita usando os prefixos
-reservados:
+O watchdog `general` (id reservado, sempre ativo) **deve** reportar gaps de lógica e domínio
+que não correspondem a uma regra explícita, usando os prefixos reservados:
 
 - `Lógica: <descrição>` — nome/contrato vs comportamento, fluxos, estados, bordas.
-- `Domínio: <descrição>` — transições, idempotência, invariantes, arredondamento, timezone.
+- `Domínio: <descrição>` — transições, idempotência, invariantes, arredondamento, timezone,
+  paridade de capacidade, propagação de credencial.
 
-Esses findings continuam exigindo `evidence` e têm severidade máxima `attention`. Sem o
-opt-in, todo finding precisa citar uma regra existente.
+Demonstre o gap em três partes:
+
+1. `scenario` — o gatilho concreto (ex.: "`AsaasSplit` recebe `RenewAutomaticPix`").
+2. `message` — o comportamento observado e o invariante/regra violado.
+3. `evidence` — o trecho que comprova.
+
+**Severidade:** fora de regra, `blocking` só é aceito com `scenario` **e** `evidence`. Sem os
+dois, o motor rebaixa para `attention` (e registra um aviso). Regras explícitas mantêm a
+severidade declarada pelo watchdog.
+
+Os demais watchdogs podem usar os mesmos prefixos apenas quando declararem
+`allowEmergentFindings: true`.

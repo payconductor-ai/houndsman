@@ -23,6 +23,8 @@ export {
 	errorMessage,
 } from "./errors";
 export { AiBriefEnricher } from "./features/brief-enricher";
+export { AiBusinessAnalyzer } from "./features/business-analyzer";
+export { AiBusinessSummarizer } from "./features/business-summarizer";
 export { AiClassifier } from "./features/classifier";
 export { AiContextSummarizer } from "./features/context-summarizer";
 export { AiPreAnalyzer } from "./features/pre-analyzer";
@@ -33,8 +35,14 @@ export {
 	type AiCandidate,
 	type AiClassification,
 	type AiVerdict,
+	type BriefCheck,
+	BriefCheckSchema,
 	type BriefPlan,
 	BriefPlanSchema,
+	BusinessHypothesesSchema,
+	type BusinessHypothesis,
+	type BusinessSummaryPlan,
+	BusinessSummarySchema,
 	CandidateSchema,
 	ClassificationSchema,
 	type ContextSummaryPlan,

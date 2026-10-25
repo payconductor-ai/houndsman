@@ -5,6 +5,7 @@
  * `HoundsmanConfig` — não há caminhos de arquivo do projeto na config.
  */
 
+import { GENERAL_WATCHDOG_ID } from "./builtins";
 import type { HoundsmanConfig } from "./config";
 import { env } from "./env";
 import { JevQuestionFactory } from "./jev";
@@ -60,6 +61,15 @@ function checkFallbacks(config: HoundsmanConfig, warnings: string[]): void {
 		if (def.rules.length === 0) {
 			warnings.push(`Watchdog fallback '${id}' não declara nenhuma regra.`);
 		}
+	}
+}
+
+/** O id `general` é reservado: o motor sempre injeta o revisor de fluxo. */
+function checkReservedIds(config: HoundsmanConfig, warnings: string[]): void {
+	if (config.watchdogIds.includes(GENERAL_WATCHDOG_ID)) {
+		warnings.push(
+			`watchdogs['${GENERAL_WATCHDOG_ID}'] usa um id reservado — os metadados são mesclados ao piso de lógica do motor.`,
+		);
 	}
 }
 
@@ -331,6 +341,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkDefinitions(config, problems);
 	checkClassification(config, problems);
 	checkFallbacks(config, warnings);
+	checkReservedIds(config, warnings);
 	checkEmergent(config, warnings);
 	checkRendering(config, problems);
 	checkRulePolarity(config, warnings);

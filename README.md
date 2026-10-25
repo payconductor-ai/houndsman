@@ -15,6 +15,11 @@ agente especialista por domínio que audita o diff · **review/revisão** = o pr
 **Jev** = pré-análise opcional. O vocabulário completo (brief, findings, manifest, budget,
 overflow, churn, candidato…) está em [`docs/GLOSSARY.md`](docs/GLOSSARY.md).
 
+> Toda revisão tem duas etapas fixas: um **modelo de intenção** da PR
+> (`business-summary.json`) e o revisor de fluxo **`general`**. Nenhum dos dois é
+> configurável — o primeiro enriquece os briefs; o segundo procura gaps de lógica/domínio,
+> não só violações de regra.
+
 ---
 
 ## Como iniciar

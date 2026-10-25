@@ -223,6 +223,28 @@ repositório (não em uma subpasta) e que o caminho do worktree está sob ela.
 
 ---
 
+## Intenção e revisão de fluxo (`general`)
+
+Revisar só por regra acha padronização — não acha gap de fluxo. Por isso o motor trata a
+**intenção** como insumo obrigatório:
+
+1. O `prepare` grava `business-summary.json` com o que a PR **deve** entregar (`intent`,
+   `flows`, `invariants`, `contracts`, `states`) e um `business-brief.md` para o passo.
+2. Quem produz o modelo, em ordem de precedência:
+   - **IA no prepare** (`HOUNDSMAN_DEEP_SEEK_API_KEY`) → `source: "ai"`;
+   - **subagente** na skill, quando não há chave → `source: "reviewer"`;
+   - **pré-passe maki** no `houndsman hunt` (IA embutida) → `source: "reviewer"`;
+   - **determinístico** (AST + churn + contexto) como fallback.
+3. O watchdog reservado **`general`** é injetado em todo ciclo, com todos os arquivos
+   alterados, e audita o fluxo ponta a ponta. Ele sempre pode emitir `Lógica:`/`Domínio:`;
+   `blocking` fora de regra exige `scenario` + `evidence` (sem os dois, vira `attention`).
+
+O `general` não é configurável nem pode ser removido: é parte do fluxo, como o escopo do diff.
+Se o consumidor declarar um watchdog com id `general`, os metadados são mesclados ao piso do
+motor e o `doctor` avisa.
+
+---
+
 ## Comandos do dia a dia
 
 | Comando | Função |

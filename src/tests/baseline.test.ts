@@ -425,6 +425,19 @@ describe("baseline — artefatos de prepare/finalize", () => {
 					2,
 				)}\n`,
 			);
+			writeFileSync(
+				ctx.work.findingFile("general"),
+				`${JSON.stringify(
+					{
+						watchdogId: "general",
+						reviewedFiles: ["src/alpha/a.ts", "src/alpha/b.ts"],
+						skipped: [],
+						findings: [],
+					},
+					null,
+					2,
+				)}\n`,
+			);
 
 			const finalized = finalize(opts, "main", config, ctx);
 			expect(normalize(finalized.messages.join("\n"))).toMatchSnapshot();

@@ -27,7 +27,7 @@ export class AiBriefEnricher {
 				instructions: briefInstructions(),
 				prompt: briefPrompt(input),
 				outputSchema: BriefPlanSchema,
-				maxOutputTokens: 700,
+				maxOutputTokens: 1_400,
 			},
 			this.client.projectConfig.aiModelFor(input.watchdogId),
 		);

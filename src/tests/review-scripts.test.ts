@@ -742,7 +742,7 @@ describe("report-builder", () => {
 			],
 		);
 		expect(md.indexOf("## ❌ blocking")).toBeLessThan(
-			md.indexOf("## 🔎 Candidatos não verificados"),
+			md.indexOf("## 🔎 Candidatos não verificados (pré-análise)"),
 		);
 	});
 

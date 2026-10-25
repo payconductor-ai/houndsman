@@ -50,6 +50,10 @@ export type FindingRow = {
 	message: string;
 	action: string;
 	evidence: string | null;
+	scenario: string | null;
+	impact: string | null;
+	confidence: number | null;
+	basis: string | null;
 	anchor: string | null;
 	found_at_sha: string | null;
 	count: number;
@@ -129,6 +133,10 @@ export function findingFromRow(row: FindingRow, history: HistoryRow[]): FindingS
 		message: row.message,
 		action: row.action,
 		evidence: row.evidence ?? undefined,
+		scenario: row.scenario ?? undefined,
+		impact: row.impact ?? undefined,
+		confidence: row.confidence === null ? undefined : Number(row.confidence),
+		basis: (row.basis as FindingState["basis"]) ?? undefined,
 		anchor: parseJson<FindingAnchor>(row.anchor) ?? null,
 		foundAtSha: row.found_at_sha ?? undefined,
 		count: Number(row.count),

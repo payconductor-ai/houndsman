@@ -72,6 +72,8 @@ export type AiProviderOptions = Record<string, Record<string, unknown>>;
 export type HoundsmanAiFeatures = {
 	/** Resume o contexto da PR (`context-summary`) quando o subagente não gerou. */
 	context?: boolean;
+	/** Reconstrói a intenção da PR (`business-summary`) antes dos watchdogs. */
+	business?: boolean;
 	/** Enriquece os briefs com um plano de revisão sugerido. */
 	brief?: boolean;
 	/** Gera os pontos técnicos estruturais do resumo final. */

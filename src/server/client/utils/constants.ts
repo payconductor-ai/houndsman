@@ -100,6 +100,8 @@ const KIND_ORDER: ArtifactKind[] = [
 	"context",
 	"context-brief",
 	"context-summary",
+	"business",
+	"business-brief",
 	"finding-report",
 	"other",
 ];
@@ -124,6 +126,8 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 		context: { key: "context", label: "Contexto da PR", order: 5 },
 		"context-brief": { key: "context", label: "Contexto da PR", order: 5 },
 		"context-summary": { key: "context", label: "Contexto da PR", order: 5 },
+		business: { key: "business", label: "Intenção da PR", order: 5 },
+		"business-brief": { key: "business", label: "Intenção da PR", order: 5 },
 		"finding-report": { key: "other", label: "Outros", order: 6 },
 		other: { key: "other", label: "Outros", order: 6 },
 	};
@@ -147,6 +151,8 @@ export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
 	context: "contexto",
 	"context-brief": "brief ctx",
 	"context-summary": "resumo ctx",
+	business: "intenção",
+	"business-brief": "brief intenção",
 	"finding-report": "findings",
 	other: "outro",
 };
@@ -189,6 +195,10 @@ export function describeArtifact(meta: ArtifactMeta): string {
 			return "Brief do subagente que resume o contexto da PR.";
 		case "context-summary":
 			return "Resumo da PR (objetivo, motivação e alterações) gerado no Passo 0.";
+		case "business":
+			return "Modelo de intenção da PR: o que ela deve entregar (fluxos, invariantes, contratos e estados).";
+		case "business-brief":
+			return "Brief do passo de intenção (subagente na skill / pré-passe maki).";
 		default:
 			return meta.name;
 	}

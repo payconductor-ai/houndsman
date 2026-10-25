@@ -32,6 +32,8 @@ export {
 	resolveMakiBinary,
 	uninstallMaki,
 } from "./maki-install";
+export type { HuntIntentPromptInput } from "./maki-intent-prompt";
+export { renderHuntIntentPrompt, renderIntentRetrySuffix } from "./maki-intent-prompt";
 export type { MakiModel } from "./maki-model";
 export {
 	houndsmanKeyEnvFor,

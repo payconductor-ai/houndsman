@@ -206,6 +206,26 @@ export function FindingCard({
 				<div class="card-body">
 					<div class="meta-row">{finding.rule}</div>
 
+					{finding.scenario && (
+						<div class="action-block">
+							<Sparkles size={16} class="action-icon" />
+							<div class="action-text">
+								<span class="action-label">Cenário:</span>
+								<MarkdownText text={finding.scenario} />
+							</div>
+						</div>
+					)}
+
+					{finding.impact && (
+						<div class="action-block">
+							<Sparkles size={16} class="action-icon" />
+							<div class="action-text">
+								<span class="action-label">Impacto:</span>
+								<MarkdownText text={finding.impact} />
+							</div>
+						</div>
+					)}
+
 					<div class="action-block">
 						<Sparkles size={16} class="action-icon" />
 						<div class="action-text">

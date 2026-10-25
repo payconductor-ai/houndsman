@@ -50,6 +50,29 @@ export type {
 	AstSymbolKind,
 } from "./core/ast/types";
 export { defaultRenderBrief, PROCEDURE, renderBrief } from "./core/brief";
+export {
+	BUILTIN_WATCHDOGS,
+	builtinWatchdog,
+	GENERAL_WATCHDOG_ID,
+	generalWatchdog,
+	mergeGeneralWatchdog,
+} from "./core/builtins";
+export {
+	BUSINESS_SUMMARY_SCHEMA,
+	type BusinessBriefInput,
+	type BusinessContract,
+	type BusinessFlow,
+	type BusinessInput,
+	type BusinessState,
+	type BusinessSummary,
+	type BusinessSummarySource,
+	buildBusinessBrief,
+	buildBusinessPromptPayload,
+	buildBusinessSummary,
+	parseBusinessSummary,
+	renderBusinessLines,
+	summarizeBusiness,
+} from "./core/business-summary";
 export type {
 	BuildChangedScopeInput,
 	ChangedScope,

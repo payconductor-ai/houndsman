@@ -20,6 +20,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { AiClient } from "./ai/ai-client";
 import { AiBriefEnricher } from "./ai/features/brief-enricher";
+import { AiBusinessAnalyzer } from "./ai/features/business-analyzer";
+import { AiBusinessSummarizer } from "./ai/features/business-summarizer";
 import { AiClassifier } from "./ai/features/classifier";
 import { AiContextSummarizer } from "./ai/features/context-summarizer";
 import { AiPreAnalyzer } from "./ai/features/pre-analyzer";
@@ -28,6 +30,15 @@ import type { BriefPlan } from "./ai/schemas";
 import { assetPath, OUTPUT_FORMAT_FILE } from "./assets";
 import type { AstService } from "./ast/service";
 import type { AstAnalysis, AstFileBrief, AstImpact } from "./ast/types";
+import { GENERAL_WATCHDOG_ID } from "./builtins";
+import {
+	type BusinessInput,
+	type BusinessSummary,
+	buildBusinessBrief,
+	buildBusinessSummary,
+	parseBusinessSummary,
+	summarizeBusiness,
+} from "./business-summary";
 import { summarizeScope } from "./changed-scope";
 import {
 	type HoundsmanConfig,
@@ -58,6 +69,8 @@ import {
 	serializeCandidates,
 } from "./jev";
 import {
+	BUSINESS_BRIEF_FILE,
+	BUSINESS_SUMMARY_FILE,
 	displayPath,
 	OUTPUT_FORMAT_PATH,
 	REVIEW_FILE,
@@ -69,6 +82,7 @@ import { BriefRenderer } from "./renderers/brief-renderer";
 import {
 	type ManifestAi,
 	type ManifestAst,
+	type ManifestBusiness,
 	ManifestWriter,
 } from "./renderers/manifest-writer";
 import { ReportRenderer } from "./renderers/report-renderer";
@@ -220,6 +234,7 @@ function writeManifest(
 	jev: JevCandidatesFile,
 	ast?: ManifestAst,
 	ai?: ManifestAi,
+	business?: ManifestBusiness,
 ): void {
 	new ManifestWriter(
 		ctx.storage,
@@ -227,12 +242,37 @@ function writeManifest(
 		ctx.work,
 		new ProjectConfig(config),
 		opts,
-	).write(classification, activeIds, pending, jev, ast, ai);
+	).write(classification, activeIds, pending, jev, ast, ai, business);
 }
 
 // ---------------------------------------------------------------------------
 // Briefs
 // ---------------------------------------------------------------------------
+
+/**
+ * Trechos do diff para o revisor de fluxo: cap por arquivo e cap total (o
+ * subagente lê o restante do arquivo; aqui só entra o que mudou).
+ */
+function buildSnippets(
+	files: readonly string[],
+	diff: DiffSource | undefined,
+	maxTotal = 24_000,
+	maxPerFile = 2_500,
+): { file: string; snippet: string }[] {
+	if (!diff) return [];
+	const snippets: { file: string; snippet: string }[] = [];
+	let used = 0;
+	for (const file of files) {
+		const patch = diff.byFile.get(file);
+		if (!patch) continue;
+		const remaining = maxTotal - used;
+		if (remaining <= 0) break;
+		const snippet = patch.slice(0, Math.min(maxPerFile, remaining));
+		used += snippet.length;
+		snippets.push({ file, snippet });
+	}
+	return snippets;
+}
 
 function writeBriefs(
 	activeIds: string[],
@@ -245,6 +285,8 @@ function writeBriefs(
 	astAnalyses?: ReadonlyMap<string, AstAnalysis>,
 	astImpact?: AstImpact,
 	aiPlans?: ReadonlyMap<string, BriefPlan>,
+	business?: BusinessSummary,
+	diff?: DiffSource,
 ): void {
 	const work = ctx.work;
 	const docs = discoverDocs(Object.keys(classification.files), config);
@@ -281,6 +323,10 @@ function writeBriefs(
 			candidates: candidates.filter((c) => c.watchdogId === id),
 			ast: astFiles,
 			aiPlan: aiPlans?.get(id),
+			business,
+			businessSummaryPath: business ? work.businessPaths.summary : undefined,
+			snippets:
+				id === GENERAL_WATCHDOG_ID ? buildSnippets(selected, diff) : undefined,
 			changedScope: classification.changedScope,
 		});
 		const content = `${brief}\n`;
@@ -325,6 +371,9 @@ async function resolveCandidates(
 		if (analyzer.enabled) {
 			const candidates: JevCandidate[] = [];
 			for (const [id, files] of Object.entries(classification.watchdogs)) {
+				// O `general` recebe hipóteses próprias (`AiBusinessAnalyzer`), não
+				// candidatos por regra.
+				if (id === GENERAL_WATCHDOG_ID) continue;
 				const def = findWatchdog(config, id);
 				if (!def) continue;
 				const inputs = files.slice(0, 5).flatMap((file) => {
@@ -404,8 +453,13 @@ function discoveryMessages(
 	classification: ClassificationResult,
 	briefsDir: string,
 ): string[] {
+	const hasGeneral = activeIds.includes(GENERAL_WATCHDOG_ID);
+	const domains = activeIds.filter((id) => id !== GENERAL_WATCHDOG_ID).length;
+	const label = hasGeneral
+		? `${domains} watchdog(s) de domínio + revisor general`
+		: `${domains} watchdog(s)`;
 	const messages = [
-		`Discovery: ${activeIds.length} watchdog(s) ativado(s), ${Object.keys(classification.files).length} arquivo(s), ${classification.deleted.length} deletado(s).`,
+		`Discovery: ${label}, ${Object.keys(classification.files).length} arquivo(s), ${classification.deleted.length} deletado(s).`,
 		`Briefs: ${displayPath(briefsDir)}/`,
 	];
 	for (const file of classification.deleted) {
@@ -459,6 +513,7 @@ export type PrepareStage =
 	| "impact"
 	| "jev"
 	| "context"
+	| "business"
 	| "technical"
 	| "ai-plans"
 	| "briefs"
@@ -620,6 +675,106 @@ async function resolveTechnicalSummary(
 }
 
 /**
+ * Modelo de intenção (Passo 1.4): determinístico sempre, IA quando disponível.
+ * O brief do passo fica no staging para a skill (subagente) ou o `hunt` (maki).
+ */
+async function resolveBusinessSummary(
+	ctx: ReviewContext,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+	config: HoundsmanConfig,
+	input: BusinessInput,
+): Promise<BusinessSummary> {
+	const fallback = buildBusinessSummary(input);
+	const summary =
+		ai && !opts.noAi
+			? ((await new AiBusinessSummarizer(ai).summarize(input)) ?? fallback)
+			: fallback;
+
+	ctx.work.writeBusinessSummary(summary);
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: BUSINESS_SUMMARY_FILE,
+		kind: "business",
+		content: `${JSON.stringify(summary, null, 2)}\n`,
+	});
+
+	const files = Object.entries(input.classification.files)
+		.map(([path, file]) => {
+			const analysis = input.ast?.get(path);
+			const symbols = analysis?.delta
+				? [...analysis.delta.addedSymbols, ...analysis.delta.modifiedSymbols].map(
+						(symbol) => symbol.name,
+					)
+				: [];
+			return {
+				path,
+				status: file.status,
+				ranges: input.changedScope?.[path]?.ranges,
+				symbols: [...new Set(symbols)].slice(0, 8),
+			};
+		})
+		.sort(
+			(a, b) =>
+				(input.classification.churn[b.path]?.additions ?? 0) +
+				(input.classification.churn[b.path]?.deletions ?? 0) -
+				((input.classification.churn[a.path]?.additions ?? 0) +
+					(input.classification.churn[a.path]?.deletions ?? 0)),
+		);
+
+	const docs = discoverDocs(Object.keys(input.classification.files), config);
+	const brief = buildBusinessBrief({
+		projectName: config.projectName,
+		branch: ctx.review.branch,
+		headSha: input.headSha,
+		outputPath: ctx.work.businessPaths.summary,
+		business: summary,
+		files,
+		docs,
+		context: input.context,
+	});
+	ctx.work.writeBusinessBrief(brief.trimEnd());
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: BUSINESS_BRIEF_FILE,
+		kind: "business-brief",
+		content: `${brief.trimEnd()}\n`,
+	});
+
+	return summary;
+}
+
+/**
+ * Hipóteses de lógica/domínio (opt-in por IA) — candidatos que o revisor
+ * `general` confirma ou refuta. Nunca viram achado sozinhos.
+ */
+async function appendBusinessCandidates(
+	ctx: ReviewContext,
+	ai: AiClient | undefined,
+	opts: ReviewOptions,
+	jev: JevCandidatesFile,
+	business: BusinessSummary,
+	input: BusinessInput,
+): Promise<void> {
+	if (!ai || opts.noAi) return;
+	const analyzer = new AiBusinessAnalyzer(ai);
+	if (!analyzer.enabled) return;
+	const candidates = await analyzer.analyze({ business, payload: input });
+	if (candidates.length === 0) return;
+	jev.candidates.push(...candidates);
+	jev.available = true;
+	jev.model = jev.model ?? ai.modelId;
+	jev.reason = undefined;
+	jev.analyzedFiles = Math.max(
+		jev.analyzedFiles ?? 0,
+		Object.keys(input.classification.files).length,
+	);
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: "candidates.json",
+		kind: "candidates",
+		content: serializeCandidates(jev),
+	});
+}
+
+/**
  * Planos de revisão por watchdog (uma chamada por brief, concorrência
  * limitada). Sem IA/chave/feature, devolve mapa vazio e o brief fica igual.
  */
@@ -632,6 +787,8 @@ async function buildAiPlans(
 	astImpact: AstImpact | undefined,
 	ai: AiClient | undefined,
 	opts: ReviewOptions,
+	business?: BusinessSummary,
+	diff?: DiffSource,
 ): Promise<Map<string, BriefPlan>> {
 	const plans = new Map<string, BriefPlan>();
 	if (!ai || opts.noAi) return plans;
@@ -663,6 +820,8 @@ async function buildAiPlans(
 			context,
 			ast: astFiles,
 			docs,
+			business,
+			snippets: buildSnippets(selected, diff),
 		});
 	}
 	return enricher.enrichAll(inputs);
@@ -737,6 +896,17 @@ export async function prepare(
 	});
 
 	await applyAiClassification(classification, config, ai, opts);
+	// Revisor de lógica obrigatório: recebe todos os arquivos alterados,
+	// inclusive os não classificados. Id reservado — não é configurável.
+	if (Object.keys(classification.files).length > 0) {
+		const files = Object.keys(classification.files).filter(
+			(file) => classification.files[file]?.status !== "deleted",
+		);
+		if (files.length > 0) {
+			classification.watchdogs[GENERAL_WATCHDOG_ID] = files;
+			classification.stats[GENERAL_WATCHDOG_ID] = files.length;
+		}
+	}
 	ctx.storage.writeArtifact(ctx.review.id, {
 		name: "classification.json",
 		kind: "classification",
@@ -812,6 +982,28 @@ export async function prepare(
 	const context = await runOptionalStage(onProgress, aiContext, "context", () =>
 		resolveContextSummary(ctx, ai, opts),
 	);
+
+	// Intenção da PR — sempre gerada (determinística) e enriquecida pela IA
+	// quando disponível. O brief do passo fica no staging para o subagente ou
+	// para o pré-passe do `houndsman hunt`.
+	const businessDomains = activeIds
+		.filter((id) => id !== GENERAL_WATCHDOG_ID)
+		.map((id) => ({ id, name: findWatchdog(config, id)?.name ?? id }));
+	const businessInput = {
+		classification,
+		context,
+		ast: astAnalyses,
+		impact: astImpact,
+		changedScope: classification.changedScope,
+		headSha: classification.headSha,
+		snippets: diff.byFile,
+		domains: businessDomains,
+	};
+	const business = await runStage(onProgress, "business", () =>
+		resolveBusinessSummary(ctx, ai, opts, config, businessInput),
+	);
+	await appendBusinessCandidates(ctx, ai, opts, jev, business, businessInput);
+
 	const aiTechnical = ai && !opts.noAi ? new AiTechnicalSummarizer(ai).enabled : false;
 	await runOptionalStage(onProgress, aiTechnical, "technical", () =>
 		resolveTechnicalSummary(ctx, ai, opts, {
@@ -854,6 +1046,8 @@ export async function prepare(
 			astImpact,
 			ai,
 			opts,
+			business,
+			diff,
 		),
 	);
 	if (aiPlans.size > 0) {
@@ -896,8 +1090,15 @@ export async function prepare(
 			astAnalyses,
 			astImpact,
 			aiPlans,
+			business,
+			diff,
 		),
 	);
+	const manifestBusiness: ManifestBusiness = {
+		source: business.source,
+		model: business.source === "ai" ? ai?.modelId : undefined,
+		...summarizeBusiness(business),
+	};
 	await runStage(onProgress, "manifest", () =>
 		writeManifest(
 			ctx,
@@ -909,6 +1110,7 @@ export async function prepare(
 			jev,
 			manifestAst,
 			manifestAi,
+			manifestBusiness,
 		),
 	);
 	messages.push(
@@ -933,6 +1135,12 @@ export async function prepare(
 			"Sem contexto da PR (rode `bun run houndsman context` antes, se houver PR).",
 		);
 	}
+	const businessSummary = summarizeBusiness(business);
+	messages.push(
+		business.source === "ai"
+			? `Intenção da PR reconstruída pela IA: ${businessSummary.flows} fluxo(s), ${businessSummary.invariants} invariante(s).`
+			: `Intenção da PR determinística (${businessSummary.flows} fluxo(s)) — enriquecida no passo de intenção (${displayPath(ctx.work.businessPaths.brief)}).`,
+	);
 	if (aiPlans.size > 0) {
 		messages.push(
 			`IA: plano de revisão em ${aiPlans.size} brief(s) (sugestão, não substitui regras).`,
@@ -989,10 +1197,11 @@ function persistContext(ctx: ReviewContext): void {
 // Passo 2 — finalizar
 // ---------------------------------------------------------------------------
 
-/** Reaproveita `ast`/`ai` do manifesto anterior (o finalize não os recalcula). */
+/** Reaproveita `ast`/`ai`/`business` do manifesto anterior (o finalize não os recalcula). */
 function readManifestExtras(ctx: ReviewContext): {
 	ast?: ManifestAst;
 	ai?: ManifestAi;
+	business?: ManifestBusiness;
 } {
 	const artifact = ctx.storage.readArtifact(ctx.review.id, "manifest.json");
 	if (!artifact) return {};
@@ -1000,8 +1209,9 @@ function readManifestExtras(ctx: ReviewContext): {
 		const parsed = JSON.parse(artifact.content) as {
 			ast?: ManifestAst;
 			ai?: ManifestAi;
+			business?: ManifestBusiness;
 		};
-		return { ast: parsed.ast, ai: parsed.ai };
+		return { ast: parsed.ast, ai: parsed.ai, business: parsed.business ?? undefined };
 	} catch {
 		return {};
 	}
@@ -1024,8 +1234,10 @@ function readCandidates(ctx: ReviewContext, config: HoundsmanConfig): JevCandida
 	if (!artifact) return JevCandidatesStore.unavailable("candidates.json ausente");
 	try {
 		return (
-			parseCandidates(JSON.parse(artifact.content), config.watchdogIds) ??
-			JevCandidatesStore.unavailable("candidates.json inválido")
+			parseCandidates(JSON.parse(artifact.content), [
+				...config.watchdogIds,
+				GENERAL_WATCHDOG_ID,
+			]) ?? JevCandidatesStore.unavailable("candidates.json inválido")
 		);
 	} catch {
 		return JevCandidatesStore.unavailable("candidates.json inválido");
@@ -1051,6 +1263,39 @@ function readArtifactJson<T>(ctx: ReviewContext, name: string): T | null {
 		return JSON.parse(artifact.content) as T;
 	} catch {
 		return null;
+	}
+}
+
+/** Modelo de intenção persistido pelo prepare/revisor; `null` quando ausente. */
+function readPersistedBusinessSummary(ctx: ReviewContext): BusinessSummary | null {
+	const raw = readArtifactJson<unknown>(ctx, BUSINESS_SUMMARY_FILE);
+	return raw ? parseBusinessSummary(raw) : null;
+}
+
+/**
+ * Persiste o `business-summary.json` final: o revisor `general` pode ter
+ * reescrito o modelo no staging durante a revisão.
+ */
+function persistBusiness(ctx: ReviewContext): BusinessSummary | null {
+	const raw = ctx.work.readBusinessSummaryRaw();
+	if (raw === null) return readPersistedBusinessSummary(ctx);
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: BUSINESS_SUMMARY_FILE,
+		kind: "business",
+		content: raw.endsWith("\n") ? raw : `${raw}\n`,
+	});
+	const brief = ctx.work.readBusinessBriefRaw();
+	if (brief !== null) {
+		ctx.storage.writeArtifact(ctx.review.id, {
+			name: BUSINESS_BRIEF_FILE,
+			kind: "business-brief",
+			content: brief.endsWith("\n") ? brief : `${brief}\n`,
+		});
+	}
+	try {
+		return parseBusinessSummary(JSON.parse(raw), "reviewer");
+	} catch {
+		return readPersistedBusinessSummary(ctx);
 	}
 }
 
@@ -1165,6 +1410,10 @@ export function finalize(
 	messages.push(...warnings);
 	const jev = readCandidates(ctx, config);
 	const extras = readManifestExtras(ctx);
+	const business = persistBusiness(ctx);
+	const manifestBusiness: ManifestBusiness | undefined = business
+		? { source: business.source, ...summarizeBusiness(business) }
+		: extras.business;
 	writeManifest(
 		ctx,
 		config,
@@ -1175,6 +1424,7 @@ export function finalize(
 		jev,
 		extras.ast,
 		extras.ai,
+		manifestBusiness,
 	);
 
 	if (pending.length > 0) {
@@ -1285,6 +1535,7 @@ export function finalize(
 			branch,
 			date: now.slice(0, 10),
 			context,
+			business,
 			classification,
 			findings: merged,
 			technical,

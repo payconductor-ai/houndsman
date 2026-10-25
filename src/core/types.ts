@@ -8,6 +8,7 @@
 
 import type { BriefPlan } from "./ai/schemas";
 import type { AstFileBrief } from "./ast/types";
+import type { BusinessSummary } from "./business-summary";
 import type { ChangedScope } from "./changed-scope";
 import type { JevRuleSpec } from "./jev/jev-types";
 
@@ -131,6 +132,14 @@ export type WatchdogRenderArgs = {
 	ast?: readonly AstFileBrief[];
 	/** Plano de revisão sugerido por IA (nunca substitui as regras). */
 	aiPlan?: BriefPlan;
+	/** Modelo de intenção da PR (negócio) — insumo do revisor `general`. */
+	business?: BusinessSummary;
+	/** Caminho do `business-summary.json` no staging (versão canônica). */
+	businessSummaryPath?: string;
+	/** Trechos alterados (`diff` por arquivo) — só para o revisor de fluxo. */
+	snippets?: readonly { file: string; snippet: string }[];
+	/** `true` no revisor de fluxo: exige devolver/gravar o modelo de intenção. */
+	flowReview?: boolean;
 	/** Escopo do diff por arquivo (símbolos alterados; hunks como fallback). */
 	changedScope?: ChangedScope;
 };

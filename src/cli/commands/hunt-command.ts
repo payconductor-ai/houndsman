@@ -26,7 +26,7 @@ import {
 	resolveMakiModel,
 } from "../../core/hunt/maki-model";
 import { SpawnMakiRunner } from "../../core/hunt/maki-runner";
-import { formatDuration, ProgressBoard } from "../../core/logging";
+import { formatDuration, type LoggerLike, ProgressBoard } from "../../core/logging";
 import { displayPath } from "../../core/paths";
 import { ProjectConfig } from "../../core/project-config";
 import { touchRunStatus } from "../../core/run-status";
@@ -236,7 +236,7 @@ export class HuntCommand implements Command {
 				timeoutMs,
 				retries,
 				runner: new SpawnMakiRunner(binary.path),
-				onEvent: (event) => this.logEvent(board, event),
+				onEvent: (event) => this.logEvent(board, event, context.logger),
 			});
 			// Runs longas não podem parecer “timeout” na UI: a skill pinga antes de
 			// cada onda; o CLI renova o heartbeat enquanto o maki trabalha.
@@ -409,8 +409,23 @@ export class HuntCommand implements Command {
 	}
 
 	/** Log de progresso por watchdog. */
-	private logEvent(board: ProgressBoard, event: HuntEvent): void {
+	private logEvent(board: ProgressBoard, event: HuntEvent, logger: LoggerLike): void {
 		switch (event.type) {
+			case "intent":
+				if (event.status === "start") {
+					logger.step("Reconstruindo a intenção da PR (maki)…");
+				} else if (event.status === "done") {
+					logger.success(
+						`Intenção da PR reconstruída (${event.source ?? "reviewer"}).`,
+					);
+				} else if (event.status === "skipped") {
+					logger.info(`Intenção da PR já disponível (${event.source}).`);
+				} else {
+					logger.warn(
+						`Intenção da PR manteve o modelo determinístico: ${event.error ?? "falha"}`,
+					);
+				}
+				return;
 			case "start":
 				board.add(event.watchdogId, "revisando");
 				return;

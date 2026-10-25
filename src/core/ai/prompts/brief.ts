@@ -6,6 +6,8 @@
  */
 
 import type { AstFileBrief } from "../../ast/types";
+import { type BusinessSummary, renderBusinessLines } from "../../business-summary";
+import type { ChangedScope } from "../../changed-scope";
 import type { ChurnMap, Rule, WatchdogRenderContext } from "../../types";
 import { buildSystem } from "./base";
 
@@ -21,6 +23,12 @@ export type BriefPromptInput = {
 	context?: WatchdogRenderContext | null;
 	ast?: readonly AstFileBrief[];
 	docs?: readonly string[];
+	/** Modelo de intenção da PR (contrato esperado). */
+	business?: BusinessSummary | null;
+	/** Trechos alterados — a única fonte real para verificar lógica. */
+	snippets?: readonly { file: string; snippet: string }[];
+	/** Faixas revisáveis por arquivo. */
+	changedScope?: ChangedScope;
 };
 
 /** Instruções de sistema do enriquecimento. */
@@ -29,11 +37,13 @@ export function briefInstructions(): string {
 		"Você é um revisor sênior que prepara um plano de leitura para um watchdog (revisor) especializado.",
 		[
 			"As regras fornecidas são o PISO da revisão, não o teto.",
-			"Além delas, procure riscos de consistência lógica: nome/contrato vs comportamento (ex.: `fazA` que faz `fazB`), fluxos incompletos, estados inválidos, off-by-one e bordas.",
-			"Procure também riscos do domínio de negócio: transições de estado, idempotência, arredondamento, timezone, autorização e invariantes implícitas.",
-			"Sugira foco de leitura (até 5), perguntas de verificação (até 3), riscos (até 3), verificações de lógica (até 3) e de domínio (até 3).",
+			"Derive cada verificação dos trechos alterados fornecidos — não apenas do nome do arquivo.",
+			"Toda verificação cita arquivo e, quando possível, símbolo; sem âncora, não sugira.",
+			"Além das regras, procure riscos de consistência lógica: nome/contrato vs comportamento (ex.: `fazA` que faz `fazB`), fluxos incompletos, estados inválidos, off-by-one e bordas.",
+			"Procure também riscos do domínio de negócio: transições de estado, idempotência, arredondamento, timezone, autorização, paridade de capacidade e invariantes implícitas.",
+			"Sugira foco de leitura (até 5), perguntas (até 3), riscos (até 3), verificações de lógica (até 4) e de domínio (até 4).",
 			"Sugira verificações, nunca afirme violação; não crie regra nova nem invente arquivo, linha ou achado.",
-			"Se uma suspeita não couber em nenhuma regra, coloque-a em `logic`/`domain` como pergunta de verificação.",
+			"Se uma suspeita não couber em nenhuma regra, coloque-a em `logic`/`domain` como verificação ancorada.",
 			"Não repita o texto literal das regras; o brief já as contém.",
 		],
 	);
@@ -62,6 +72,15 @@ export function briefPrompt(input: BriefPromptInput): string {
 			lines.push(`Motivação: ${input.context.motivation}`);
 		for (const item of input.context.changeSummary ?? []) lines.push(`- ${item}`);
 	}
+	if (input.business) {
+		const business = renderBusinessLines(input.business, {
+			flows: 8,
+			invariants: 8,
+			contracts: 8,
+			states: 4,
+		});
+		if (business.length > 0) lines.push("", "## Modelo de intenção", ...business);
+	}
 	if (input.ast && input.ast.length > 0) {
 		lines.push("", "## Estrutura (AST)");
 		for (const entry of input.ast) {
@@ -71,15 +90,22 @@ export function briefPrompt(input: BriefPromptInput): string {
 			);
 		}
 	}
+	if (input.snippets && input.snippets.length > 0) {
+		lines.push("", "## Trechos alterados (diff)");
+		for (const item of input.snippets.slice(0, 12)) {
+			lines.push(`### ${item.file}`, "```diff", item.snippet.trimEnd(), "```");
+		}
+	}
 	if (input.docs && input.docs.length > 0) {
 		lines.push("", "## Docs disponíveis", ...input.docs.map((doc) => `- ${doc}`));
 	}
 	lines.push(
 		"",
 		"## Revisão além das regras",
-		"As regras são o piso. Aponte verificações de consistência lógica e de domínio",
-		"que mereçam inspeção mesmo sem regra explícita (nome vs comportamento, estados,",
-		"transições, idempotência, bordas). Sugira verificações; não afirme violações.",
+		"As regras são o piso. Aponte verificações de lógica e domínio ancoradas nos",
+		"trechos alterados (nome vs comportamento, estados, transições, idempotência,",
+		"paridade de capacidade, credencial, bordas). Sugira verificações; não afirme",
+		"violações.",
 		"",
 		"Produza o plano de revisão em JSON (focus, questions, risks, logic, domain).",
 	);

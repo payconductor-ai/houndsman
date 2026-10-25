@@ -9,7 +9,10 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { type BusinessSummary, parseBusinessSummary } from "../business-summary";
 import {
+	BUSINESS_BRIEF_FILE,
+	BUSINESS_SUMMARY_FILE,
 	CONTEXT_BRIEF_FILE,
 	CONTEXT_FILE,
 	CONTEXT_SUMMARY_FILE,
@@ -97,7 +100,6 @@ export class ReviewWorkArea {
 			brief: this.file(CONTEXT_BRIEF_FILE),
 		};
 	}
-
 	/** Garante os diretórios; `clean` recria a área do zero. */
 	ensure(clean = false): void {
 		if (clean) this.clean();
@@ -141,6 +143,62 @@ export class ReviewWorkArea {
 	writeContextSummary(summary: unknown): void {
 		mkdirSync(this.root, { recursive: true });
 		writeFileSync(this.contextPaths.summary, `${JSON.stringify(summary, null, 2)}\n`);
+	}
+
+	/** Caminhos do modelo de intenção (JSON + brief do passo). */
+	get businessPaths(): { summary: string; brief: string } {
+		return {
+			summary: this.file(BUSINESS_SUMMARY_FILE),
+			brief: this.file(BUSINESS_BRIEF_FILE),
+		};
+	}
+
+	/** Grava o modelo de intenção (determinístico, IA ou revisor). */
+	writeBusinessSummary(summary: unknown): void {
+		mkdirSync(this.root, { recursive: true });
+		writeFileSync(
+			this.businessPaths.summary,
+			`${JSON.stringify(summary, null, 2)}\n`,
+		);
+	}
+
+	/** Grava o brief do passo de intenção. */
+	writeBusinessBrief(content: string): void {
+		mkdirSync(this.root, { recursive: true });
+		writeFileSync(this.businessPaths.brief, `${content}\n`);
+	}
+
+	/** Modelo de intenção gravado (subagente/IA) — null se ausente/inválido. */
+	readBusinessSummary(): BusinessSummary | null {
+		const raw = this.readBusinessSummaryRaw();
+		if (raw === null) return null;
+		try {
+			return parseBusinessSummary(JSON.parse(raw), "reviewer");
+		} catch {
+			return null;
+		}
+	}
+
+	/** Conteúdo cru do modelo de intenção (para persistir como artefato). */
+	readBusinessSummaryRaw(): string | null {
+		const path = this.businessPaths.summary;
+		if (!existsSync(path)) return null;
+		try {
+			return readFileSync(path, "utf8");
+		} catch {
+			return null;
+		}
+	}
+
+	/** Conteúdo cru do brief de intenção (para persistir como artefato). */
+	readBusinessBriefRaw(): string | null {
+		const path = this.businessPaths.brief;
+		if (!existsSync(path)) return null;
+		try {
+			return readFileSync(path, "utf8");
+		} catch {
+			return null;
+		}
 	}
 
 	/** Finds brutos gravados pelos subagentes (um JSON por watchdog). */

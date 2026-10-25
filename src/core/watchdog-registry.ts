@@ -6,6 +6,7 @@
  * adaptadores para a API pública.
  */
 
+import { builtinWatchdog, GENERAL_WATCHDOG_ID, mergeGeneralWatchdog } from "./builtins";
 import type { HoundsmanConfig } from "./config";
 import { Watchdog, type WatchdogContext } from "./domain/watchdog";
 import type { WatchdogDefinition } from "./types";
@@ -23,15 +24,32 @@ export class WatchdogRegistry<TId extends string = string> {
 		return this.config.watchdogIds;
 	}
 
-	/** Definição de um watchdog (id string em runtime). */
+	/** Definição de um watchdog (config vence; senão, built-in). */
 	get(watchdogId: string): WatchdogDefinition {
-		return this.config.watchdogs[watchdogId as TId];
+		const definition = this.definitionOf(watchdogId);
+		if (!definition) {
+			throw new Error(`Watchdog '${watchdogId}' não encontrado.`);
+		}
+		return definition;
 	}
 
 	/** Busca null-safe por id. */
 	find(watchdogId: string): Watchdog | null {
-		const definition = this.config.watchdogs[watchdogId as TId];
+		const definition = this.definitionOf(watchdogId);
 		return definition ? new Watchdog(definition) : null;
+	}
+
+	/**
+	 * Resolve a definição: config primeiro, built-in depois. O `general` é
+	 * reservado e sempre inclui o piso de lógica do motor (mesmo se o consumidor
+	 * declarar um watchdog com esse id).
+	 */
+	private definitionOf(watchdogId: string): WatchdogDefinition | null {
+		const configured = this.config.watchdogs[watchdogId as TId];
+		if (watchdogId === GENERAL_WATCHDOG_ID) {
+			return mergeGeneralWatchdog(configured);
+		}
+		return configured ?? builtinWatchdog(watchdogId);
 	}
 
 	/** Nome legível (default: o próprio id). */

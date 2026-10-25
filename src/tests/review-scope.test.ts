@@ -281,6 +281,19 @@ describe("prepare/finalize — mesmo commit", () => {
 					2,
 				)}\n`,
 			);
+			writeFileSync(
+				ctx.work.findingFile("general"),
+				`${JSON.stringify(
+					{
+						watchdogId: "general",
+						reviewedFiles: ["src/alpha/a.ts"],
+						skipped: [],
+						findings: [],
+					},
+					null,
+					2,
+				)}\n`,
+			);
 			finalize(opts, "main", fakeHoundsmanConfig, ctx);
 
 			const classificationBefore = storage.readArtifact(
@@ -445,7 +458,13 @@ describe("prepare — progresso", () => {
 			const starts = events
 				.filter((event) => event.type === "start")
 				.map((event) => event.stage);
-			expect(starts).toEqual(["diff", "classify", "briefs", "manifest"]);
+			expect(starts).toEqual([
+				"diff",
+				"classify",
+				"business",
+				"briefs",
+				"manifest",
+			]);
 			const done = events.filter((event) => event.type === "done");
 			expect(done.map((event) => event.stage)).toEqual(starts);
 			for (const event of done) {

@@ -7,6 +7,7 @@
  * `RESUME_MAX_CHARS`.
  */
 
+import { type BusinessSummary, renderBusinessLines } from "../business-summary";
 import type { ContextSummary, MergedFinding } from "../report-builder";
 import { systemClock } from "../services/clock";
 import type { TechnicalSummary } from "../technical-summary";
@@ -25,6 +26,8 @@ export type ReviewResumeInput = {
 	/** `YYYY-MM-DD`; default: data corrente do sistema. */
 	date?: string;
 	context?: ContextSummary | null;
+	/** Modelo de intenção da PR (negócio). */
+	business?: BusinessSummary | null;
 	classification: ResumeClassification;
 	findings: readonly MergedFinding[];
 	/** Pontos técnicos estruturais (não achados). */
@@ -47,8 +50,27 @@ function plural(count: number, singular: string, plural: string): string {
 	return `${count} ${count === 1 ? singular : plural}`;
 }
 
-/** Resumo de negócio: contexto da PR; sem ele, o alcance da branch. */
+/** Resumo de negócio: modelo de intenção; sem ele, contexto da PR/branch. */
 function businessSection(input: ReviewResumeInput): string[] {
+	const lines = ["## Resumo de negócio", ""];
+	const business = input.business;
+
+	if (
+		business &&
+		(business.intent || business.flows.length > 0 || business.invariants.length > 0)
+	) {
+		if (business.intent) lines.push(business.intent, "");
+		else if (input.context?.objective) lines.push(input.context.objective, "");
+		const rendered = renderBusinessLines(business).filter(
+			(line) => !line.startsWith("**Intenção:**"),
+		);
+		if (rendered.length > 0) lines.push(...rendered, "");
+		if (input.context?.motivation) {
+			lines.push(`**Por quê:** ${truncate(input.context.motivation, 480)}`, "");
+		}
+		return lines;
+	}
+
 	const context = input.context;
 	const hasContext =
 		context?.available === true &&
@@ -57,7 +79,6 @@ function businessSection(input: ReviewResumeInput): string[] {
 				context.motivation ||
 				(context.changeSummary && context.changeSummary.length > 0),
 		);
-	const lines = ["## Resumo de negócio", ""];
 
 	if (!hasContext) {
 		const domainCount = Object.keys(input.classification.watchdogs).length;

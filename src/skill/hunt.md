@@ -48,8 +48,9 @@ mudanças antes de push.
 | Passo | Comando | Quem roda | Resultado |
 |---|---|---|---|
 | 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
-| 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `briefs/` + `manifest.json` |
-| 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog) |
+| 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
+| 1.5. Intenção | *(subagente)* | skill | `business-summary.json` enriquecido (`source: "reviewer"`) |
+| 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog, incluindo `general`) |
 | 3. Finalizar | `houndsman --finalize` | skill | `review.md` + triagem/status no storage |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
@@ -118,6 +119,8 @@ staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 | `ast-summary.json` | Fatos estruturais + delta por arquivo (AST TS/JS) (storage) |
 | `ast-impact.json` | Importadores reversos e exports públicos alterados (storage) |
 | `candidates.json` | Indícios da pré-análise Jev (regra + arquivo + confiança) (storage) |
+| `business-summary.json` | Modelo de intenção (fluxos, invariantes, contratos, estados) (staging + storage) |
+| `business-brief.md` | Brief do passo de intenção (staging + storage) |
 | `briefs/<watchdog>.md` | Instruções prontas para cada subagente (staging + storage, para auditoria) |
 | `manifest.json` | Resumo: watchdogs, arquivos, deletados, status, contexto, Jev, orçamento (storage) |
 
@@ -179,10 +182,47 @@ arquivos alterados desde a última revisão — e **carrega** os findings dos ar
 
 ---
 
+## Passo 1.5 — Intenção da PR (subagente, condicional)
+
+O motor **sempre** grava `business-summary.json` (determinístico) e `business-brief.md`.
+Quando a IA está configurada (`HOUNDSMAN_DEEP_SEEK_API_KEY`), o prepare já gravou o modelo
+com `source: "ai"` e este passo é **pulado**.
+
+> **Quando pular (operacional):** se o prepare imprimir "Intenção da PR reconstruída pela IA"
+> ou `business-summary.json` tiver `source: "ai"`, não despache este subagente. Se a mensagem
+> for "Intenção da PR determinística", despache.
+
+Sem IA, despache **um** subagente antes dos watchdogs:
+
+```
+Leia e execute o brief de intenção: <staging>/business-brief.md
+Você é o passo de intenção do houndsman no {{projectName}}.
+Use como raiz de leitura o **Worktree:** indicado. Grave o JSON em
+`<staging>/business-summary.json` com `source: "reviewer"`.
+Não produza achados.
+```
+
+- O modelo descreve **o que a PR deve entregar** (fluxos, invariantes, contratos,
+estados) — não a estrutura do código.
+- Ele é lido por todos os briefs; o revisor `general` o reconstrói no primeiro passo da
+revisão e pode refiná-lo.
+- Falha do subagente mantém a versão determinística (fail-open).
+
+> **Obrigatório:** a revisão de lógica (`general`) nunca é opcional. Se o Passo 1.5 não
+> rodar, o `general` ainda reconstrói o modelo no próprio brief — a revisão degrada, mas
+> não perde o eixo de lógica/domínio.
+
+---
+
 ## Passo 2 — Revisar (skill despacha os subagentes)
 
 Um subagente por brief. Despache em **ondas** (ex.: até 8 subagentes por bloco de tool
-calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief:
+calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief.
+
+> **`general` é obrigatório.** O motor injeta esse watchdog reservado em todos os ciclos
+> (com todos os arquivos alterados). Ele audita o fluxo inteiro e emite `Lógica:`/`Domínio:`.
+> Nunca remova o brief dele da onda.
+
 
 > **Heartbeat:** antes de despachar cada onda, rode `houndsman status ping`. A UI usa esse
 > sinal (e não `updatedAt`) para saber que a execução está viva; sem ping por 10 min ela
@@ -219,7 +259,7 @@ Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. 
    conclusão — antes dos achados
 5. Agrupa os achados por severidade (❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit) e
    **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
-6. Anexa os candidatos Jev não confirmados em `🔎 Candidatos não verificados` ao final
+6. Anexa os candidatos da pré-análise (Jev/IA) não confirmados em `🔎 Candidatos não verificados` ao final
    (não bloqueiam)
 7. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
    finding, preservados entre execuções9. Marca como **`done`** os findings que sumiram do relatório (corrigidos manualmente entre
@@ -278,9 +318,11 @@ houndsman context (gh)         ──►  context.json ──► subagente ─�
         ↓
 git diff --name-status (base...head)
         ↓
-[1] houndsman                  ──►  storage (classification/candidates/manifest) + briefs/ no staging
+[1] houndsman                  ──►  storage (classification/candidates/business/manifest) + briefs/ no staging
         ↓
-[2] N subagentes em paralelo   ──►  findings/<watchdog>.json no staging
+[1.5] subagente de intenção    ──►  business-summary.json (quando não veio da IA)
+        ↓
+[2] N+1 subagentes em paralelo ──►  findings/<watchdog>.json (+ findings/general.json)
         ↓
 [3] houndsman --finalize       ──►  review.md + triagem no storage (review_done)
         ↓

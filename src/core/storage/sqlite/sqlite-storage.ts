@@ -253,9 +253,10 @@ export class SQLiteStorageProvider implements StorageProvider {
 		const upsert = this.db.query(
 			`INSERT INTO findings
 				(id, review_id, short_id, fingerprint, watchdog_ids, rule, severity,
-				 file, line, message, action, evidence, anchor, found_at_sha, count,
-				 present, decision, comment, exec_state, github, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+				 file, line, message, action, evidence, scenario, impact, confidence, basis,
+				 anchor, found_at_sha, count, present, decision, comment, exec_state, github,
+				 created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			 ON CONFLICT(id) DO UPDATE SET
 				short_id = excluded.short_id,
 				fingerprint = excluded.fingerprint,
@@ -267,6 +268,10 @@ export class SQLiteStorageProvider implements StorageProvider {
 				message = excluded.message,
 				action = excluded.action,
 				evidence = excluded.evidence,
+				scenario = excluded.scenario,
+				impact = excluded.impact,
+				confidence = excluded.confidence,
+				basis = excluded.basis,
 				anchor = excluded.anchor,
 				found_at_sha = excluded.found_at_sha,
 				count = excluded.count,
@@ -325,6 +330,10 @@ export class SQLiteStorageProvider implements StorageProvider {
 					finding.message,
 					finding.action,
 					finding.evidence ?? null,
+					finding.scenario ?? null,
+					finding.impact ?? null,
+					finding.confidence ?? null,
+					finding.basis ?? null,
 					finding.anchor ? JSON.stringify(finding.anchor) : null,
 					finding.foundAtSha ?? null,
 					finding.count,

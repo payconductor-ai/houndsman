@@ -18,7 +18,7 @@ import {
 	locateAnchor,
 	reanchor,
 } from "./finding-anchor";
-import { type MergedFinding, sanitizeBranch } from "./report-builder";
+import { type FindingBasis, type MergedFinding, sanitizeBranch } from "./report-builder";
 import { systemClock } from "./services/clock";
 import { type FileReader, ProjectFiles } from "./services/project-files";
 import { SEVERITY_ORDER, type Severity, severityRank } from "./types";
@@ -101,6 +101,14 @@ export type FindingState = {
 	message: string;
 	action: string;
 	evidence?: string;
+	/** Gatilho concreto do gap (fora de regra). */
+	scenario?: string;
+	/** Consequência observável do gap. */
+	impact?: string;
+	/** Confiança do revisor (0–1). */
+	confidence?: number;
+	/** Origem do achado: regra, lógica ou domínio. */
+	basis?: FindingBasis;
 	anchor: FindingAnchor | null;
 	/** Commit em que o achado foi observado (base do diff focado do verify). */
 	foundAtSha?: string;
@@ -370,6 +378,10 @@ export function buildStateFromFindings(
 			message: finding.message,
 			action: finding.action,
 			evidence: finding.evidence,
+			scenario: finding.scenario,
+			impact: finding.impact,
+			confidence: finding.confidence,
+			basis: finding.basis,
 			anchor,
 			// Carry-over preserva o `foundAtSha` original; novos/re-reportados usam o head atual.
 			foundAtSha: finding.foundAtSha ?? options.headSha ?? prev?.foundAtSha,

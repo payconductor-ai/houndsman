@@ -62,11 +62,12 @@ src/alpha/**
 
 ## Procedimento
 
-1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
-2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
-3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
-4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.
-5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
+2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
+6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
 exports[`baseline — relatório renderReport consolidado 1`] = `
@@ -214,6 +215,11 @@ consolida tudo num relatório. O motor é o CLI **\`houndsman\`**; as regras do 
 **Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor) · **watchdog** = agente
 especialista por domínio · **finding** = um achado da revisão · **Jev** = pré-análise opcional.
 
+> **Duas etapas são obrigatórias em toda revisão:** o **modelo de intenção**
+> (\`business-summary.json\`) e o revisor de fluxo **\`general\`** (id reservado, sempre ativo).
+> O modelo vem da IA no prepare quando há chave; sem chave, um subagente (Passo 1.5) ou o
+> pré-passe maki o produz. Nenhum dos dois é configurável pelo usuário.
+
 ## Capabilities
 
 | Capability | Objetivo | Documento |
@@ -302,6 +308,11 @@ consolida tudo num relatório. O motor é o CLI **\`houndsman\`**; as regras do 
 
 **Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor) · **watchdog** = agente
 especialista por domínio · **finding** = um achado da revisão · **Jev** = pré-análise opcional.
+
+> **Duas etapas são obrigatórias em toda revisão:** o **modelo de intenção**
+> (\`business-summary.json\`) e o revisor de fluxo **\`general\`** (id reservado, sempre ativo).
+> O modelo vem da IA no prepare quando há chave; sem chave, um subagente (Passo 1.5) ou o
+> pré-passe maki o produz. Nenhum dos dois é configurável pelo usuário.
 
 ## Capabilities
 
@@ -497,6 +508,7 @@ export type AiProviderOptions = Record<string, Record<string, unknown>>;
 /** Features de IA do fluxo normal (todas fail-open). */
 export type HoundsmanAiFeatures = {
 	context?: boolean;
+	business?: boolean;
 	brief?: boolean;
 	technical?: boolean;
 	classification?: boolean;
@@ -626,6 +638,9 @@ import { exampleWatchdog } from "./example";
 /**
  * Definições dos watchdogs — as chaves definem o union \`WatchdogId\`.
  * Adicionar um watchdog = criar \`<id>.ts\` e registrá-lo aqui.
+ *
+ * NÃO declare um watchdog com id \`general\`: ele é reservado pelo motor
+ * (revisor de fluxo obrigatório) e é injetado em todo ciclo.
  */
 export const WATCHDOG_DEFINITIONS = {
 	default: defaultWatchdog,
@@ -669,11 +684,11 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "a78ed16d4d211889",
+    "sha256": "e7781bd408d0cd12",
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "2ecf43f34a624011",
+    "sha256": "d7e1fde6e3043344",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
@@ -681,7 +696,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/example-review.md",
-    "sha256": "d9e75054cc9811dc",
+    "sha256": "c69f2888cddba865",
   },
   {
     "file": ".houndsman/core/skill/fix.md",
@@ -689,7 +704,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "d31198580d894427",
+    "sha256": "93f036176d7f2044",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -703,13 +718,14 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 1`] = `
-"Discovery: 1 watchdog(s) ativado(s), 3 arquivo(s), 1 deletado(s).
+"Discovery: 1 watchdog(s) de domínio + revisor general, 3 arquivo(s), 1 deletado(s).
 Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
 Escopo: 2 arquivo(s), 0 símbolo(s) em 2 faixa(s) alterada(s).
 Jev: pulado (desativado (--no-jev)).
 AST: desabilitado ou sem grammar compatível.
 Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
+Intenção da PR determinística (1 fluxo(s)) — enriquecida no passo de intenção (<cwd>/.home/work/<uuid>/business-brief.md).
 
 Próximo passo: despachar os sub-agentes (um por brief em <cwd>/.home/work/<uuid>/briefs/).
 Quando os findings estiverem gravados: bun run houndsman --finalize"
@@ -719,6 +735,10 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "{
   "watchdogs": {
     "alpha": [
+      "src/alpha/a.ts",
+      "src/alpha/b.ts"
+    ],
+    "general": [
       "src/alpha/a.ts",
       "src/alpha/b.ts"
     ]
@@ -754,7 +774,8 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
     "src/alpha/old.ts"
   ],
   "stats": {
-    "alpha": 2
+    "alpha": 2,
+    "general": 2
   },
   "excludedCount": 0,
   "headSha": "<sha>",
@@ -814,11 +835,30 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
       "brief": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\briefs\\\\alpha.md",
       "findings": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\findings\\\\alpha.json",
       "status": "pending"
+    },
+    {
+      "id": "general",
+      "name": "Lógica e domínio (fluxo)",
+      "files": [
+        "src/alpha/a.ts",
+        "src/alpha/b.ts"
+      ],
+      "overflow": 0,
+      "brief": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\briefs\\\\general.md",
+      "findings": "<cwd>\\\\.home\\\\work\\\\<uuid>\\\\findings\\\\general.json",
+      "status": "pending"
     }
   ],
   "context": {
     "summarized": false,
     "source": null
+  },
+  "business": {
+    "source": "deterministic",
+    "flows": 1,
+    "invariants": 0,
+    "contracts": 0,
+    "states": 0
   },
   "jev": {
     "available": false,
@@ -868,6 +908,14 @@ src/alpha/**
 - \`src/alpha/a.ts\` — linhas 1-2 _(faixas do diff)_
 - \`src/alpha/b.ts\` — linhas 1 _(faixas do diff)_
 
+## Modelo de intenção (negócio)
+
+> Fonte: determinístico · \`<cwd>\\.home\\work\\<uuid>\\business-summary.json\` (versão canônica no staging). Use para saber o que a mudança **deve** entregar; não é achado.
+
+**Fluxos (1):**
+- **Alpha**
+  arquivos: src/alpha/a.ts, src/alpha/b.ts
+
 ## Regras (por severidade)
 
 - ❌ **blocking** — Nunca usar \`any\`.
@@ -888,11 +936,12 @@ src/alpha/**
 
 ## Procedimento
 
-1. **FILTER** — descarte o que não for do seu domínio (ver *Prioridade de leitura* e *Não carregar*).
-2. **READ SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
-3. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
-4. **DEEP-READ** — aprofunde apenas as faixas com suspeita de violação dentro do escopo.
-5. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
+2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
+6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "
 `;
 
@@ -905,7 +954,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "# PR Review — main
 
 **Data:** <date>
-**Watchdogs ativos:** alpha
+**Watchdogs ativos:** alpha, general
 **Achados:** 1 bloqueantes · 0 atenção · 0 sugestões · 0 nits
 
 ## Relatórios por domínio
@@ -919,6 +968,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 | Watchdog | Arquivos revisados | Findings |
 |---|---|---|
 | Alpha | 2 | 1 |
+| Lógica e domínio (fluxo) | 2 | 0 |
 
 ## Conclusão
 
@@ -979,6 +1029,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
       "message": "any detectado",
       "action": "tipar",
       "evidence": "export const a: any = 1;",
+      "basis": "rule",
       "anchor": {
         "snippet": "export const a: any = 1;",
         "line": 1,

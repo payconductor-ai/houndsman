@@ -14,6 +14,11 @@ consolida tudo num relatório. O motor é o CLI **`houndsman`**; as regras do pr
 **Terminologia:** **houndsman** = orquestrador/treinador (CLI + motor) · **watchdog** = agente
 especialista por domínio · **finding** = um achado da revisão · **Jev** = pré-análise opcional.
 
+> **Duas etapas são obrigatórias em toda revisão:** o **modelo de intenção**
+> (`business-summary.json`) e o revisor de fluxo **`general`** (id reservado, sempre ativo).
+> O modelo vem da IA no prepare quando há chave; sem chave, um subagente (Passo 1.5) ou o
+> pré-passe maki o produz. Nenhum dos dois é configurável pelo usuário.
+
 ## Capabilities
 
 | Capability | Objetivo | Documento |

@@ -244,6 +244,64 @@ describe("HuntRunner", () => {
 		}
 	});
 
+	test("pré-passe de intenção grava o modelo antes dos watchdogs", async () => {
+		const staging = makeWork(["alpha"]);
+		staging.work.writeBusinessBrief("# Brief de intenção");
+		try {
+			let intentCalls = 0;
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 0,
+				runner: {
+					run: async (request) => {
+						if (request.prompt.includes("passo de intenção")) {
+							intentCalls++;
+							return {
+								ok: true,
+								text: JSON.stringify({
+									intent: "Entregar o split",
+									flows: [
+										{ name: "Renovação", files: ["src/alpha/a.ts"] },
+									],
+									invariants: ["split sempre presente"],
+									contracts: [],
+									states: [],
+								}),
+								metrics: { durationMs: 5 },
+								stderr: "",
+								exitCode: 0,
+							};
+						}
+						return {
+							ok: true,
+							text: reportJson("alpha"),
+							metrics: { durationMs: 5 },
+							stderr: "",
+							exitCode: 0,
+						};
+					},
+				},
+			});
+
+			const report = await runner.run(["alpha"]);
+			expect(intentCalls).toBe(1);
+			expect(report.business).toBe("reviewer");
+			const summary = staging.work.readBusinessSummary();
+			expect(summary?.source).toBe("reviewer");
+			expect(summary?.intent).toBe("Entregar o split");
+			expect(summary?.invariants).toEqual(["split sempre presente"]);
+		} finally {
+			staging.cleanup();
+		}
+	});
+
 	test("repete uma vez quando a saída não tem JSON válido", async () => {
 		const staging = makeWork(["alpha"]);
 		try {

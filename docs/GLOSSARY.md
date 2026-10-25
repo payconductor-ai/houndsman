@@ -28,7 +28,10 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **IA do fluxo normal** | Features opcionais e fail-open: resumo de contexto, plano de brief, classificação fallback, pré-análise e verify. Sem chave, nada muda. | `src/core/ai/` |
 | **budget de IA** | Teto de chamadas/tokens por review; ao estourar, a feature de IA desiste (fail-open). | `src/core/ai/usage-budget.ts` |
 | **fallback (watchdog)** | Watchdog de último recurso (`fallback: true`) que só assume arquivos sem outro dono; `classify` é ignorado. | `src/core/file-classifier.ts` |
-| **finding emergente** | Achado de lógica/domínio fora das regras explícitas, permitido por `allowEmergentFindings`; prefixos `Lógica:`/`Domínio:`, evidência obrigatória, severidade máxima `attention`. | `src/core/rule-text.ts` |
+| **finding emergente** | Achado de lógica/domínio fora das regras explícitas. O watchdog `general` sempre pode emitir; os demais, só com `allowEmergentFindings`. Prefixos `Lógica:`/`Domínio:`, com `scenario` + `evidence` para `blocking`. | `src/core/report-builder.ts` |
+| **`general` (revisor de fluxo)** | Watchdog **embutido e obrigatório** (id reservado): recebe todos os arquivos alterados, reconstrói a intenção e audita o fluxo ponta a ponta. Não é configurável. | `src/core/builtins.ts` |
+| **intenção (`business-summary.json`)** | Modelo do que a PR **deve** entregar (`intent`, `flows`, `invariants`, `contracts`, `states`). Fonte: IA no prepare, subagente na skill ou pré-passe maki; fallback determinístico. | `src/core/business-summary.ts` |
+| **`business-brief.md`** | Instruções do passo de intenção — executado por subagente (skill sem chave) ou pelo pré-passe maki. | `src/core/business-summary.ts` |
 | **logger** | Instância única de saída do CLI (cores, spinner, progresso), em `core/logging`; módulos de negócio do core não logam. | `src/core/logging/` |
 | **worktree** | Árvore de trabalho git isolada, em **detached HEAD** no commit da PR. Permite revisar várias PRs ao mesmo tempo sem checkout. | `<repo>/.houndsman/worktrees/<repo>/<branch>` (default) · `src/core/services/worktree-manager.ts` |
 | **workspace da review** | Raiz operacional (`root`) onde git/arquivos são lidos + `mainRoot` do clone principal. Resolvido por `--pr`, `--worktree` ou branch atual. | `src/core/engine/review-workspace.ts` |
@@ -38,8 +41,8 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | Passo | Significado | Comando → artefatos |
 | --- | --- | --- |
 | **Passo 0 — contexto** | Coleta a PR via `gh` e resume objetivo/motivação/alterações. Opcional (falha-aberto). | `houndsman context` → `context.json`, `context-brief.md`, `context-summary.json` |
-| **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o AST e o Jev e **grava um brief por watchdog**. | `houndsman` → `classification.json`, `ast-summary.json`, `ast-impact.json`, `candidates.json`, `briefs/`, `manifest.json` |
-| **Passo 2 — revisar** | N subagentes (em **ondas**) executam os briefs e gravam os achados. | `findings/<watchdog>.json` |
+| **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o AST/Jev e grava **briefs** + o modelo de intenção. | `houndsman` → `classification.json`, `ast-summary.json`, `ast-impact.json`, `candidates.json`, `business-summary.json`, `business-brief.md`, `briefs/`, `manifest.json` |
+| **Passo 2 — revisar** | N+1 subagentes (em **ondas**) executam os briefs — incluindo o `general` — e gravam os achados. | `findings/<watchdog>.json` |
 | **Passo 3 — finalizar** | Valida, deduplica, agrupa e renderiza o relatório. | `houndsman --finalize` → `review.md`, `review-resume.md` |
 | **Passo 1.5** | Apelido do Jev dentro do Passo 1. | `candidates.json` |
 
@@ -61,7 +64,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **`brief`** | O documento de instruções do watchdog (escopo, regras, docs, arquivos, candidatos). Renderizado por `renderBrief`. |
 | **`briefs/<id>.md`** | O brief no staging global — o prompt do subagente; também persistido como artefato para auditoria. |
 | **`findings/<id>.json`** | Achados **daquele** watchdog no staging (schema em `OUTPUT-FORMAT.md`). |
-| **finding / achado** | Uma violação: `rule`, `severity`, `file`, `line?`, `message`, `action`, `evidence?`. |
+| **finding / achado** | Uma violação: `rule`, `severity`, `file`, `line?`, `message`, `action`, `evidence?`, `scenario?`, `impact?`, `confidence?`, `basis?`. |
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
 | **`review.md`** | Relatório consolidado (o entregável da revisão). |
@@ -123,7 +126,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **`Rule`** | Uma regra: `severity` + `text` (+ `jev` opcional). Vive **só** em `rules` — não duplicar em `reviewFocus`/`contextFiles`/`scope`/`description`. |
 | **polaridade** | O texto **deve** começar com `Promover:` (deve acontecer) ou `Evitar:` / `Não` / `Nunca` (não deve acontecer). Sem prefixo → **aviso** no `doctor`. |
 | **`Severity`** | `blocking` ❌ (bloqueia merge) > `attention` ⚠️ > `suggestion` 💡 > `nit` 🔎. |
-| **`PROCEDURE`** | Os 5 passos do watchdog: FILTER → READ SCOPE → GREP → DEEP-READ → CONCLUDE. |
+| **`PROCEDURE`** | Os 6 passos do watchdog: RECONSTRUCT → SCOPE → TRACE → GREP → PROVE → CONCLUDE. |
 | **escopo do diff** | Faixas revisáveis de cada arquivo alterado: menor símbolo folha (AST) que contém cada âncora do diff + âncoras soltas (imports/topo). Sem AST, caem para os hunks. Só findings com `line` nessas faixas são válidos. |
 | **dedupe** | Achados iguais por `(file, line, rule)` são unidos, somando os watchdogs que os apontaram. |
 | **cobertura (coverage)** | Tabela `revisados / esperados` por watchdog — mostra o que faltou. |
