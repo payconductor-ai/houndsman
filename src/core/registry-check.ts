@@ -90,14 +90,31 @@ function checkEmergent(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
-/** Prioridades por caminho: RegExp + bônus finito e não-negativo. */
+/**
+ * Prioridades por caminho: RegExp, valores finitos (`bonus` ≥ 0, teto > 0) e ao
+ * menos um efeito — uma regra sem `bonus` nem `maxRiskFromChurn` é inócua.
+ */
 function checkPriorities(config: HoundsmanConfig, problems: string[]): void {
 	for (const [index, rule] of (config.priorities ?? []).entries()) {
 		if (!(rule.pattern instanceof RegExp)) {
 			problems.push(`priorities[${index}].pattern precisa ser uma RegExp`);
 		}
-		if (!Number.isFinite(rule.bonus) || rule.bonus < 0) {
+		if (
+			rule.bonus !== undefined &&
+			(!Number.isFinite(rule.bonus) || rule.bonus < 0)
+		) {
 			problems.push(`priorities[${index}].bonus precisa ser número ≥ 0`);
+		}
+		if (
+			rule.maxRiskFromChurn !== undefined &&
+			(!Number.isFinite(rule.maxRiskFromChurn) || rule.maxRiskFromChurn <= 0)
+		) {
+			problems.push(`priorities[${index}].maxRiskFromChurn precisa ser número > 0`);
+		}
+		if (rule.bonus === undefined && rule.maxRiskFromChurn === undefined) {
+			problems.push(
+				`priorities[${index}] não tem bonus nem maxRiskFromChurn (regra inócua)`,
+			);
 		}
 	}
 }

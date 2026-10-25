@@ -147,9 +147,10 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   mandar o watchdog "ler o arquivo inteiro". O brief recebe o patch `-U0` com o teto **rateado
   entre todos os arquivos** (metade igual, o resto por churn) e declara um **orçamento de
   exploração** (6 leituras/6 buscas por domínio; 10/10 no `general`) — sem prova dentro dele,
-  não há achado.- **Prioridade por caminho é config-driven.** `priorities` do consumidor soma `bonus` (linhas de
-  churn equivalentes) ao risco em `sortByRisk`/`selectByBudget` e no recorte do `general`. Sem
-  config, churn puro. Nunca hardcode paths de consumidor no `core/`.
+  não há achado.- **Prioridade por caminho é config-driven.** Cada regra de `priorities` soma `bonus` (linhas de
+  churn equivalentes) e/ou satura o churn com `maxRiskFromChurn` — risco =
+  `min(churn, teto) + bonus`, aplicado em `sortByRisk`/`selectByBudget` e no recorte do `general`.
+  Sem config, churn puro. Nunca hardcode paths de consumidor no `core/`.
 - **Propagação mecânica é detectada deterministicamente.** `core/propagation.ts` agrupa
   micro-alterações idênticas (≤3 linhas) em 1 representante + outliers e lista importadores de
   contratos alterados que ficaram fora do diff. Sem leitura extra de git e sem IA.- **Revisão de lógica é obrigatória.** O `prepare` injeta o watchdog reservado `general` em

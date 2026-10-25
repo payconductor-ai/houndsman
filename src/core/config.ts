@@ -167,15 +167,22 @@ export type HoundsmanStorage = {
 /**
  * Regra de prioridade por caminho (ordenada; a primeira que casar vence).
  *
- * `bonus` é expresso em **linhas de churn equivalentes**: o risco do arquivo vira
- * `churn + bonus`. Ex.: com `bonus: 300`, 10 linhas em `db/` (310) passam na
- * frente de 200 linhas em `client/` (200), mas perdem para 400 linhas em `client/`.
+ * O risco do arquivo é `min(churn, maxRiskFromChurn) + bonus`. O `bonus` promove
+ * caminhos críticos (em linhas de churn equivalentes) e o `maxRiskFromChurn`
+ * satura o superchurn de caminhos de baixa criticidade: um frontend que
+ * reformatou 2.000 linhas não escala além do teto, mas um ajuste pequeno no
+ * mesmo caminho mantém o peso natural.
  */
 export type HoundsmanPriority = {
 	/** Padrão sobre o caminho relativo (ex.: `/^server\\/src\\/db\\//`). */
 	pattern: RegExp;
-	/** Peso em linhas de churn equivalentes (≥ 0). */
-	bonus: number;
+	/** Peso em linhas de churn equivalentes (≥ 0; default: 0). */
+	bonus?: number;
+	/**
+	 * Teto do churn considerado no risco (em linhas equivalentes). Acima dele os
+	 * arquivos do caminho empatam e só o `bonus` diferencia. Default: sem teto.
+	 */
+	maxRiskFromChurn?: number;
 };
 
 /**

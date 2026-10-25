@@ -120,11 +120,21 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
   citados pelos **fluxos do modelo de intenção** + os de maior churn, limitados a 15 com
   diff de até 2k cada. O restante é declarado em `skipped` (`fora do fluxo`) — profundidade
   nos arquivos que importam para a lógica, com a lacuna explícita.
-- **Prioridade por caminho (config-driven).** `priorities: [{ pattern, bonus }]` soma o `bonus`
-  (em linhas de churn equivalentes) ao risco do arquivo. Ex.: `db` +300, `services` +200,
-  `client` 0. Um arquivo de 10 linhas em `db` (310) passa na frente de 200 linhas em `client`
-  (200), mas perde para 400 linhas em `client` (400). Ordena o orçamento, o rateio do diff e o
-  recorte do `general`; sem config, churn puro.
+- **Prioridade por caminho (config-driven).** Cada regra tem `bonus` (promove; em linhas de churn
+  equivalentes) e/ou `maxRiskFromChurn` (teto do churn considerado). O risco é
+  `min(churn, teto) + bonus`:
+
+  ```ts
+  priorities: [
+  	{ pattern: /^server\/src\/(db|repositories)\//, bonus: 300 },
+  	{ pattern: /^server\/src\/(services|use-cases)\//, bonus: 200 },
+  	{ pattern: /^(client|admin)\//, maxRiskFromChurn: 120 },
+  ]
+  ```
+
+  Um arquivo de 20 linhas em `db` vale 320 e ganha de 2.000 linhas de UI reformatada (120);
+  abaixo do teto o caminho mantém o peso natural do churn (15 linhas = 15). Ordena o orçamento,
+  o rateio do diff e o recorte do `general`; sem regra, churn puro.
 - **Propagação mecânica.** Micro-alterações idênticas (≤3 linhas) em ≥5 arquivos viram **um**
   bloco no brief: padrão dominante + outliers, em vez de N diffs de uma linha. E contratos
   alterados cujos importadores **não** estão no diff aparecem em *Possível propagação

@@ -98,11 +98,14 @@ export const houndsmanConfig = {
 	watchdogs: WATCHDOG_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
-	// Prioridade por caminho (opcional): bônus em "linhas de churn equivalentes".
+	// Prioridade por caminho (opcional): "linhas de churn equivalentes".
+	// \`bonus\` promove caminho crítico; \`maxRiskFromChurn\` satura o superchurn de
+	// caminho de baixa criticidade (risco = min(churn, teto) + bonus).
 	// A primeira regra que casar vence; sem regra, o risco é o churn puro.
 	// priorities: [
 	//   { pattern: /^src\\/(db|repositories)\\//, bonus: 300 },
 	//   { pattern: /^src\\/(services|domain)\\//, bonus: 200 },
+	//   { pattern: /^src\\/(components|styles)\\//, maxRiskFromChurn: 120 },
 	// ],
 } satisfies HoundsmanConfig;
 
@@ -259,10 +262,16 @@ export type HoundsmanHunt = {
 	binaryPath?: string;
 };
 
-/** Prioridade por caminho — \`bonus\` em linhas de churn equivalentes. */
+/**
+ * Prioridade por caminho.
+ *
+ * \`bonus\` promove (linhas de churn equivalentes) e \`maxRiskFromChurn\` satura o
+ * superchurn de caminhos de baixa criticidade.
+ */
 export type HoundsmanPriority = {
 	pattern: RegExp;
-	bonus: number;
+	bonus?: number;
+	maxRiskFromChurn?: number;
 };
 
 /** Contrato de configuração do motor. */

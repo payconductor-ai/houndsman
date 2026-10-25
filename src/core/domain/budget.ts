@@ -14,30 +14,56 @@ export function churnOf(filePath: string, churn: ChurnMap | undefined): number {
 	return entry ? entry.additions + entry.deletions : 0;
 }
 
-/**
- * Bônus de prioridade do caminho (primeira regra que casar vence).
- * O valor é interpretado como **linhas de churn equivalentes**.
- */
+/** Regra de prioridade do caminho (a primeira que casar vence). */
+export function priorityFor(
+	filePath: string,
+	priorities: readonly HoundsmanPriority[] | undefined,
+): HoundsmanPriority | undefined {
+	for (const rule of priorities ?? []) {
+		// Regex global mantém `lastIndex` entre chamadas — zera para não pular match.
+		if (rule.pattern.global) rule.pattern.lastIndex = 0;
+		if (rule.pattern.test(filePath)) return rule;
+	}
+	return undefined;
+}
+
+/** Bônus da regra (linhas de churn equivalentes; ausente/inválido = 0). */
+function bonusOf(rule: HoundsmanPriority | undefined): number {
+	const bonus = rule?.bonus;
+	return bonus !== undefined && Number.isFinite(bonus) ? Math.max(0, bonus) : 0;
+}
+
+/** Bônus de prioridade do caminho (primeira regra que casar vence). */
 export function priorityBonus(
 	filePath: string,
 	priorities: readonly HoundsmanPriority[] | undefined,
 ): number {
-	for (const rule of priorities ?? []) {
-		// Regex global mantém `lastIndex` entre chamadas — zera para não pular match.
-		if (rule.pattern.global) rule.pattern.lastIndex = 0;
-		if (!rule.pattern.test(filePath)) continue;
-		return Number.isFinite(rule.bonus) ? Math.max(0, rule.bonus) : 0;
-	}
-	return 0;
+	return bonusOf(priorityFor(filePath, priorities));
 }
 
-/** Risco do arquivo: churn + prioridade (linhas equivalentes). */
+/** Teto de churn da regra (ausente/inválido = sem teto). */
+function churnLimitOf(rule: HoundsmanPriority | undefined): number {
+	const limit = rule?.maxRiskFromChurn;
+	return limit !== undefined && Number.isFinite(limit) && limit > 0
+		? limit
+		: Number.POSITIVE_INFINITY;
+}
+
+/**
+ * Risco do arquivo: `min(churn, maxRiskFromChurn) + bonus`.
+ *
+ * O teto existe para superchurn de caminho de baixa criticidade (frontend que
+ * reformatou uma tabela inteira) não competir com churn real de caminho crítico;
+ * abaixo do teto, o peso do caminho é o churn natural.
+ */
 export function riskOf(
 	filePath: string,
 	churn: ChurnMap | undefined,
 	priorities?: readonly HoundsmanPriority[],
 ): number {
-	return churnOf(filePath, churn) + priorityBonus(filePath, priorities);
+	const rule = priorityFor(filePath, priorities);
+	const churnRisk = Math.min(churnOf(filePath, churn), churnLimitOf(rule));
+	return churnRisk + bonusOf(rule);
 }
 
 /** Ordena os arquivos por risco (churn + prioridade; empate pelo caminho). */

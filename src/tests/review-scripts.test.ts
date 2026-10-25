@@ -14,6 +14,7 @@ import {
 } from "../core/config";
 import { parseDiffIndex, parseNumstat } from "../core/diff-source";
 import { discoverDocs } from "../core/doc-discoverer";
+import { riskOf } from "../core/domain/budget";
 import { coverageOf, unaccountedFiles } from "../core/engine/finalize-pipeline";
 import { overlapMessage } from "../core/engine/prepare-pipeline";
 import {
@@ -494,6 +495,38 @@ describe("triage", () => {
 				priorities,
 			).selected,
 		).toEqual(["server/db/small.ts"]);
+	});
+
+	test("maxRiskFromChurn satura o superchurn de caminho com baixa criticidade", () => {
+		const priorities = [
+			{ pattern: /^server\/db\//, bonus: 300 },
+			{ pattern: /^client\//, maxRiskFromChurn: 120 },
+		];
+		const files = ["client/table.tsx", "server/db/migration.ts"];
+		const churn = {
+			"client/table.tsx": { additions: 1900, deletions: 100 },
+			"server/db/migration.ts": { additions: 20, deletions: 0 },
+		};
+		// 2.000 linhas de UI "boba" viram 120; 20 linhas de db valem 320.
+		expect(riskOf("client/table.tsx", churn, priorities)).toBe(120);
+		expect(sortByRisk(files, churn, priorities)).toEqual([
+			"server/db/migration.ts",
+			"client/table.tsx",
+		]);
+		// Abaixo do teto, o caminho mantém o peso natural do churn.
+		expect(
+			riskOf(
+				"client/table.tsx",
+				{
+					"client/table.tsx": { additions: 15, deletions: 0 },
+				},
+				priorities,
+			),
+		).toBe(15);
+		// Sem teto configurado, o churn puro continua vencendo.
+		expect(
+			riskOf("client/table.tsx", churn, [{ pattern: /^server\/db\//, bonus: 300 }]),
+		).toBe(2000);
 	});
 
 	test("maxFiles não-positivo desativa o orçamento", () => {
