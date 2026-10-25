@@ -289,6 +289,26 @@ function scopeProgress(onProgress?: PrepareProgress): ScopeProgress | undefined 
 	return (event) => emitProgress(onProgress, event);
 }
 
+/**
+ * Aviso de sobreposição de escopo: o mesmo arquivo casando em vários domínios é
+ * revisado uma vez por domínio (recortes diferentes). Explica a cobertura >100%
+ * que um watchdog pode declarar e o custo multiplicado em PRs grandes.
+ */
+export function overlapMessage(
+	classification: Pick<ClassificationResult, "watchdogs">,
+): string[] {
+	const counts = new Map<string, number>();
+	for (const files of Object.values(classification.watchdogs)) {
+		for (const file of files) counts.set(file, (counts.get(file) ?? 0) + 1);
+	}
+	const shared = [...counts.values()].filter((count) => count > 1);
+	if (shared.length === 0) return [];
+	const max = Math.max(...shared);
+	return [
+		`Escopo: ${shared.length} arquivo(s) em mais de um domínio (máx. ${max}) — cada domínio revisa o arquivo com o seu recorte.`,
+	];
+}
+
 /** Emite um evento de progresso sem deixar o callback derrubar a revisão. */
 function emitProgress(
 	onProgress: PrepareProgress | undefined,
@@ -642,6 +662,7 @@ export class PreparePipeline {
 			...discoveryMessages(activeIds, classification, ctx.work.briefsDir),
 			...budgetMessage(classification, config),
 			...changedScopeMessage(classification),
+			...overlapMessage(classification),
 			...jevSummary(jev),
 		);
 		if (astAnalyses) {

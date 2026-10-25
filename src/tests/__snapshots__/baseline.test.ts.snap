@@ -75,7 +75,7 @@ src/alpha/**
 3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
 4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
-6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios). \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
 exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1`] = `
@@ -602,7 +602,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "50f7f9bf74c54f87",
+    "sha256": "fd873f1e7c2ca87c",
   },
   {
     "file": ".houndsman/core/skill/README.md",
@@ -622,7 +622,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "0c1193e23ca71656",
+    "sha256": "6919ee5a79e13af1",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -640,6 +640,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
 Escopo: 2 arquivo(s), 0 símbolo(s) em 2 faixa(s) alterada(s).
+Escopo: 2 arquivo(s) em mais de um domínio (máx. 2) — cada domínio revisa o arquivo com o seu recorte.
 Jev: pulado (desativado (--no-jev)).
 AST: desabilitado ou sem grammar compatível.
 Sem contexto da PR (rode \`bun run houndsman context\` antes, se houver PR).
@@ -900,7 +901,7 @@ index 0000000..f4082f0
 3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
 4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
-6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios). \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "
 `;
 

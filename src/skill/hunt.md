@@ -276,6 +276,7 @@ Use como raiz de leitura o **Worktree:** indicado no brief (nunca o clone princi
 O brief já traz os trechos alterados (`## Trechos alterados (diff)`): comece por eles.
 Respeite o **Orçamento de exploração** do brief (6 leituras/6 buscas; `general`: 10/10):
 se a prova não estiver no brief nem nesse orçamento, **não é achado**.
+Em `reviewedFiles`, liste apenas arquivos do seu domínio (subconjunto do brief).
 ```
 
 Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).

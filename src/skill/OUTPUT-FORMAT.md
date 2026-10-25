@@ -49,7 +49,7 @@ staging global da review:
 | Campo | Tipo | Obrigatório | Descrição |
 |---|---|---|---|
 | `watchdogId` | string | ✅ | Id do watchdog (deve casar com uma chave de `.houndsman/watchdogs/index.ts`) |
-| `reviewedFiles` | string[] | ✅ | Arquivos efetivamente inspecionados |
+| `reviewedFiles` | string[] | ✅ | Arquivos **do seu domínio** efetivamente revisados (subconjunto de `## Arquivos do seu domínio`; não inclua chamadores/importadores nem arquivos de outros domínios) |
 | `skipped` | string[] | ✅ | Arquivos do domínio que NÃO foram lidos + motivo |
 | `findings` | object[] | ✅ | Achados (vazio se nada encontrado) |
 | `findings[].rule` | string | ✅ | Regra violada (conforme o brief do watchdog) |

@@ -14,6 +14,8 @@ import {
 } from "../core/config";
 import { parseDiffIndex, parseNumstat } from "../core/diff-source";
 import { discoverDocs } from "../core/doc-discoverer";
+import { coverageOf } from "../core/engine/finalize-pipeline";
+import { overlapMessage } from "../core/engine/prepare-pipeline";
 import {
 	type ClassificationResult,
 	churnOf,
@@ -568,6 +570,27 @@ describe("report-builder", () => {
 		expect(merged[0].watchdogs).toHaveLength(2);
 		expect(merged[0].severity).toBe("blocking");
 		expect(merged[0].message).toBe("maior");
+	});
+
+	test("cobertura ignora arquivos declarados fora do escopo", () => {
+		const coverage = coverageOf(
+			["src/a.ts", "src/b.ts", "src/outro.ts", "src/a.ts"],
+			["src/a.ts", "src/b.ts", "src/c.ts"],
+		);
+		expect(coverage).toEqual({ reviewed: 2, expected: 3 });
+	});
+
+	test("avisa quando um arquivo entra em vários domínios", () => {
+		expect(
+			overlapMessage({
+				watchdogs: { alpha: ["a.ts", "b.ts"], beta: ["b.ts"], gamma: [] },
+			}),
+		).toEqual([
+			"Escopo: 1 arquivo(s) em mais de um domínio (máx. 2) — cada domínio revisa o arquivo com o seu recorte.",
+		]);
+		expect(
+			overlapMessage({ watchdogs: { alpha: ["a.ts"], beta: ["b.ts"] } }),
+		).toEqual([]);
 	});
 });
 

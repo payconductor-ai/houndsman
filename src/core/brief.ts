@@ -31,7 +31,7 @@ export const PROCEDURE: readonly string[] = [
 	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.",
 	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.",
 	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.",
-	'6. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido (arquivo cujo trecho está no brief conta como revisado) e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
+	'6. **CONCLUDE** — grave o JSON no caminho de output. `reviewedFiles` é um subconjunto de `## Arquivos do seu domínio` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios). `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
 /**

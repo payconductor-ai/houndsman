@@ -42,6 +42,22 @@ function incrementalNote(classification: RunClassification): string {
 }
 
 /**
+ * Cobertura efetiva de um watchdog: só conta arquivos que estavam no escopo.
+ *
+ * `reviewedFiles` é auto-declarado pelo subagente e costuma incluir chamadores e
+ * arquivos de outros domínios; sem o recorte, a tabela mostrava "25/13" e
+ * escondia o que realmente ficou de fora.
+ */
+export function coverageOf(
+	reviewedFiles: readonly string[],
+	expectedFiles: readonly string[],
+): { reviewed: number; expected: number } {
+	const expected = new Set(expectedFiles);
+	const reviewed = new Set(reviewedFiles.filter((file) => expected.has(file)));
+	return { reviewed: reviewed.size, expected: expected.size };
+}
+
+/**
  * Cobertura por domínio (achados × arquivos revisados/esperados) para a tabela
  * do resumo final. Não grava relatório por domínio: os achados vivem na triagem
  * (`findings`), que já é filtrável por watchdog na UI.
@@ -52,13 +68,19 @@ function summarizeDomains(
 	nameOf: (id: string) => string,
 ): ResumeDomain[] {
 	return reports
-		.map((report) => ({
-			id: report.watchdogId,
-			name: nameOf(report.watchdogId),
-			findings: dedupeFindings([report]).length,
-			reviewedFiles: report.reviewedFiles.length,
-			expectedFiles: (classification.watchdogs[report.watchdogId] ?? []).length,
-		}))
+		.map((report) => {
+			const coverage = coverageOf(
+				report.reviewedFiles,
+				classification.watchdogs[report.watchdogId] ?? [],
+			);
+			return {
+				id: report.watchdogId,
+				name: nameOf(report.watchdogId),
+				findings: dedupeFindings([report]).length,
+				reviewedFiles: coverage.reviewed,
+				expectedFiles: coverage.expected,
+			};
+		})
 		.sort((a, b) => b.findings - a.findings || a.name.localeCompare(b.name));
 }
 
@@ -239,6 +261,25 @@ export class FinalizePipeline {
 		messages.push(
 			`Resumo: ${location} (${REVIEW_RESUME_FILE}) — ${blockers} bloqueante(s), ${attention} atenção.`,
 		);
+
+		// Lacuna de cobertura: arquivos do escopo que ninguém declarou ter revisado.
+		const gaps = domains.filter(
+			(domain) => domain.reviewedFiles < domain.expectedFiles,
+		);
+		if (gaps.length > 0) {
+			const missing = gaps.reduce(
+				(total, domain) => total + (domain.expectedFiles - domain.reviewedFiles),
+				0,
+			);
+			messages.push(
+				`Cobertura: ${missing} arquivo(s) sem revisão declarada em ${gaps
+					.map(
+						(domain) =>
+							`${domain.name} (${domain.reviewedFiles}/${domain.expectedFiles})`,
+					)
+					.join(", ")}.`,
+			);
+		}
 
 		// O staging já cumpriu o papel (briefs/findings/contexto estão no storage).
 		ctx.work.clean();
