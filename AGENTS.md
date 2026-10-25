@@ -63,6 +63,7 @@ src/
 ├── core/             # bibliotecas genéricas
 │   ├── ai/                  # camada genérica de IA (modelo, uso, schemas, features)
 │   ├── engine/              # HoundsmanEngine (composition root), ReviewSession,
+│   │                        # Prepare/FinalizePipeline, ReviewContext, RunArtifacts,
 │   │                        # ReviewScopeResolver, review-workspace, carry-over
 │   ├── ast/                 # AST determinístico: parser wasm, símbolos, delta e impacto
 │   ├── domain/              # Watchdog, Classification, Diff, budget (regras puras)
@@ -82,7 +83,7 @@ src/
 │   ├── run-layout.ts        # caminhos de uma run (branch-slug)
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # WatchdogRegistry (classes) + adaptadores
-│   ├── orchestrator.ts      # prepare/finalize (delegam ao engine/renderers)
+│   ├── orchestrator.ts      # fachada: tipos + defaults + prepare/finalize
 │   ├── arg-parser.ts        # ArgParser compartilhado (core + cli)
 │   ├── concurrency.ts       # mapPool (paralelismo limitado; prepare + hunt)
 │   ├── prepare-report.ts    # durações por etapa do prepare (`prepare-report.json`)

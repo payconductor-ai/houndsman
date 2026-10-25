@@ -276,7 +276,7 @@ describe("baseline — artefatos de prepare/finalize", () => {
 						.replaceAll(homeDisplay, "<cwd>"),
 				);
 
-			const prepared = await prepare(opts, "main", config, ctx);
+			const prepared = await prepare(ctx, config, opts);
 			expect(normalize(prepared.messages.join("\n"))).toMatchSnapshot();
 
 			// Instrumentação do prepare: etapas medidas sem alterar o manifesto.
@@ -335,7 +335,7 @@ describe("baseline — artefatos de prepare/finalize", () => {
 				)}\n`,
 			);
 
-			const finalized = finalize(opts, "main", config, ctx);
+			const finalized = finalize(ctx, config, opts);
 			expect(normalize(finalized.messages.join("\n"))).toMatchSnapshot();
 
 			// Único artefato humano: o resumo final (negócio, técnico, cobertura, conclusão).

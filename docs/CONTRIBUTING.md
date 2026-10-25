@@ -47,7 +47,7 @@ src/
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext
-│   ├── orchestrator.ts      # prepare/finalize (storage + staging)
+│   ├── orchestrator.ts      # fachada de prepare/finalize (pipelines em engine/)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── file-classifier.ts   # classificação via `classify` dos watchdogs + churn
 │   ├── diff-source.ts       # diff único (patch + --numstat) p/ PRs grandes

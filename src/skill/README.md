@@ -125,7 +125,7 @@ src/
 │   ├── paths.ts             # layout fixo da camada (.houndsman/) + relFromRoot
 │   ├── types.ts             # Severity, Rule, WatchdogDefinition, defineWatchdog
 │   ├── watchdog-registry.ts # getWatchdog/findWatchdog/getWatchdogContext(config)
-│   ├── orchestrator.ts      # preparar/finalizar
+│   ├── orchestrator.ts      # fachada: preparar/finalizar (pipelines em engine/)
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE
 │   ├── pr-context.ts        # contexto da PR via gh
 │   ├── file-classifier.ts   # classificação (via `classify` dos watchdogs) + churn

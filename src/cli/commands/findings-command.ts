@@ -14,21 +14,31 @@ export class FindingsCommand implements Command {
 	async run(args: string[], context: CliContext): Promise<number> {
 		const engine = await context.engine();
 		const sub = ArgParser.from(args).command();
+		// Raiz/git do engine: o comando nunca lê `process.cwd()` implicitamente.
+		const options = { root: engine.root, git: engine.git };
 		const result =
 			sub === "verify"
-				? await runVerifyCommand(engine.config, engine.storage, engine.repo, args)
+				? await runVerifyCommand(
+						engine.config,
+						engine.storage,
+						engine.repo,
+						args,
+						options,
+					)
 				: sub === "submit"
 					? await runSubmitCommand(
 							engine.config,
 							engine.storage,
 							engine.repo,
 							args,
+							options,
 						)
 					: runFindingsCommand(
 							engine.config,
 							engine.storage,
 							engine.repo,
 							args,
+							options,
 						);
 
 		if (result.exitCode !== 0) context.err(result.output);

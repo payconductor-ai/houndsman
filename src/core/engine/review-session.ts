@@ -108,20 +108,16 @@ export class ReviewSession {
 
 	/** Passo 1 — preparar. */
 	prepare(onProgress?: PrepareProgress): Promise<PrepareResult> {
-		return prepare(
-			this.options,
-			this.branch,
-			this.config,
-			this.context,
-			this.ast,
-			this.ai,
+		return prepare(this.context, this.config, this.options, {
+			ast: this.ast,
+			ai: this.ai,
 			onProgress,
-		);
+		});
 	}
 
 	/** Passo 3 — finalizar. */
 	finalize(): FinalizeResult {
-		return finalize(this.options, this.branch, this.config, this.context);
+		return finalize(this.context, this.config, this.options);
 	}
 
 	/** Executa o passo escolhido em `--finalize`. */

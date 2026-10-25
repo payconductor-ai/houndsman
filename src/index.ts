@@ -90,7 +90,10 @@ export {
 	mergeRanges,
 	summarizeScope,
 } from "./core/changed-scope";
-export type { FindingsCommandResult } from "./core/commands/findings";
+export type {
+	FindingsCommandResult,
+	FindingsContextOptions,
+} from "./core/commands/findings";
 export { runFindingsCommand, runVerifyCommand } from "./core/commands/findings";
 export { ProjectScaffolder } from "./core/commands/scaffold";
 export type {

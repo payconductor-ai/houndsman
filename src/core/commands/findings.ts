@@ -14,6 +14,7 @@ import { existsSync } from "node:fs";
 import { AiClient } from "../ai/ai-client";
 import { AiVerifier } from "../ai/features/verifier";
 import { type HoundsmanConfig, resolveJevConcurrency } from "../config";
+import { type ReviewContext, reviewContext } from "../engine/review-context";
 import { ENV_NAMES } from "../env";
 import {
 	applyFindingUpdate,
@@ -25,7 +26,6 @@ import {
 	type FindingsFilter,
 	type FindingsStateFile,
 	type FindingUpdate,
-	fileReader,
 	filterFindings,
 	reorder,
 	resolveFindingId,
@@ -51,9 +51,9 @@ import { VerifyPresenter } from "../renderers/verify-presenter";
 import { pingFindingsStatus } from "../run-status";
 import { systemClock } from "../services/clock";
 import { FixBatchBuilder } from "../services/fix-batch-builder";
+import type { GitRepository } from "../services/git-repository";
 import { Verifier } from "../services/verifier";
-import type { RepoIdentity, ReviewRecord, StorageProvider } from "../storage/types";
-import { ReviewWorkArea } from "../storage/work-area";
+import type { RepoIdentity, StorageProvider } from "../storage/types";
 import { SEVERITY_ORDER, type Severity } from "../types";
 
 export type FindingsCommandResult = {
@@ -109,13 +109,11 @@ function parseArgs(args: string[]): ParsedArgs {
 	return parsed;
 }
 
-/** Contexto de uma review (storage + registro + staging + raiz). */
-type CommandContext = {
-	storage: StorageProvider;
-	review: ReviewRecord;
-	work: ReviewWorkArea;
-	/** Worktree da review quando existir; senão, a raiz do repositório. */
-	root: string;
+/** Opções de resolução do contexto (o CLI passa root/git do engine). */
+export type FindingsContextOptions = {
+	/** Raiz operacional (default: cwd de quem chamou). */
+	root?: string;
+	git?: GitRepository;
 };
 
 /** Resolve a review da branch atual (explícita ou via git). */
@@ -123,7 +121,8 @@ function openContext(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	parsed: ParsedArgs,
-): CommandContext {
+	options: FindingsContextOptions = {},
+): ReviewContext {
 	const branch = parsed.values["--branch"] ?? currentBranch();
 	const variant = parsed.values["--variant"]?.trim() || undefined;
 	const review = storage.findReview(repo.key, branch, variant);
@@ -134,12 +133,13 @@ function openContext(
 	}
 	const worktree = review.worktreePath;
 	// Sem worktree, mantém a raiz onde o comando foi invocado (comportamento histórico).
-	const root = worktree && existsSync(worktree) ? worktree : process.cwd();
-	return { storage, review, work: new ReviewWorkArea(review), root };
+	const root =
+		worktree && existsSync(worktree) ? worktree : (options.root ?? process.cwd());
+	return reviewContext(storage, review, { root, git: options.git });
 }
 
 /** Lê o estado de triagem; lança se a review ainda não tem findings. */
-function loadState(ctx: CommandContext): FindingsStateFile {
+function loadState(ctx: ReviewContext): FindingsStateFile {
 	const state = ctx.storage.readFindings(ctx.review.id);
 	if (!state) {
 		throw new Error(
@@ -151,7 +151,7 @@ function loadState(ctx: CommandContext): FindingsStateFile {
 
 /** Lê-modifica-grava o estado, atualizando `updatedAt` e a ordem. */
 function mutateState(
-	ctx: CommandContext,
+	ctx: ReviewContext,
 	mutator: (state: FindingsStateFile) => void,
 ): FindingsStateFile {
 	const state = loadState(ctx);
@@ -223,7 +223,7 @@ function filterFrom(parsed: ParsedArgs): FindingsFilter {
 }
 
 /** Faz ping no status da review (derivado do estado atual) após uma mutação. */
-function pingStatus(ctx: CommandContext, state: FindingsStateFile): void {
+function pingStatus(ctx: ReviewContext, state: FindingsStateFile): void {
 	pingFindingsStatus(ctx.storage, ctx.review.id, state);
 }
 
@@ -232,7 +232,7 @@ function pingStatus(ctx: CommandContext, state: FindingsStateFile): void {
  * Fail-open (`gh` ausente/sem PR ⇒ só a mensagem). Devolve a linha para o
  * output ou `null` quando não há vínculo remoto pendente.
  */
-function syncThreadsOutput(ctx: CommandContext, ids: readonly string[]): string | null {
+function syncThreadsOutput(ctx: ReviewContext, ids: readonly string[]): string | null {
 	if (ids.length === 0) return null;
 	const state = loadState(ctx);
 	const outcome = syncResolvedThreads({ state, ids });
@@ -248,7 +248,7 @@ function syncThreadsOutput(ctx: CommandContext, ids: readonly string[]): string 
 
 /** Aplica uma atualização a um finding e persiste. */
 function updateOne(
-	ctx: CommandContext,
+	ctx: ReviewContext,
 	input: string,
 	update: FindingUpdate,
 ): FindingState {
@@ -263,7 +263,7 @@ function updateOne(
 
 /** Aplica a mesma atualização a vários ids (done/reset). */
 function updateMany(
-	ctx: CommandContext,
+	ctx: ReviewContext,
 	inputs: string[],
 	update: FindingUpdate,
 ): FindingState[] {
@@ -283,10 +283,11 @@ export function runFindingsCommand(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	args: string[],
+	options: FindingsContextOptions = {},
 ): FindingsCommandResult {
 	try {
 		const parsed = parseArgs(args);
-		return execute(config, storage, repo, parsed);
+		return execute(config, storage, repo, parsed, options);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -300,8 +301,9 @@ function execute(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	parsed: ParsedArgs,
+	options: FindingsContextOptions,
 ): FindingsCommandResult {
-	const ctx = openContext(storage, repo, parsed);
+	const ctx = openContext(storage, repo, parsed, options);
 	switch (parsed.sub ?? "list") {
 		case "list": {
 			const state = loadState(ctx);
@@ -388,7 +390,7 @@ function execute(
 		}
 		case "sync": {
 			const state = loadState(ctx);
-			const result = syncState(state, fileReader(ctx.root));
+			const result = syncState(state, ctx.files.reader());
 			ctx.storage.writeFindings(ctx.review.id, state);
 			pingStatus(ctx, state);
 			const output = parsed.bools.has("--json")
@@ -485,10 +487,11 @@ export async function runVerifyCommand(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	args: string[],
+	options: FindingsContextOptions = {},
 ): Promise<FindingsCommandResult> {
 	try {
 		const parsed = parseArgs(args);
-		return await executeVerify(config, storage, repo, parsed);
+		return await executeVerify(config, storage, repo, parsed, options);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -516,8 +519,9 @@ async function executeVerify(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	parsed: ParsedArgs,
+	options: FindingsContextOptions,
 ): Promise<FindingsCommandResult> {
-	const ctx = openContext(storage, repo, parsed);
+	const ctx = openContext(storage, repo, parsed, options);
 	const state = loadState(ctx);
 
 	// Lazy: `../jev` (axios) só entra no caminho do verify.
@@ -525,7 +529,7 @@ async function executeVerify(
 	const { JevCandidatesStore, JevClient, JevVerifier } = await import("../jev");
 
 	const findings = verifier.select(state, filterFrom(parsed));
-	const entries = verifier.verifyLocal(findings, fileReader(ctx.root));
+	const entries = verifier.verifyLocal(findings, ctx.files.reader());
 
 	// Tier 1 — Jev só nos ambíguos (fail-open: sem chave/erro mantém o provisório).
 	let jevChecked = 0;
@@ -573,7 +577,7 @@ async function executeVerify(
 		} else if (!aiVerifier.enabled) {
 			aiReason = "feature ai.features.verify desligada";
 		} else {
-			const readFile = fileReader(ctx.root);
+			const readFile = ctx.files.reader();
 			const byId = new Map(findings.map((finding) => [finding.id, finding]));
 			const confidence = await aiVerifier.verify({
 				findings: stillAmbiguous.map((entry) => ({
@@ -750,10 +754,11 @@ export async function runSubmitCommand(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	args: string[],
+	options: FindingsContextOptions = {},
 ): Promise<FindingsCommandResult> {
 	try {
 		const parsed = parseArgs(args);
-		return await executeSubmit(config, storage, repo, parsed);
+		return await executeSubmit(config, storage, repo, parsed, options);
 	} catch (error) {
 		return {
 			output: error instanceof Error ? error.message : String(error),
@@ -767,8 +772,9 @@ async function executeSubmit(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	parsed: ParsedArgs,
+	options: FindingsContextOptions,
 ): Promise<FindingsCommandResult> {
-	const ctx = openContext(storage, repo, parsed);
+	const ctx = openContext(storage, repo, parsed, options);
 	const state = loadState(ctx);
 	const selection = submitSelection(parsed);
 	const target = resolvePrTarget(defaultGhRunner, state.branch);

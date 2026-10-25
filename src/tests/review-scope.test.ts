@@ -256,7 +256,7 @@ describe("prepare/finalize — mesmo commit", () => {
 			};
 
 			let ctx = reviewContext(storage, record);
-			await prepare(opts, "main", fakeHoundsmanConfig, ctx);
+			await prepare(ctx, fakeHoundsmanConfig, opts);
 			expect(storage.getReview(record.id)?.status).toBe("reviewing");
 
 			writeFileSync(
@@ -294,7 +294,7 @@ describe("prepare/finalize — mesmo commit", () => {
 					2,
 				)}\n`,
 			);
-			finalize(opts, "main", fakeHoundsmanConfig, ctx);
+			finalize(ctx, fakeHoundsmanConfig, opts);
 
 			const classificationBefore = storage.readArtifact(
 				record.id,
@@ -313,7 +313,7 @@ describe("prepare/finalize — mesmo commit", () => {
 
 			// Mesmo commit: prepare vira no-op e nada é reescrito.
 			ctx = reviewContext(storage, storage.getReview(record.id) ?? record);
-			const again = await prepare(opts, "main", fakeHoundsmanConfig, ctx);
+			const again = await prepare(ctx, fakeHoundsmanConfig, opts);
 			expect(again.messages.join("\n")).toContain(
 				"Nenhuma alteração desde a última revisão",
 			);
@@ -328,10 +328,9 @@ describe("prepare/finalize — mesmo commit", () => {
 
 			// Finalize sem ciclo preparado: no-op (não degrada o relatório).
 			const finalizedAgain = finalize(
-				opts,
-				"main",
-				fakeHoundsmanConfig,
 				reviewContext(storage, storage.getReview(record.id) ?? record),
+				fakeHoundsmanConfig,
+				opts,
 			);
 			expect(finalizedAgain.messages.join("\n")).toContain("Nada a finalizar");
 			expect(storage.readArtifact(record.id, "review-resume.md")?.content).toBe(
@@ -380,10 +379,9 @@ describe("prepare sem alterações", () => {
 			};
 
 			const result = await prepare(
-				opts,
-				"main",
-				fakeHoundsmanConfig,
 				reviewContext(storage, record),
+				fakeHoundsmanConfig,
+				opts,
 			);
 			expect(result.messages.join("\n")).toContain("nenhuma run criada");
 			expect(storage.getReview(record.id)).toBeNull();
@@ -400,12 +398,7 @@ describe("prepare sem alterações", () => {
 				kind: "context",
 				content: "{}\n",
 			});
-			await prepare(
-				opts,
-				"main",
-				fakeHoundsmanConfig,
-				reviewContext(storage, kept),
-			);
+			await prepare(reviewContext(storage, kept), fakeHoundsmanConfig, opts);
 			expect(storage.getReview(kept.id)?.status).toBe("review_done");
 			expect(storage.readArtifact(kept.id, "context.json")).not.toBeNull();
 		} finally {
@@ -448,15 +441,9 @@ describe("prepare — progresso", () => {
 			};
 
 			const events: PrepareProgressEvent[] = [];
-			await prepare(
-				opts,
-				"main",
-				fakeHoundsmanConfig,
-				reviewContext(storage, record),
-				undefined,
-				undefined,
-				(event) => events.push(event),
-			);
+			await prepare(reviewContext(storage, record), fakeHoundsmanConfig, opts, {
+				onProgress: (event) => events.push(event),
+			});
 
 			const starts = events
 				.filter((event) => event.type === "start")
