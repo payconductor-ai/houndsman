@@ -77,7 +77,14 @@ staging global da review:
 
 - Sem achados → `"findings": []` (arquivo **obrigatório**).
 - Um achado por regra violada; não agrupar regras diferentes.
+- **Teto de 20 achados por watchdog.** Se houver mais, mantenha os de maior severidade e
+  agrupe ocorrências idênticas (mesmo trecho + mesma regra) em um único item. O JSON precisa
+  caber inteiro — relatório cortado perde achados.
+- `reviewedFiles ∪ skipped` deve cobrir **todo** o escopo do brief. O que não foi revisado
+  entra em `skipped` com o motivo (`budget`, `truncated`, `fora do fluxo`).
 - `file:line` sempre que possível; `evidence` quando o achado não é óbvio.
+- **Trecho truncado** (`… [trecho truncado]`): sem abrir o arquivo para ver o restante, não
+  afirme violação sobre ele — reduza a `confidence` ou não reporte.
 - **Escopo do diff:** a `line` deve cair dentro das faixas listadas em
   *Escopo do diff (símbolos alterados)* no brief. Código fora delas é contexto — não é
   achado desta revisão. Se a alteração quebra código não alterado, ancore o finding na

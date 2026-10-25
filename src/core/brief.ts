@@ -30,8 +30,8 @@ export const PROCEDURE: readonly string[] = [
 	"2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Trecho com o marcador `… [trecho truncado]` pode ser aberto, uma vez, para o restante.",
 	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.",
 	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.",
-	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.",
-	'6. **CONCLUDE** — grave o JSON no caminho de output. `reviewedFiles` é um subconjunto de `## Arquivos do seu domínio` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios). `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
+	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado. Trecho com o marcador de truncamento só sustenta achado depois de abrir o arquivo para ver o restante.",
+	'6. **CONCLUDE** — grave o JSON no caminho de output. `reviewedFiles` é um subconjunto de `## Arquivos do seu domínio` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios) e o que ficou de fora entra em `skipped` ("budget", "truncated" ou "fora do fluxo"). Máximo de 20 achados: priorize severidade e agrupe ocorrências idênticas. `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
 /**

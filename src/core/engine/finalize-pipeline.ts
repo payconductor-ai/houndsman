@@ -57,6 +57,15 @@ export function coverageOf(
 	return { reviewed: reviewed.size, expected: expected.size };
 }
 
+/** Arquivos do escopo que o relatório não declarou ter revisado. */
+export function missingFiles(
+	reviewedFiles: readonly string[],
+	expectedFiles: readonly string[],
+): string[] {
+	const reviewed = new Set(reviewedFiles);
+	return expectedFiles.filter((file) => !reviewed.has(file));
+}
+
 /**
  * Cobertura por domínio (achados × arquivos revisados/esperados) para a tabela
  * do resumo final. Não grava relatório por domínio: os achados vivem na triagem
@@ -263,21 +272,30 @@ export class FinalizePipeline {
 		);
 
 		// Lacuna de cobertura: arquivos do escopo que ninguém declarou ter revisado.
-		const gaps = domains.filter(
-			(domain) => domain.reviewedFiles < domain.expectedFiles,
-		);
+		const gaps = reports.flatMap((report) => {
+			const expected = classification.watchdogs[report.watchdogId] ?? [];
+			const missing = missingFiles(report.reviewedFiles, expected);
+			if (missing.length === 0) return [];
+			return [
+				{
+					id: report.watchdogId,
+					missing,
+					coverage: coverageOf(report.reviewedFiles, expected),
+				},
+			];
+		});
 		if (gaps.length > 0) {
-			const missing = gaps.reduce(
-				(total, domain) => total + (domain.expectedFiles - domain.reviewedFiles),
-				0,
-			);
+			const total = gaps.reduce((sum, gap) => sum + gap.missing.length, 0);
+			const detail = gaps
+				.map((gap) => {
+					const sample = gap.missing.slice(0, 3).join(", ");
+					const rest =
+						gap.missing.length > 3 ? ` (+${gap.missing.length - 3})` : "";
+					return `${nameOf(gap.id)} (${gap.coverage.reviewed}/${gap.coverage.expected}): ${sample}${rest}`;
+				})
+				.join("; ");
 			messages.push(
-				`Cobertura: ${missing} arquivo(s) sem revisão declarada em ${gaps
-					.map(
-						(domain) =>
-							`${domain.name} (${domain.reviewedFiles}/${domain.expectedFiles})`,
-					)
-					.join(", ")}.`,
+				`Cobertura: ${total} arquivo(s) sem revisão declarada — ${detail}.`,
 			);
 		}
 

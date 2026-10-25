@@ -14,7 +14,7 @@ import {
 } from "../core/config";
 import { parseDiffIndex, parseNumstat } from "../core/diff-source";
 import { discoverDocs } from "../core/doc-discoverer";
-import { coverageOf } from "../core/engine/finalize-pipeline";
+import { coverageOf, missingFiles } from "../core/engine/finalize-pipeline";
 import { overlapMessage } from "../core/engine/prepare-pipeline";
 import {
 	type ClassificationResult,
@@ -578,6 +578,12 @@ describe("report-builder", () => {
 			["src/a.ts", "src/b.ts", "src/c.ts"],
 		);
 		expect(coverage).toEqual({ reviewed: 2, expected: 3 });
+	});
+
+	test("lista os arquivos do escopo que não foram declarados", () => {
+		expect(
+			missingFiles(["src/a.ts", "src/fora.ts"], ["src/a.ts", "src/b.ts"]),
+		).toEqual(["src/b.ts"]);
 	});
 
 	test("avisa quando um arquivo entra em vários domínios", () => {
