@@ -11,6 +11,7 @@ export class StatusCommand implements Command {
 		const parser = ArgParser.from(args);
 		const action = parser.command();
 		const branch = parser.value("--branch");
+		const variant = parser.value("--variant");
 
 		if (action && action !== "ping" && action !== "show") {
 			context.err(
@@ -22,8 +23,8 @@ export class StatusCommand implements Command {
 		const engine = await context.engine();
 		const result =
 			action === "ping"
-				? pingStatus(engine.storage, engine.repo, branch)
-				: readStatus(engine.storage, engine.repo, branch);
+				? pingStatus(engine.storage, engine.repo, branch, variant)
+				: readStatus(engine.storage, engine.repo, branch, variant);
 
 		if (action === "ping") {
 			context.out(

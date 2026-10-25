@@ -101,6 +101,58 @@ concurrency: { jev: 8 },
 
 > Em PRs pequenos o orçamento não muda nada (o default de 40 raramente é atingido).
 
+### Custo e latência da revisão
+
+O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/código) e por
+**chamadas de IA do prepare**. O motor corta os dois:
+
+- **Trechos alterados no brief.** Todos os watchdogs recebem `## Trechos alterados (diff)`
+  (patch `-U0`, só linhas alteradas; caps de 1.5k/arquivo e 12k/brief — o `general` recebe
+  2.5k/24k). O subagente começa pelo diff e abre o arquivo apenas para contexto adjacente.
+- **Modelo de intenção recortado.** O `general` vê o modelo completo; cada domínio recebe só
+  os fluxos que tocam seus arquivos (e não recebe o caminho do JSON canônico), evitando que
+  persiga fluxos de outros watchdogs.
+- **Fases do prepare em paralelo.** Contexto ∥ pré-análise, depois intenção, depois hipóteses
+  do `general` ∥ resumo técnico ∥ planos de brief. `ai.concurrency` default **4**.
+- **Harness em uma onda.** `hunt.concurrency` default **8** — domínios + `general` rodam
+  juntos; `--hunt-concurrency` ajusta se o provider limitar a taxa.
+- **Despacho da skill.** Despache todos os briefs da onda no **mesmo bloco** de tool calls;
+  serializar N subagentes custa N × o tempo de um.
+
+Para diagnosticar, o prepare grava `prepare-report.json` (duração por etapa + uso de IA) e o
+CLI imprime cada etapa. No `houndsman hunt`, `hunt-report.json` traz `durationMs`, `numTurns`
+e tokens por watchdog.
+
+### Teste A/B (variantes da mesma PR)
+
+A identidade de uma run é `(repoKey, branch, variant)`. Rótulos de variante permitem rodar a
+mesma PR duas vezes **sem apagar** a anterior:
+
+```bash
+# A: baseline
+houndsman --pr 456 --variant baseline
+houndsman --pr 456 --variant baseline --finalize
+
+# B: candidato (prompt/modelo/configuração nova)
+houndsman --pr 456 --variant otimizado
+houndsman --pr 456 --variant otimizado --finalize
+
+houndsman compare --branch <head> --a baseline --b otimizado
+```
+
+- `--variant <label>` acompanha `houndsman` (default), `hunt`, `context`, `status`,
+  `findings` e `verify` — use o mesmo rótulo em todas as etapas.
+- A UI lista cada variante como uma run (`--variant` aparece como badge na sidebar).
+- `compare` aceita `--branch` + `--a/--b` ou dois slugs (`houndsman compare <a> <b>`), e
+  `--list` mostra as runs da branch com contagem por severidade. O relatório
+  `compare-<a>--<b>.md|.json` fica nos artefatos da run B.
+- O relatório compara **achados presentes**, severidade, cobertura, duração e tokens — não
+  elege vencedor; confirme cada achado novo no código.
+- Tokens/custo aparecem quando medidos: `hunt-report.json` (harness maki) ou `ai-usage.json`
+  (IA do prepare). No modo skill, o consumo dos subagentes não passa pelo CLI.
+- Repetir a mesma variante reusa a run: `--full` re-revisa o commit. Para um teste limpo,
+  use um rótulo novo.
+
 ### Onde o Jev entra
 
 O **Jev** é o **Passo 1.5** — roda **dentro do CLI, na mesma etapa do Passo 1 (preparar)**,

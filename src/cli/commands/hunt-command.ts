@@ -49,6 +49,7 @@ Subcomandos:
 Flags:
   --pr <n>            Revisa a PR em worktree dedicado
   --branch <b>        Branch alvo
+  --variant <label>   Rótulo da variante A/B (runs separadas para a mesma branch)
   --worktree <path>   Worktree já existente
   --allow-partial     Finaliza mesmo se algum watchdog falhar (findings vazios)
   --no-context        Não coleta o contexto da PR via gh
@@ -180,6 +181,7 @@ export class HuntCommand implements Command {
 						engine.repo,
 						{
 							branch: workspace.branch,
+							variant: options.variant,
 							worktreePath: workspace.worktreePath,
 							prNumber: workspace.prNumber,
 						},

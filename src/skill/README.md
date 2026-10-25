@@ -45,26 +45,28 @@ O CLI só substitui o despacho manual dos subagentes por processos maki headless
 
 | Passo | Comando | Quem roda | Resultado |
 |---|---|---|---|
-| 0. Contexto | `bun run houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
+| 0. Contexto | `houndsman --pr` (via `gh`) | prepare | `context.json` + `context-brief.md` → `context-summary.json` (IA; sem IA, subagente) |
 | 1. Preparar | `bun run houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
-| 1.5. Intenção | *(subagente)* | skill | `business-summary.json` enriquecido (só quando não veio da IA) |
+| 1.5. Intenção | *(subagente)* | skill, só sem IA | `business-summary.json` enriquecido (só quando não veio da IA) |
 | 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (inclui o `general`, sempre ativo) |
 | 3. Finalizar | `bun run houndsman --finalize` | skill | `review.md` |
 
-> **Alvo = PR** (ex.: “revise a PR 456”): troque os passos por `houndsman context --pr 456`,
-> `houndsman --pr 456` e `houndsman --pr 456 --finalize`. O prepare cria um **worktree**
-> detached em `<repo>/.houndsman/worktrees/<repo>/<branch>`; os briefs trazem
-> `**Worktree:**` e os subagentes devem ler essa árvore (nunca o clone principal).
+> **Alvo = PR** (ex.: “revise a PR 456”): use `houndsman --pr 456` e
+> `houndsman --pr 456 --finalize`. O prepare coleta o contexto via `gh`, cria um **worktree**
+> detached em `<repo>/.houndsman/worktrees/<repo>/<branch>` e resume o contexto com IA;
+> os briefs trazem `**Worktree:**` e os subagentes devem ler essa árvore (nunca o clone
+> principal). Despache os briefs em paralelo (mesmo bloco de tool calls).
 
 ## Comandos
 
 | Comando | Função |
 |---|---|
-| `houndsman context` | Passo 0 — contexto da PR via `gh` (`--pr <n>`/`--worktree <path>`) |
+| `houndsman context` | Contexto da PR via `gh` (`--pr <n>`/`--worktree <path>`) — o prepare já coleta com `--pr` |
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --pr <n>` | Passo 1 em worktree dedicado (revisões paralelas) |
 | `houndsman --finalize` | Passo 3 — gerar o relatório (`--pr <n>` reusa o worktree) |
 | `houndsman hunt [--pr <n>]` | Harness local opcional (maki): prepare → watchdogs → finalize |
+| `houndsman compare` | Compara duas runs/variantes (`--list`, `--a`, `--b` ou dois slugs) |
 | `houndsman hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |

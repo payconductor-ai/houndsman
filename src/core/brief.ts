@@ -6,6 +6,7 @@
  */
 
 import type { AstDelta } from "./ast/types";
+import { GENERAL_WATCHDOG_ID } from "./builtins";
 import { type BusinessSummary, renderBusinessLines } from "./business-summary";
 import { formatRanges, formatSymbols } from "./changed-scope";
 import {
@@ -25,12 +26,12 @@ import {
  * piso, mas a revisão começa entendendo o que a mudança deve entregar.
  */
 export const PROCEDURE: readonly string[] = [
-	"1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.",
-	"2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.",
-	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).",
-	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.",
+	"1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.",
+	"2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.",
+	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.",
+	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.",
 	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.",
-	'6. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
+	'6. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido (arquivo cujo trecho está no brief conta como revisado) e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
 
 /** Limites do contexto injetado em cada brief (o resumo final é maior). */
@@ -240,38 +241,87 @@ const BUSINESS_SOURCE_LABEL: Record<BusinessSummary["source"], string> = {
 };
 
 /**
+ * Recorte do modelo de intenção: só fluxos que tocam os arquivos do watchdog.
+ *
+ * O modelo é global; injetá-lo inteiro em cada brief fazia o subagente
+ * perseguir fluxos de outros domínios (mais leituras e buscas sem achado).
+ */
+function scopeBusinessToFiles(
+	business: BusinessSummary,
+	files: readonly string[],
+): BusinessSummary {
+	if (files.length === 0) return business;
+	// O modelo vem da IA e pode usar `./`, `\` ou caminho absoluto: normaliza
+	// antes de comparar para não perder um fluxo do próprio domínio.
+	const normalize = (value: string): string =>
+		value.replace(/\\/g, "/").replace(/^\.\//, "");
+	const own = new Set(files.map(normalize));
+	const flows = business.flows.filter(
+		(flow) =>
+			!flow.files ||
+			flow.files.length === 0 ||
+			flow.files.some((file) => own.has(normalize(file))),
+	);
+	if (flows.length === business.flows.length) return business;
+	return { ...business, flows };
+}
+
+/**
  * Modelo de intenção da PR — o contrato esperado antes de julgar o código.
  *
- * Injetado em todos os briefs; o revisor `general` é quem o reconstrói.
+ * Injetado em todos os briefs; o revisor `general` recebe o modelo completo, os
+ * watchdogs de domínio recebem só o recorte dos seus arquivos.
  */
 function businessSection(args: WatchdogRenderArgs): string[] {
 	const business = args.business;
 	if (!business) return [];
+	const isGeneral = args.watchdogId === GENERAL_WATCHDOG_ID;
+	const scoped = isGeneral
+		? business
+		: { ...scopeBusinessToFiles(business, args.files), openQuestions: [] };
+	const omitted = business.flows.length - scoped.flows.length;
+	// O caminho canônico só interessa a quem reconstrói o modelo (`general`):
+	// nos demais, citá-lo induzia uma leitura extra do JSON completo.
+	const canonical =
+		args.businessSummaryPath && (isGeneral || args.flowReview)
+			? ` · \`${args.businessSummaryPath}\` (versão canônica no staging)`
+			: "";
 	const lines = [
 		"## Modelo de intenção (negócio)",
 		"",
-		`> Fonte: ${BUSINESS_SOURCE_LABEL[business.source]}` +
-			(args.businessSummaryPath
-				? ` · \`${args.businessSummaryPath}\` (versão canônica no staging)`
-				: "") +
-			". Use para saber o que a mudança **deve** entregar; não é achado.",
+		`> Fonte: ${BUSINESS_SOURCE_LABEL[business.source]}${canonical}. Use para saber o que a mudança **deve** entregar; não é achado.`,
 		"",
 	];
-	const rendered = renderBusinessLines(business);
+	if (!isGeneral) {
+		lines.push(
+			"> Recorte do seu domínio: fluxos/arquivos de outros domínios pertencem a outros watchdogs — não os investigue.",
+			...(omitted > 0
+				? [`> ${omitted} fluxo(s) fora do seu domínio foram omitidos.`]
+				: []),
+			"",
+		);
+	}
+	const rendered = renderBusinessLines(
+		scoped,
+		isGeneral
+			? { flows: 12, invariants: 12, contracts: 12, states: 8 }
+			: { flows: 3, invariants: 6, contracts: 2, states: 2 },
+	);
 	while (rendered[0] === "") rendered.shift();
 	lines.push(...rendered, "");
 	return lines;
 }
 
-/** Trechos alterados (diff) — só o revisor de fluxo recebe o patch no brief. */
+/** Trechos alterados (diff) — todos os watchdogs recebem o patch do seu domínio. */
 function snippetsSection(args: WatchdogRenderArgs): string[] {
 	const snippets = args.snippets ?? [];
 	if (snippets.length === 0) return [];
 	const lines = [
 		"## Trechos alterados (diff)",
 		"",
-		"> Apenas as linhas alteradas. O restante do arquivo é contexto; um finding",
-		"> só é válido quando a `line` está nas faixas do escopo.",
+		"> Trechos já extraídos do diff (`-U0`, só linhas alteradas). Eles bastam",
+		"> para achar violações: **não abra os arquivos apenas para reler o que já",
+		"> está aqui**. Use o arquivo só para contexto adjacente ou chamadores.",
 		"",
 	];
 	for (const item of snippets) {

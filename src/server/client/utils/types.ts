@@ -80,6 +80,8 @@ export type ArtifactKind =
 	| "ai"
 	| "ai-usage"
 	| "ai-brief"
+	| "prepare"
+	| "compare"
 	| "other";
 
 /** Metadados de artefato retornados pela API (sem conteúdo). */
@@ -93,6 +95,8 @@ export type ArtifactMeta = {
 export type RunSummary = {
 	slug: string;
 	branch: string;
+	/** Variante A/B (ausente = run principal da branch). */
+	variant?: string;
 	/** Worktree onde a run foi executada (ausente = clone principal). */
 	worktreePath?: string;
 	prNumber?: number;

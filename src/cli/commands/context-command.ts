@@ -51,6 +51,7 @@ export class ContextCommand implements Command {
 			engine.repo,
 			{
 				branch: workspace?.branch ?? parser.value("--branch"),
+				variant: parser.value("--variant"),
 				worktreePath: workspace?.worktreePath,
 				prNumber: workspace?.prNumber,
 			},

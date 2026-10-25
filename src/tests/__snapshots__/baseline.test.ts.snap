@@ -62,12 +62,12 @@ src/alpha/**
 
 ## Procedimento
 
-1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
-2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
-3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).
-4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
+2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
-6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
 exports[`baseline — relatório renderReport consolidado 1`] = `
@@ -266,11 +266,15 @@ Interprete o alvo em linguagem natural **antes** de rodar o CLI:
 Sequência para uma PR (ex.: 456):
 
 \`\`\`bash
-houndsman context --pr 456
-houndsman --pr 456                 # cria/reusa o worktree e imprime o caminho
-# despache os briefs (cada um traz **Worktree:** <path>)
+houndsman --pr 456                 # cria/reusa o worktree, coleta o contexto e prepara
+# despache os briefs em paralelo (cada um traz **Worktree:** <path>)
 houndsman --pr 456 --finalize
 \`\`\`
+
+- O contexto da PR é coletado pelo próprio prepare (via \`gh\`); com IA ligada ele também é
+  resumido ali — não gaste um subagente nisso. Desative com \`--no-context\`.
+- Para comparar duas execuções, use \`--variant <label>\` em cada uma e depois
+  \`houndsman compare --branch <head> --a <a> --b <b>\` (ou \`compare --list\`).
 
 - O worktree vive em \`<repo>/.houndsman/worktrees/<repo>/<branch>\` (detached no commit da PR)
   e é reutilizado nas próximas execuções da mesma branch. Ele fica **dentro do workspace**
@@ -360,11 +364,15 @@ Interprete o alvo em linguagem natural **antes** de rodar o CLI:
 Sequência para uma PR (ex.: 456):
 
 \`\`\`bash
-houndsman context --pr 456
-houndsman --pr 456                 # cria/reusa o worktree e imprime o caminho
-# despache os briefs (cada um traz **Worktree:** <path>)
+houndsman --pr 456                 # cria/reusa o worktree, coleta o contexto e prepara
+# despache os briefs em paralelo (cada um traz **Worktree:** <path>)
 houndsman --pr 456 --finalize
 \`\`\`
+
+- O contexto da PR é coletado pelo próprio prepare (via \`gh\`); com IA ligada ele também é
+  resumido ali — não gaste um subagente nisso. Desative com \`--no-context\`.
+- Para comparar duas execuções, use \`--variant <label>\` em cada uma e depois
+  \`houndsman compare --branch <head> --a <a> --b <b>\` (ou \`compare --list\`).
 
 - O worktree vive em \`<repo>/.houndsman/worktrees/<repo>/<branch>\` (detached no commit da PR)
   e é reutilizado nas próximas execuções da mesma branch. Ele fica **dentro do workspace**
@@ -688,7 +696,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "d7e1fde6e3043344",
+    "sha256": "2d9c1de9e37d31aa",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
@@ -704,7 +712,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "93f036176d7f2044",
+    "sha256": "2db0c3df1f99bfe6",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -910,11 +918,44 @@ src/alpha/**
 
 ## Modelo de intenção (negócio)
 
-> Fonte: determinístico · \`<cwd>\\.home\\work\\<uuid>\\business-summary.json\` (versão canônica no staging). Use para saber o que a mudança **deve** entregar; não é achado.
+> Fonte: determinístico. Use para saber o que a mudança **deve** entregar; não é achado.
+
+> Recorte do seu domínio: fluxos/arquivos de outros domínios pertencem a outros watchdogs — não os investigue.
 
 **Fluxos (1):**
 - **Alpha**
   arquivos: src/alpha/a.ts, src/alpha/b.ts
+
+## Trechos alterados (diff)
+
+> Trechos já extraídos do diff (\`-U0\`, só linhas alteradas). Eles bastam
+> para achar violações: **não abra os arquivos apenas para reler o que já
+> está aqui**. Use o arquivo só para contexto adjacente ou chamadores.
+
+### \`src/alpha/a.ts\`
+
+\`\`\`diff
+diff --git a/src/alpha/a.ts b/src/alpha/a.ts
+index cc798ff..bc84e2e 100644
+--- a/src/alpha/a.ts
++++ b/src/alpha/a.ts
+@@ -1 +1,2 @@
+-export const a = 1;
++export const a: any = 1;
++export const b = 2;
+\`\`\`
+
+### \`src/alpha/b.ts\`
+
+\`\`\`diff
+diff --git a/src/alpha/b.ts b/src/alpha/b.ts
+new file mode 100644
+index 0000000..f4082f0
+--- /dev/null
++++ b/src/alpha/b.ts
+@@ -0,0 +1 @@
++export const b = 3;
+\`\`\`
 
 ## Regras (por severidade)
 
@@ -936,12 +977,12 @@ src/alpha/**
 
 ## Procedimento
 
-1. **RECONSTRUCT** — leia o *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
-2. **SCOPE** — carregue apenas as faixas alteradas em *Escopo do diff*; o restante do arquivo é só contexto.
-3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados. Compare o declarado com o honrado (feature/método/evento/webhook, credencial/conta, estado).
-4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas.
+1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
+2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
-6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "
 `;
 

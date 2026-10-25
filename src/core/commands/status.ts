@@ -33,11 +33,14 @@ function findReview(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	branch?: string,
+	variant?: string,
 ): ReviewRecord {
 	const target = branch ?? currentBranch();
-	const review = storage.findReview(repo.key, target);
+	const review = storage.findReview(repo.key, target, variant);
 	if (!review) {
-		throw new Error(`Nenhuma revisão para '${target}'.`);
+		throw new Error(
+			`Nenhuma revisão para '${target}'${variant ? ` (variante '${variant}')` : ""}.`,
+		);
 	}
 	return review;
 }
@@ -47,8 +50,9 @@ export function readStatus(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	branch?: string,
+	variant?: string,
 ): StatusResult {
-	return toResult(findReview(storage, repo, branch));
+	return toResult(findReview(storage, repo, branch, variant));
 }
 
 /** Renova o heartbeat de uma execução ativa (`reviewing`/`fixing`). */
@@ -56,8 +60,9 @@ export function pingStatus(
 	storage: StorageProvider,
 	repo: RepoIdentity,
 	branch?: string,
+	variant?: string,
 	now?: string,
 ): StatusResult {
-	const review = findReview(storage, repo, branch);
+	const review = findReview(storage, repo, branch, variant);
 	return toResult(touchRunStatus(storage, review.id, now));
 }

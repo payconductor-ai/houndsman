@@ -39,7 +39,7 @@ export class FileStorageProvider implements StorageProvider {
 	// -----------------------------------------------------------------------
 
 	getOrCreateReview(input: CreateReviewInput): ReviewRecord {
-		const existing = this.findReview(input.repo.key, input.branch);
+		const existing = this.findReview(input.repo.key, input.branch, input.variant);
 		if (existing) {
 			if (
 				existing.repoRoot !== input.repo.root ||
@@ -66,6 +66,7 @@ export class FileStorageProvider implements StorageProvider {
 			repoRoot: input.repo.root,
 			repoRemote: input.repo.remote,
 			branch: input.branch,
+			variant: input.variant?.trim() || undefined,
 			slug: input.slug,
 			base: input.base,
 			head: input.head,
@@ -78,9 +79,12 @@ export class FileStorageProvider implements StorageProvider {
 		return this.writeReview(record);
 	}
 
-	findReview(repoKey: string, branch: string): ReviewRecord | null {
+	findReview(repoKey: string, branch: string, variant?: string): ReviewRecord | null {
+		const label = variant?.trim() ?? "";
 		return (
-			this.readReviews(repoKey).find((review) => review.branch === branch) ?? null
+			this.readReviews(repoKey).find(
+				(review) => review.branch === branch && (review.variant ?? "") === label,
+			) ?? null
 		);
 	}
 

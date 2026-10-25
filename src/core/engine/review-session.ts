@@ -20,7 +20,7 @@ import {
 	resolveBranch,
 	reviewContext,
 } from "../orchestrator";
-import { sanitizeBranch } from "../report-builder";
+import { reviewSlug } from "../report-builder";
 import { GitRepository } from "../services/git-repository";
 import type { RepoIdentity, StorageProvider } from "../storage/types";
 
@@ -48,12 +48,14 @@ export class ReviewSession {
 		this.branch = branch;
 		this.ast = ast;
 		this.ai = ai;
+		const variant = options.variant?.trim() || undefined;
 		const review = options.finalize
-			? storage.findReview(repo.key, branch)
+			? storage.findReview(repo.key, branch, variant)
 			: storage.getOrCreateReview({
 					repo,
 					branch,
-					slug: sanitizeBranch(branch),
+					variant,
+					slug: reviewSlug(branch, variant),
 					base: options.base,
 					head: options.head,
 					worktreePath: options.worktreePath,
@@ -61,7 +63,7 @@ export class ReviewSession {
 				});
 		if (!review) {
 			throw new Error(
-				`Nenhuma revisão para '${branch}'. Rode \`houndsman\` (preparar) primeiro.`,
+				`Nenhuma revisão para '${branch}'${variant ? ` (variante '${variant}')` : ""}. Rode \`houndsman\` (preparar) primeiro.`,
 			);
 		}
 		// Um prepare no clone principal invalida um worktree usado antes; o finalize

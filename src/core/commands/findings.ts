@@ -68,6 +68,7 @@ const VALUE_FLAGS = new Set([
 	"--severity",
 	"--file",
 	"--branch",
+	"--variant",
 	"--limit",
 	"--comment",
 	"--by",
@@ -124,10 +125,11 @@ function openContext(
 	parsed: ParsedArgs,
 ): CommandContext {
 	const branch = parsed.values["--branch"] ?? currentBranch();
-	const review = storage.findReview(repo.key, branch);
+	const variant = parsed.values["--variant"]?.trim() || undefined;
+	const review = storage.findReview(repo.key, branch, variant);
 	if (!review) {
 		throw new Error(
-			`Nenhuma revisão para '${branch}'. Rode \`houndsman --finalize\` primeiro.`,
+			`Nenhuma revisão para '${branch}'${variant ? ` (variante '${variant}')` : ""}. Rode \`houndsman --finalize\` primeiro.`,
 		);
 	}
 	const worktree = review.worktreePath;

@@ -101,7 +101,7 @@ export type HoundsmanAi = {
 	model?: string;
 	/** Base URL customizada do provider. */
 	baseURL?: string;
-	/** Chamadas simultâneas (default: 2). */
+	/** Chamadas simultâneas (default: 4). */
 	concurrency?: number;
 	/** Opções do AI SDK por provider (repassadas sem interpretação). */
 	providerOptions?: AiProviderOptions;
@@ -132,7 +132,7 @@ export type HoundsmanWorktrees = {
  * Harness local da capability `hunt` (`houndsman hunt`) — opcional.
  *
  * Sem esta config, o comando usa defaults seguros: modelo derivado de `ai`,
- * 4 processos simultâneos e timeout de 15 min por watchdog. A skill
+ * 8 processos simultâneos (uma onda) e timeout de 15 min por watchdog. A skill
  * `/houndsman hunt` (harness externo) não depende deste bloco.
  */
 export type HoundsmanHunt = {
@@ -140,7 +140,7 @@ export type HoundsmanHunt = {
 	enabled?: boolean;
 	/** Modelo no formato do maki (`provider/model-id`). Default: derivado de `ai`. */
 	model?: string;
-	/** Processos maki simultâneos (default: 4). */
+	/** Processos maki simultâneos (default: 8). */
 	concurrency?: number;
 	/** Timeout por watchdog em ms (default: 900_000). */
 	timeoutMs?: number;

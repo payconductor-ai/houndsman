@@ -65,11 +65,15 @@ Interprete o alvo em linguagem natural **antes** de rodar o CLI:
 Sequência para uma PR (ex.: 456):
 
 ```bash
-houndsman context --pr 456
-houndsman --pr 456                 # cria/reusa o worktree e imprime o caminho
-# despache os briefs (cada um traz **Worktree:** <path>)
+houndsman --pr 456                 # cria/reusa o worktree, coleta o contexto e prepara
+# despache os briefs em paralelo (cada um traz **Worktree:** <path>)
 houndsman --pr 456 --finalize
 ```
+
+- O contexto da PR é coletado pelo próprio prepare (via `gh`); com IA ligada ele também é
+  resumido ali — não gaste um subagente nisso. Desative com `--no-context`.
+- Para comparar duas execuções, use `--variant <label>` em cada uma e depois
+  `houndsman compare --branch <head> --a <a> --b <b>` (ou `compare --list`).
 
 - O worktree vive em `<repo>/.houndsman/worktrees/<repo>/<branch>` (detached no commit da PR)
   e é reutilizado nas próximas execuções da mesma branch. Ele fica **dentro do workspace**

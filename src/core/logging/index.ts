@@ -16,4 +16,9 @@ export type {
 } from "./logger";
 export { Logger, SilentLogger } from "./logger";
 export type { ProgressBoardOptions } from "./progress";
-export { formatDuration, PhaseReporter, ProgressBoard } from "./progress";
+export {
+	formatDuration,
+	ParallelPhaseReporter,
+	PhaseReporter,
+	ProgressBoard,
+} from "./progress";

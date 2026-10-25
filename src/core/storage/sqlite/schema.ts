@@ -7,7 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS reviews (
@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	repo_root TEXT NOT NULL,
 	repo_remote TEXT,
 	branch TEXT NOT NULL,
+	variant TEXT NOT NULL DEFAULT '',
 	slug TEXT NOT NULL,
 	base TEXT,
 	head TEXT,
@@ -29,7 +30,7 @@ CREATE TABLE IF NOT EXISTS reviews (
 	pr_number INTEGER,
 	created_at TEXT NOT NULL,
 	updated_at TEXT NOT NULL,
-	UNIQUE(repo_key, branch)
+	UNIQUE(repo_key, branch, variant)
 );
 
 CREATE INDEX IF NOT EXISTS idx_reviews_repo_updated
@@ -97,7 +98,6 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_review ON artifacts(review_id);
 
 /** Aplica pragmas e cria o schema quando necessário. */
 export function migrate(db: Database, path: string): void {
-	db.exec("PRAGMA foreign_keys = ON;");
 	db.exec("PRAGMA busy_timeout = 5000;");
 	db.exec("PRAGMA synchronous = NORMAL;");
 	if (path !== ":memory:") db.exec("PRAGMA journal_mode = WAL;");
@@ -106,33 +106,102 @@ export function migrate(db: Database, path: string): void {
 		user_version?: number;
 	} | null;
 	const version = Number(row?.user_version ?? 0);
-	if (version >= SCHEMA_VERSION) return;
+	if (version >= SCHEMA_VERSION) {
+		db.exec("PRAGMA foreign_keys = ON;");
+		return;
+	}
 
-	db.transaction(() => {
-		db.exec(DDL);
-		// v2: heartbeat explícito da execução; v3: worktree/pr da revisão;
-		// v4: cenário/impacto/confiança/origem do finding.
-		const addMissing = (table: string, columns: [string, string][]): void => {
-			const info = db.query(`PRAGMA table_info(${table})`).all() as {
-				name: string;
-			}[];
-			for (const [name, type] of columns) {
-				if (!info.some((column) => column.name === name)) {
-					db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+	// O rebuild de `reviews` (v5) troca a chave única e precisa de FKs desligadas:
+	// com elas ligadas, `DROP TABLE reviews` cascatearia e apagaria os filhos.
+	db.exec("PRAGMA foreign_keys = OFF;");
+	try {
+		db.transaction(() => {
+			db.exec(DDL);
+			// v2: heartbeat explícito da execução; v3: worktree/pr da revisão;
+			// v4: cenário/impacto/confiança/origem do finding.
+			const addMissing = (table: string, columns: [string, string][]): void => {
+				const info = db.query(`PRAGMA table_info(${table})`).all() as {
+					name: string;
+				}[];
+				for (const [name, type] of columns) {
+					if (!info.some((column) => column.name === name)) {
+						db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+					}
 				}
-			}
-		};
-		addMissing("reviews", [
-			["heartbeat_at", "TEXT"],
-			["worktree_path", "TEXT"],
-			["pr_number", "INTEGER"],
-		]);
-		addMissing("findings", [
-			["scenario", "TEXT"],
-			["impact", "TEXT"],
-			["confidence", "REAL"],
-			["basis", "TEXT"],
-		]);
-		db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-	})();
+			};
+			addMissing("reviews", [
+				["heartbeat_at", "TEXT"],
+				["worktree_path", "TEXT"],
+				["pr_number", "INTEGER"],
+			]);
+			addMissing("findings", [
+				["scenario", "TEXT"],
+				["impact", "TEXT"],
+				["confidence", "REAL"],
+				["basis", "TEXT"],
+			]);
+			// v5: variante A/B na identidade da review.
+			rebuildReviewsWithVariant(db);
+			db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+		})();
+	} finally {
+		db.exec("PRAGMA foreign_keys = ON;");
+	}
+	const violations = db.query("PRAGMA foreign_key_check").all();
+	if (violations.length > 0) {
+		throw new Error(
+			`Migração do banco deixou ${violations.length} referência(s) inválida(s).`,
+		);
+	}
+}
+
+/**
+ * v5 — adiciona `variant` e troca `UNIQUE(repo_key, branch)` por
+ * `UNIQUE(repo_key, branch, variant)`.
+ *
+ * SQLite não remove constraint inline: recria a tabela preservando os ids (as
+ * FKs dos filhos continuam válidas) e recria o índice.
+ */
+function rebuildReviewsWithVariant(db: Database): void {
+	const columns = db.query("PRAGMA table_info(reviews)").all() as {
+		name: string;
+	}[];
+	if (columns.some((column) => column.name === "variant")) return;
+
+	db.exec(`
+CREATE TABLE reviews_v5 (
+	id TEXT PRIMARY KEY,
+	repo_key TEXT NOT NULL,
+	repo_root TEXT NOT NULL,
+	repo_remote TEXT,
+	branch TEXT NOT NULL,
+	variant TEXT NOT NULL DEFAULT '',
+	slug TEXT NOT NULL,
+	base TEXT,
+	head TEXT,
+	head_sha TEXT,
+	reviewed_sha TEXT,
+	reviewed_at TEXT,
+	status TEXT,
+	started_at TEXT,
+	heartbeat_at TEXT,
+	worktree_path TEXT,
+	pr_number INTEGER,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL,
+	UNIQUE(repo_key, branch, variant)
+);
+INSERT INTO reviews_v5
+	(id, repo_key, repo_root, repo_remote, branch, variant, slug, base, head,
+	 head_sha, reviewed_sha, reviewed_at, status, started_at, heartbeat_at,
+	 worktree_path, pr_number, created_at, updated_at)
+SELECT id, repo_key, repo_root, repo_remote, branch, '', slug, base, head,
+	 head_sha, reviewed_sha, reviewed_at, status, started_at, heartbeat_at,
+	 worktree_path, pr_number, created_at, updated_at
+FROM reviews;
+DROP TABLE reviews;
+ALTER TABLE reviews_v5 RENAME TO reviews;
+CREATE INDEX IF NOT EXISTS idx_reviews_repo_updated
+	ON reviews(repo_key, updated_at DESC);
+`);
 }

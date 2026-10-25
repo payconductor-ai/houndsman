@@ -52,6 +52,11 @@ export type ReviewScope =
 			kind: "review";
 			classification: RunClassification;
 			diff: DiffSource;
+			/**
+			 * Patch `-U0` sem truncar (path → hunks). É o insumo dos briefs: cada
+			 * watchdog recebe os trechos alterados em vez de reler arquivos inteiros.
+			 */
+			patch: Map<string, string>;
 			reviewedFrom?: string;
 			/** Fatos/delta por arquivo alterado (quando o AST está habilitado). */
 			ast?: Map<string, AstAnalysis>;
@@ -144,6 +149,7 @@ export class ReviewScopeResolver {
 			return {
 				kind: "review",
 				diff,
+				patch: scopeDiff.byFile,
 				ast,
 				classification: {
 					...result,
@@ -192,7 +198,14 @@ export class ReviewScopeResolver {
 				ast,
 			}),
 		};
-		return { kind: "review", classification, diff, reviewedFrom: prevSha, ast };
+		return {
+			kind: "review",
+			classification,
+			diff,
+			patch: scopeDiff.byFile,
+			reviewedFrom: prevSha,
+			ast,
+		};
 	}
 
 	/**

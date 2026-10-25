@@ -35,6 +35,7 @@ import { formatDuration, logger } from "../core/logging";
 import { syncProjectLayerForRoot } from "../core/services/worktree-manager";
 import { ArgParser } from "./arg-parser";
 import type { CliContext } from "./commands/command";
+import { CompareCommand } from "./commands/compare-command";
 import { ContextCommand } from "./commands/context-command";
 import { DoctorCommand } from "./commands/doctor-command";
 import { FindingsCommand } from "./commands/findings-command";
@@ -61,6 +62,7 @@ function buildRegistry(): CommandRegistry {
 		.register(new HelpCommand())
 		.register(new HuntCommand())
 		.register(new ContextCommand())
+		.register(new CompareCommand())
 		.register(new FindingsCommand())
 		.register(new StatusCommand())
 		.register(new WatchdogCommand())

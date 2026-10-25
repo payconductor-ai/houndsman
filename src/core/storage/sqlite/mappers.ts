@@ -22,6 +22,7 @@ export type ReviewRow = {
 	repo_root: string;
 	repo_remote: string | null;
 	branch: string;
+	variant: string;
 	slug: string;
 	base: string | null;
 	head: string | null;
@@ -95,6 +96,7 @@ export function reviewFromRow(row: ReviewRow): ReviewRecord {
 		repoRoot: row.repo_root,
 		repoRemote: row.repo_remote ?? undefined,
 		branch: row.branch,
+		variant: row.variant || undefined,
 		slug: row.slug,
 		base: row.base ?? undefined,
 		head: row.head ?? undefined,

@@ -22,10 +22,16 @@ export function parseReviewArgs(args: string[]): ReviewOptions {
 	const branch = parser.value("--branch");
 	const pr = parser.value("--pr");
 	const worktree = parser.value("--worktree");
+	const variant = parser.value("--variant");
 	if (base) opts.base = base;
 	if (head) opts.head = head;
 	if (branch) opts.branch = branch;
 	if (worktree) opts.worktree = worktree;
+	if (variant !== undefined) {
+		const label = variant.trim();
+		if (!label) throw new Error("--variant não pode ser vazio.");
+		opts.variant = label;
+	}
 	if (pr) {
 		const number = Number.parseInt(pr, 10);
 		if (!Number.isFinite(number) || number <= 0) {

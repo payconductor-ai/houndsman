@@ -28,6 +28,13 @@ export type ReviewRecord = {
 	repoRoot: string;
 	repoRemote?: string;
 	branch: string;
+	/**
+	 * Rótulo da variante A/B (ausente = run principal da branch).
+	 *
+	 * Faz parte da identidade junto com `(repoKey, branch)`: permite rodar a
+	 * mesma PR com dois experimentos sem apagar a revisão anterior.
+	 */
+	variant?: string;
 	slug: string;
 	base?: string;
 	head?: string;
@@ -81,6 +88,8 @@ export type CreateReviewInput = {
 	repo: RepoIdentity;
 	branch: string;
 	slug: string;
+	/** Variante A/B (ausente = run principal da branch). */
+	variant?: string;
 	base?: string;
 	head?: string;
 	/** Worktree onde a revisão roda (ausente = clone principal). */
@@ -113,6 +122,8 @@ export type ArtifactKind =
 	| "ai-usage"
 	| "ai-brief"
 	| "hunt"
+	| "prepare"
+	| "compare"
 	| "other";
 
 /** Artefato persistido de uma review. */
@@ -144,9 +155,10 @@ export type WriteArtifactInput = {
 export interface StorageProvider {
 	readonly kind: "sqlite" | "file";
 
-	/** Recupera ou cria a review de uma branch (identidade = repo + branch). */
+	/** Busca por identidade `(repo, branch, variante)`; variante ausente = principal. */
+	findReview(repoKey: string, branch: string, variant?: string): ReviewRecord | null;
+	/** Run da branch + variante (cria quando não existe). */
 	getOrCreateReview(input: CreateReviewInput): ReviewRecord;
-	findReview(repoKey: string, branch: string): ReviewRecord | null;
 	getReview(id: string): ReviewRecord | null;
 	/** Reviews do repositório (mais recentes primeiro); sem chave = todas. */
 	listReviews(repoKey?: string): ReviewRecord[];

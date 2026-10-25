@@ -69,7 +69,7 @@ export class SQLiteStorageProvider implements StorageProvider {
 	// -----------------------------------------------------------------------
 
 	getOrCreateReview(input: CreateReviewInput): ReviewRecord {
-		const existing = this.findReview(input.repo.key, input.branch);
+		const existing = this.findReview(input.repo.key, input.branch, input.variant);
 		if (existing) {
 			// O repo pode ter sido movido; a identidade continua a mesma.
 			const moved =
@@ -102,6 +102,7 @@ export class SQLiteStorageProvider implements StorageProvider {
 			repoRoot: input.repo.root,
 			repoRemote: input.repo.remote,
 			branch: input.branch,
+			variant: input.variant?.trim() || undefined,
 			slug: input.slug,
 			base: input.base,
 			head: input.head,
@@ -113,15 +114,16 @@ export class SQLiteStorageProvider implements StorageProvider {
 		};
 		this.db.run(
 			`INSERT INTO reviews
-				(id, repo_key, repo_root, repo_remote, branch, slug, base, head,
+				(id, repo_key, repo_root, repo_remote, branch, variant, slug, base, head,
 				 worktree_path, pr_number, created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			[
 				record.id,
 				record.repoKey,
 				record.repoRoot,
 				record.repoRemote ?? null,
 				record.branch,
+				record.variant ?? "",
 				record.slug,
 				record.base ?? null,
 				record.head ?? null,
@@ -134,10 +136,12 @@ export class SQLiteStorageProvider implements StorageProvider {
 		return record;
 	}
 
-	findReview(repoKey: string, branch: string): ReviewRecord | null {
+	findReview(repoKey: string, branch: string, variant?: string): ReviewRecord | null {
 		const row = this.db
-			.query("SELECT * FROM reviews WHERE repo_key = ? AND branch = ?")
-			.get(repoKey, branch) as ReviewRow | null;
+			.query(
+				"SELECT * FROM reviews WHERE repo_key = ? AND branch = ? AND variant = ?",
+			)
+			.get(repoKey, branch, variant?.trim() ?? "") as ReviewRow | null;
 		return row ? reviewFromRow(row) : null;
 	}
 

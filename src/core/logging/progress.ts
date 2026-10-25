@@ -83,13 +83,97 @@ export class PhaseReporter {
 	}
 }
 
+/**
+ * Relógio de fases **concorrentes** (prepare com etapas em paralelo).
+ *
+ * No TTY mantém um único spinner com a etapa mais recente e a contagem das
+ * demais; em pipe preserva o formato `→`/`✔` por etapa do `PhaseReporter`.
+ */
+export class ParallelPhaseReporter {
+	private readonly logger: LoggerLike;
+	private readonly active = new Map<string, string>();
+	private spinner: SpinnerLike | null = null;
+
+	constructor(logger: LoggerLike) {
+		this.logger = logger;
+	}
+
+	/** Abre uma fase (pode haver várias ativas ao mesmo tempo). */
+	begin(stage: string, message: string): void {
+		try {
+			this.active.set(stage, message);
+			if (this.spinner) {
+				this.restart();
+				return;
+			}
+			const spinner = this.logger.spinner(this.summary());
+			if (spinner) {
+				this.spinner = spinner.start();
+				return;
+			}
+			this.logger.step(message);
+		} catch {
+			// Progresso nunca derruba a revisão.
+		}
+	}
+
+	/** Fecha uma fase com a duração medida. */
+	end(stage: string, message: string, durationMs: number): void {
+		try {
+			this.active.delete(stage);
+			const text = `${message} (${formatDuration(durationMs)})`;
+			if (this.spinner) {
+				this.spinner.stop();
+				this.spinner = null;
+				this.logger.success(text);
+				this.startSpinner();
+				return;
+			}
+			this.logger.success(text);
+		} catch {
+			// Progresso nunca derruba a revisão.
+		}
+	}
+
+	/** Encerra o spinner pendente (sem mensagem de sucesso). */
+	stop(): void {
+		try {
+			this.spinner?.stop();
+		} catch {
+			// Progresso nunca derruba a revisão.
+		}
+		this.spinner = null;
+	}
+
+	/** Texto agregado das fases ativas. */
+	private summary(): string {
+		const messages = [...this.active.values()];
+		if (messages.length <= 1) return messages[0] ?? "";
+		return `${messages[0]} (+${messages.length - 1} em paralelo)`;
+	}
+
+	/** Reinicia o spinner com o texto agregado atualizado. */
+	private restart(): void {
+		if (!this.spinner) return;
+		this.spinner.stop();
+		this.spinner = null;
+		this.startSpinner();
+	}
+
+	/** (Re)abre o spinner quando ainda há fases ativas. */
+	private startSpinner(): void {
+		if (this.active.size === 0) return;
+		const spinner = this.logger.spinner(this.summary());
+		this.spinner = spinner ? spinner.start() : null;
+	}
+}
+
 /** Tarefa concorrente exibida pelo board. */
 type BoardTask = {
 	id: string;
 	detail: string;
 	startedMs: number;
 };
-
 export type ProgressBoardOptions = {
 	logger: LoggerLike;
 	/** Intervalo de repintura do loader em TTY (ms). */

@@ -103,6 +103,39 @@ export function sanitizeBranch(branch: string): string {
 		.toLowerCase();
 }
 
+/** Normaliza o rótulo de uma variante A/B (`baseline` → `baseline`). */
+export function sanitizeVariant(variant: string): string {
+	return variant
+		.trim()
+		.replace(/[^a-zA-Z0-9._-]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.toLowerCase()
+		.slice(0, 32);
+}
+
+/** Hash curto e estável (FNV-1a) para desambiguar slugs de variantes. */
+function shortHash(value: string): string {
+	let hash = 2166136261;
+	for (let index = 0; index < value.length; index++) {
+		hash ^= value.charCodeAt(index);
+		hash = Math.imul(hash, 16777619);
+	}
+	return (hash >>> 0).toString(16).padStart(6, "0").slice(0, 6);
+}
+
+/**
+ * Slug da run (diretório do backend de arquivos e URL da UI).
+ *
+ * Run principal: slug da branch. Variante A/B: `branch--variante-<hash>` — o
+ * hash garante unicidade mesmo quando dois rótulos sanitizam para o mesmo texto.
+ */
+export function reviewSlug(branch: string, variant?: string): string {
+	const base = sanitizeBranch(branch);
+	const label = variant?.trim() ? sanitizeVariant(variant) : "";
+	if (!label) return base;
+	return `${base}--${label}-${shortHash(`${branch}\u0000${variant?.trim() ?? ""}`)}`;
+}
+
 function isFinding(value: unknown): value is Finding {
 	if (typeof value !== "object" || value === null) return false;
 	const f = value as Record<string, unknown>;

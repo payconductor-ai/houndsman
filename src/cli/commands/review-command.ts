@@ -1,5 +1,7 @@
 /** Comando default — prepara ou finaliza a revisão. */
 
+import { ArgParser } from "../../core/arg-parser";
+import { runContextCommand } from "../../core/commands/context";
 import { parseReviewArgs } from "../../core/commands/review";
 import { resolveReviewWorkspace } from "../../core/engine/review-workspace";
 import { displayPath } from "../../core/paths";
@@ -52,6 +54,42 @@ export class ReviewCommand implements Command {
 			pr: workspace.prNumber,
 			worktreePath: workspace.worktreePath,
 		};
+		// PR: coleta o contexto via `gh` aqui, como o `hunt` faz. Sem isso, a skill
+		// gastava um subagente só para rodar `houndsman context` antes do prepare.
+		if (
+			options.pr !== undefined &&
+			!options.finalize &&
+			!ArgParser.from(args).has("--no-context")
+		) {
+			const contextStarted = Date.now();
+			context.logger.step("Coletando o contexto da PR via gh…");
+			try {
+				const collected = runContextCommand(
+					engine.config,
+					engine.storage,
+					engine.repo,
+					{
+						branch: workspace.branch,
+						variant: options.variant,
+						worktreePath: workspace.worktreePath,
+						prNumber: workspace.prNumber,
+					},
+				);
+				stepDone(
+					context.logger,
+					collected.context.available
+						? "Contexto da PR coletado via gh"
+						: `Contexto da PR indisponível (${collected.context.reason})`,
+					contextStarted,
+				);
+			} catch (error) {
+				context.logger.warn(
+					`Contexto da PR indisponível: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
+		}
 		if (options.finalize) context.logger.step("Consolidando os findings…");
 		const result = await engine
 			.session(resolved)

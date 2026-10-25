@@ -30,6 +30,11 @@ function RunItem({
 			<span class="run-top">
 				<BranchIcon size={14} class="run-icon" />
 				<span class="run-branch">{run.branch}</span>
+				{run.variant ? (
+					<span class="run-variant" title="Variante A/B">
+						{run.variant}
+					</span>
+				) : null}
 			</span>
 			<span class="run-meta">
 				<span class="run-when">

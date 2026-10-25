@@ -6,7 +6,13 @@
  */
 
 import { describe, expect, test } from "bun:test";
-import { formatDuration, Logger, PhaseReporter, ProgressBoard } from "../core/logging";
+import {
+	formatDuration,
+	Logger,
+	ParallelPhaseReporter,
+	PhaseReporter,
+	ProgressBoard,
+} from "../core/logging";
 
 function memoryStream(): { stream: NodeJS.WritableStream; text: () => string } {
 	let content = "";
@@ -61,6 +67,28 @@ describe("PhaseReporter", () => {
 		const { logger, out } = loggerFor(false);
 		new PhaseReporter(logger).end("ast", "AST analisada", 40);
 		expect(out.text()).toContain("AST analisada (40ms)");
+	});
+});
+
+describe("ParallelPhaseReporter", () => {
+	test("em pipe aceita fases concorrentes e loga cada uma", () => {
+		const { logger, out } = loggerFor(false);
+		const reporter = new ParallelPhaseReporter(logger);
+		reporter.begin("context", "Resumindo o contexto");
+		reporter.begin("business", "Reconstruindo a intenção");
+		reporter.end("context", "Contexto resumido", 50);
+		reporter.end("business", "Intenção reconstruída", 80);
+		reporter.stop();
+		const text = out.text();
+		expect(text).toContain("→ Resumindo o contexto");
+		expect(text).toContain("→ Reconstruindo a intenção");
+		expect(text).toContain("✔ Contexto resumido (50ms)");
+		expect(text).toContain("✔ Intenção reconstruída (80ms)");
+	});
+
+	test("stop sem fases ativas não lança", () => {
+		const { logger } = loggerFor(false);
+		expect(() => new ParallelPhaseReporter(logger).stop()).not.toThrow();
 	});
 });
 

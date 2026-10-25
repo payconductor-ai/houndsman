@@ -38,8 +38,13 @@ export const DEFAULT_AI_PROVIDER = "deepseek" as const;
 /** Modelo default da camada de IA. */
 export const DEFAULT_AI_MODEL = "deepseek-v4-pro";
 
-/** Concorrência default das chamadas de IA. */
-export const DEFAULT_AI_CONCURRENCY = 2;
+/**
+ * Concorrência default das chamadas de IA do prepare.
+ *
+ * Vale principalmente para os planos de brief (1 chamada por watchdog): com 4,
+ * 8 watchdogs fecham em 2 rodadas em vez de 4.
+ */
+export const DEFAULT_AI_CONCURRENCY = 4;
 
 /** Timeout default de uma chamada de modelo (ms). */
 export const DEFAULT_AI_TIMEOUT_MS = 120_000;
@@ -47,11 +52,28 @@ export const DEFAULT_AI_TIMEOUT_MS = 120_000;
 /** Teto default de chamadas de IA por review. */
 export const DEFAULT_AI_MAX_CALLS_PER_REVIEW = 40;
 
-/** Processos maki simultâneos no harness local (`houndsman hunt`). */
-export const DEFAULT_HUNT_CONCURRENCY = 4;
+/**
+ * Processos maki simultâneos no harness local (`houndsman hunt`).
+ *
+ * 8 = uma onda para os watchdogs usuais (domínios + `general`), em vez de 2.
+ */
+export const DEFAULT_HUNT_CONCURRENCY = 8;
 
 /** Timeout default de um watchdog no harness local (15 min). */
 export const DEFAULT_HUNT_TIMEOUT_MS = 900_000;
+
+/**
+ * Trechos alterados injetados no brief (watchdog de domínio).
+ *
+ * Substituem a leitura do arquivo inteiro: o subagente começa pelo diff e só
+ * abre o arquivo para contexto adjacente. Caps evitam briefs gigantes.
+ */
+export const DEFAULT_BRIEF_SNIPPET_CHARS = 12_000;
+export const DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE = 1_500;
+
+/** Mesmos caps para o revisor de fluxo (`general`), que vê todos os arquivos. */
+export const GENERAL_BRIEF_SNIPPET_CHARS = 24_000;
+export const GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE = 2_500;
 
 /** Retentativas default quando a saída do watchdog é inválida. */
 export const DEFAULT_HUNT_RETRIES = 1;

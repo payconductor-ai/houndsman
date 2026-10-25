@@ -6,7 +6,7 @@
  * primeiro `Discovery:`.
  */
 
-import { formatDuration, type LoggerLike, PhaseReporter } from "../core/logging";
+import { formatDuration, type LoggerLike, ParallelPhaseReporter } from "../core/logging";
 import type { PrepareProgress, PrepareStage } from "../core/orchestrator";
 
 /** Texto de cada etapa (início no gerúndio, fim no particípio). */
@@ -35,7 +35,8 @@ export const PREPARE_STAGE_TEXT: Record<PrepareStage, { start: string; done: str
 
 /** Cria o callback de progresso do prepare ligado ao logger do CLI. */
 export function prepareProgress(logger: LoggerLike): PrepareProgress {
-	const reporter = new PhaseReporter(logger);
+	// O prepare roda etapas em paralelo; o reporter aceita fases concorrentes.
+	const reporter = new ParallelPhaseReporter(logger);
 	return (event) => {
 		const text = PREPARE_STAGE_TEXT[event.stage];
 		if (event.type === "start") reporter.begin(event.stage, text.start);

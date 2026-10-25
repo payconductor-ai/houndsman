@@ -47,9 +47,9 @@ mudanças antes de push.
 
 | Passo | Comando | Quem roda | Resultado |
 |---|---|---|---|
-| 0. Contexto | `houndsman context` | subagente | `context.json` + `context-brief.md` → `context-summary.json` |
+| 0. Contexto | `houndsman --pr` (via `gh`) | prepare | `context.json` + `context-brief.md` → `context-summary.json` (IA; sem IA, subagente) |
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
-| 1.5. Intenção | *(subagente)* | skill | `business-summary.json` enriquecido (`source: "reviewer"`) |
+| 1.5. Intenção | *(subagente)* | skill, só sem IA | `business-summary.json` enriquecido (`source: "reviewer"`) |
 | 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog, incluindo `general`) |
 | 3. Finalizar | `houndsman --finalize` | skill | `review.md` + triagem/status no storage |
 
@@ -77,10 +77,14 @@ mudanças antes de push.
 
 ---
 
-## Passo 0 — Contexto da PR (subagente)
+## Passo 0 — Contexto da PR
 
 O contexto vem da **descrição da PR** via GitHub CLI (`gh`), quando disponível e logado.
-Um subagente executa o CLI e resume:
+
+**Com IA ligada** (`HOUNDSMAN_DEEP_SEEK_API_KEY`), o próprio `houndsman --pr 456` coleta o
+contexto e o resume (`AiContextSummarizer`) — **não despache subagente** para este passo.
+
+Sem IA, um subagente executa o CLI e resume:
 
 ```
 Você é o subagente de contexto do houndsman. Execute `houndsman context --pr 456`
@@ -216,22 +220,56 @@ revisão e pode refiná-lo.
 
 ## Passo 2 — Revisar (skill despacha os subagentes)
 
-Um subagente por brief. Despache em **ondas** (ex.: até 8 subagentes por bloco de tool
-calls) — evita estourar limites de taxa quando há muitos watchdogs. O prompt é o próprio brief.
+Um subagente por brief. Despache **todos os briefs da onda no MESMO bloco de tool calls**
+(paralelo real) — não espere um terminar para despachar o próximo. Só divida em ondas
+menores se a plataforma recusar a concorrência.
+
+> **Custo:** cada subagente é um agente completo. Despacho serial transforma 8 briefs em
+> 8 × o tempo de um watchdog; o paralelo custa o do mais lento.
 
 > **`general` é obrigatório.** O motor injeta esse watchdog reservado em todos os ciclos
 > (com todos os arquivos alterados). Ele audita o fluxo inteiro e emite `Lógica:`/`Domínio:`.
-> Nunca remova o brief dele da onda.
+> Nunca remova o brief dele da onda. Despache-o primeiro (é o mais longo).
 
 
 > **Heartbeat:** antes de despachar cada onda, rode `houndsman status ping`. A UI usa esse
 > sinal (e não `updatedAt`) para saber que a execução está viva; sem ping por 10 min ela
 > mostra "Timeout na revisão".
 
+### Teste A/B (variantes)
+
+Para comparar duas formas de rodar a mesma PR (prompt, modelo, configuração, versão do
+houndsman), dê um **rótulo** a cada tentativa — cada variante é uma run própria
+(`(repo, branch, variante)`) e nada é apagado:
+
+```bash
+houndsman --pr 456 --variant baseline            # prepare da variante A
+# despache os briefs e grave findings/baseline
+houndsman --pr 456 --variant baseline --finalize
+
+houndsman --pr 456 --variant otimizado           # prepare da variante B
+# ...
+houndsman --pr 456 --variant otimizado --finalize
+
+houndsman compare --branch <head> --a baseline --b otimizado
+houndsman compare --list --branch <head>         # ver as runs e contagens
+```
+
+- `--variant <label>` vale para o comando default, `hunt`, `context`, `status`,
+  `findings` e `verify`; use o mesmo rótulo em todas as etapas.
+- Repetir a **mesma** variante: `--full` re-revisa o commit; para um teste realmente
+  limpo, use um rótulo novo.
+- `compare` grava `compare-<a>--<b>.md|.json` na run B (aparece nos artefatos da UI) e
+  mostra achados novos/sumidos, mudança de severidade, cobertura, tempo e tokens.
+- Sem rótulo, a run principal continua sendo a da branch (o `compare` assume A = principal
+  quando só `--b` é informado).
+
 ```
 Leia e execute o brief: <caminho absoluto impresso pelo prepare>/briefs/<watchdog-id>.md
 Você é o watchdog <watchdog-id> do {{projectName}}.
 Use como raiz de leitura o **Worktree:** indicado no brief (nunca o clone principal).
+O brief já traz os trechos alterados (`## Trechos alterados (diff)`): comece por eles e só
+abra arquivos para contexto adjacente/importadores. Não releia arquivos inteiros.
 ```
 
 Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
@@ -239,7 +277,8 @@ Sem achados → `"findings": []` (arquivo obrigatório). Arquivos na seção **F
 não são lidos: registre-os em `skipped`.
 
 **NUNCA enviar:** `git diff` completo · histórico de commits · arquivos de outros domínios ·
-`AGENTS.md` completo (já está no contexto global).
+o `business-summary.json` inteiro (o brief já traz o recorte do domínio) · `AGENTS.md` completo
+(já está no contexto global).
 
 ---
 
@@ -314,13 +353,13 @@ comandos `findings` levam do achado à correção.
 ## Fluxo Completo
 
 ```
-houndsman context (gh)         ──►  context.json ──► subagente ──► context-summary.json
+houndsman --pr (gh)            ──►  context.json ──► prepare resume (IA) ──► context-summary.json
         ↓
 git diff --name-status (base...head)
         ↓
 [1] houndsman                  ──►  storage (classification/candidates/business/manifest) + briefs/ no staging
         ↓
-[1.5] subagente de intenção    ──►  business-summary.json (quando não veio da IA)
+[1.5] subagente de intenção    ──►  business-summary.json (só quando não veio da IA)
         ↓
 [2] N+1 subagentes em paralelo ──►  findings/<watchdog>.json (+ findings/general.json)
         ↓

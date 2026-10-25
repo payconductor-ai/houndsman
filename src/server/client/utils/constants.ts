@@ -84,12 +84,14 @@ export function describeRunStatus(
 /** Ordem canônica dos tipos de artefato na lista da UI. */
 const KIND_ORDER: ArtifactKind[] = [
 	"review",
+	"compare",
 	"resume",
 	"technical",
 	"domain-review",
 	"verify",
 	"brief",
 	"manifest",
+	"prepare",
 	"classification",
 	"candidates",
 	"ast",
@@ -110,11 +112,13 @@ const KIND_ORDER: ArtifactKind[] = [
 const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: number }> =
 	{
 		review: { key: "report", label: "Relatórios", order: 0 },
+		compare: { key: "report", label: "Relatórios", order: 0 },
 		resume: { key: "report", label: "Relatórios", order: 0 },
 		technical: { key: "core", label: "Núcleo da revisão", order: 3 },
 		"domain-review": { key: "report", label: "Relatórios", order: 0 },
 		verify: { key: "verify", label: "Verificação", order: 1 },
 		brief: { key: "brief", label: "Briefs (auditoria)", order: 2 },
+		prepare: { key: "core", label: "Núcleo da revisão", order: 3 },
 		manifest: { key: "core", label: "Núcleo da revisão", order: 3 },
 		classification: { key: "core", label: "Núcleo da revisão", order: 3 },
 		candidates: { key: "core", label: "Núcleo da revisão", order: 3 },
@@ -135,10 +139,12 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 /** Rótulo curto do tipo (badge do item). */
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
 	review: "relatório",
+	compare: "comparação",
 	resume: "resumo",
 	technical: "pontos técnicos",
 	"domain-review": "domínio",
 	verify: "verify",
+	prepare: "prepare",
 	brief: "brief",
 	manifest: "manifesto",
 	classification: "classificação",
@@ -169,6 +175,8 @@ export function describeArtifact(meta: ArtifactMeta): string {
 	switch (meta.kind) {
 		case "review":
 			return "Relatório consolidado da revisão — o entregável.";
+		case "compare":
+			return "Comparação A/B entre duas runs: achados novos/sumidos, cobertura, tempo e tokens.";
 		case "resume":
 			return "Resumo final da revisão: visão de negócio e estrutura técnica (leitura humana).";
 		case "technical":
@@ -177,6 +185,8 @@ export function describeArtifact(meta: ArtifactMeta): string {
 			return "Relatório isolado do domínio: achados daquele watchdog.";
 		case "verify":
 			return "Resultado do `findings verify` (resolvidos, persistentes e incertos).";
+		case "prepare":
+			return "Duração por etapa do prepare e uso de IA (diagnóstico de performance).";
 		case "brief":
 			return "Instruções enviadas ao subagente (auditoria do prompt).";
 		case "manifest":

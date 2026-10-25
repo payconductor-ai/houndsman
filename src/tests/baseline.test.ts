@@ -391,6 +391,14 @@ describe("baseline — artefatos de prepare/finalize", () => {
 			const prepared = await prepare(opts, "main", config, ctx);
 			expect(normalize(prepared.messages.join("\n"))).toMatchSnapshot();
 
+			// Instrumentação do prepare: etapas medidas sem alterar o manifesto.
+			const prepareReport = storage.readArtifact(review.id, "prepare-report.json");
+			expect(prepareReport?.kind).toBe("prepare");
+			const report = JSON.parse(prepareReport?.content ?? "{}") as {
+				stages?: { stage: string; durationMs: number }[];
+			};
+			expect((report.stages ?? []).length).toBeGreaterThan(0);
+
 			for (const name of ["classification.json", "manifest.json"]) {
 				const artifact = storage.readArtifact(review.id, name);
 				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);

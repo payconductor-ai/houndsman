@@ -37,6 +37,8 @@ projeto **autocontida**), carregada em runtime.
 | `bun run grammars:sync` | (dev) atualiza `assets/grammars/`; o `houndsman update` copia para a camada |
 | `bun run houndsman -- <args>` | Executa o CLI localmente |
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
+| `bun run houndsman -- compare --list` | Lista runs/variantes da branch (A/B) |
+| `bun run houndsman -- compare --a <x> --b <y>` | Compara duas variantes da mesma branch |
 | `bun run houndsman -- hunt [--pr <n>]` | Harness local: prepare → watchdogs via maki → finalize (opcional) |
 | `bun run houndsman -- hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
@@ -67,7 +69,8 @@ src/
 │   ├── services/            # GitRepository, GhClient, FileClassifier, Verifier,
 │   │                        # FixBatchBuilder, ProjectFiles, Clock,
 │   │                        # WorktreeManager, PrResolver
-│   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter, presenters
+│   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter
+│   ├── compare.ts           # comparação A/B entre duas runs (funções puras), presenters
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── business-summary.ts  # intenção da PR (fluxos/invariantes/contratos)
 │   ├── builtins.ts          # watchdogs embutidos (general) + merge do consumidor
@@ -81,6 +84,8 @@ src/
 │   ├── watchdog-registry.ts # WatchdogRegistry (classes) + adaptadores
 │   ├── orchestrator.ts      # prepare/finalize (delegam ao engine/renderers)
 │   ├── arg-parser.ts        # ArgParser compartilhado (core + cli)
+│   ├── concurrency.ts       # mapPool (paralelismo limitado; prepare + hunt)
+│   ├── prepare-report.ts    # durações por etapa do prepare (`prepare-report.json`)
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
 │   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
 │   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
@@ -192,7 +197,9 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   auto-ignora no git. Ficar dentro do workspace evita prompts de permissão de agentes
   de codificação (leitura/execução fora da pasta aberta). O staging da review
   (`briefs/`, `findings/`, contexto) acompanha: fica em
-  `<worktree>/.houndsman/work/<reviewId>` quando há worktree. `--pr <n>` resolve via
+  `<worktree>/.houndsman/work/<reviewIdé `(repoKey, branch, variant)` — `variant`
+  ausente é a run principal; rótulos A/B (`--variant <label>`) criam runs separadas
+  para a mesma branch sem apagar a anterior.<n>` resolve via
   `gh`, busca `refs/pull/<n>/head` e cria/reusa o worktree; `--worktree <path>` usa um
   já existente. A identidade da review continua `(repoKey, branch)`; `worktreePath` e
   `prNumber` são metadados persistentes. Remoção é manual (`worktree remove|prune`).

@@ -77,6 +77,8 @@ body.resizing-sidebar { cursor:col-resize; user-select:none; }
 .run-icon { flex:none; margin-top:2px; color:var(--muted-2); }
 .run.active .run-icon { color:var(--accent); }
 .run-branch { font-size:12.5px; font-weight:600; line-height:1.35; word-break:break-word; }
+.run-variant { flex:none; align-self:flex-start; padding:1px 6px; border-radius:999px; font-family:var(--font-mono);
+  font-size:9.5px; color:var(--accent); background:var(--accent-soft); border:1px solid var(--accent-line); }
 .run-meta { display:flex; align-items:center; gap:10px; font-family:var(--font-mono); font-size:10.5px; color:var(--muted); }
 .run-when { display:inline-flex; align-items:center; gap:6px; }
 .run-count { margin-left:auto; color:var(--muted-2); }

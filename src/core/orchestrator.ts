@@ -40,11 +40,18 @@ import {
 	summarizeBusiness,
 } from "./business-summary";
 import { summarizeScope } from "./changed-scope";
+import { mapPool } from "./concurrency";
 import {
 	type HoundsmanConfig,
 	resolveJevConcurrency,
 	resolveMaxFilesPerBrief,
 } from "./config";
+import {
+	DEFAULT_BRIEF_SNIPPET_CHARS,
+	DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
+	GENERAL_BRIEF_SNIPPET_CHARS,
+	GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE,
+} from "./defaults";
 import type { DiffSource } from "./diff-source";
 import { discoverDocs } from "./doc-discoverer";
 import { Classification } from "./domain/classification";
@@ -77,6 +84,7 @@ import {
 	REVIEW_RESUME_FILE,
 	TECHNICAL_SUMMARY_FILE,
 } from "./paths";
+import { type PrepareStageTiming, renderPrepareReport } from "./prepare-report";
 import { ProjectConfig } from "./project-config";
 import { BriefRenderer } from "./renderers/brief-renderer";
 import {
@@ -112,6 +120,11 @@ export type ReviewOptions = {
 	base: string;
 	head: string;
 	branch?: string;
+	/**
+	 * Rótulo da variante A/B. Cada variante vira uma run própria
+	 * (`repoKey`, `branch`, `variant`) — permite comparar sem apagar a anterior.
+	 */
+	variant?: string;
 	finalize: boolean;
 	failOnBlocking: boolean;
 	clean: boolean;
@@ -250,24 +263,26 @@ function writeManifest(
 // ---------------------------------------------------------------------------
 
 /**
- * Trechos do diff para o revisor de fluxo: cap por arquivo e cap total (o
- * subagente lê o restante do arquivo; aqui só entra o que mudou).
+ * Trechos do diff para o brief: cap por arquivo e cap total.
+ *
+ * Usa o patch `-U0` já calculado no escopo (linhas alteradas, sem contexto).
+ * O watchdog não precisa reler arquivos inteiros para ver o que mudou.
  */
 function buildSnippets(
 	files: readonly string[],
-	diff: DiffSource | undefined,
-	maxTotal = 24_000,
-	maxPerFile = 2_500,
+	patch: ReadonlyMap<string, string> | undefined,
+	maxTotal = DEFAULT_BRIEF_SNIPPET_CHARS,
+	maxPerFile = DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
 ): { file: string; snippet: string }[] {
-	if (!diff) return [];
+	if (!patch) return [];
 	const snippets: { file: string; snippet: string }[] = [];
 	let used = 0;
 	for (const file of files) {
-		const patch = diff.byFile.get(file);
-		if (!patch) continue;
+		const text = patch.get(file);
+		if (!text) continue;
 		const remaining = maxTotal - used;
 		if (remaining <= 0) break;
-		const snippet = patch.slice(0, Math.min(maxPerFile, remaining));
+		const snippet = text.slice(0, Math.min(maxPerFile, remaining));
 		used += snippet.length;
 		snippets.push({ file, snippet });
 	}
@@ -286,7 +301,7 @@ function writeBriefs(
 	astImpact?: AstImpact,
 	aiPlans?: ReadonlyMap<string, BriefPlan>,
 	business?: BusinessSummary,
-	diff?: DiffSource,
+	patch?: ReadonlyMap<string, string>,
 ): void {
 	const work = ctx.work;
 	const docs = discoverDocs(Object.keys(classification.files), config);
@@ -307,6 +322,7 @@ function writeBriefs(
 				},
 			];
 		});
+		const isGeneral = id === GENERAL_WATCHDOG_ID;
 		const brief = renderer.render(new Watchdog(def), {
 			watchdogId: id,
 			files: selected,
@@ -325,8 +341,16 @@ function writeBriefs(
 			aiPlan: aiPlans?.get(id),
 			business,
 			businessSummaryPath: business ? work.businessPaths.summary : undefined,
-			snippets:
-				id === GENERAL_WATCHDOG_ID ? buildSnippets(selected, diff) : undefined,
+			// Todos os watchdogs recebem o diff: sem ele o subagente relê o arquivo
+			// inteiro só para enxergar as linhas alteradas. O `general` vê mais.
+			snippets: buildSnippets(
+				selected,
+				patch,
+				isGeneral ? GENERAL_BRIEF_SNIPPET_CHARS : DEFAULT_BRIEF_SNIPPET_CHARS,
+				isGeneral
+					? GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE
+					: DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
+			),
 			changedScope: classification.changedScope,
 		});
 		const content = `${brief}\n`;
@@ -369,34 +393,37 @@ async function resolveCandidates(
 	if (ai && !opts.noAi) {
 		const analyzer = new AiPreAnalyzer(ai);
 		if (analyzer.enabled) {
-			const candidates: JevCandidate[] = [];
-			for (const [id, files] of Object.entries(classification.watchdogs)) {
-				// O `general` recebe hipóteses próprias (`AiBusinessAnalyzer`), não
-				// candidatos por regra.
-				if (id === GENERAL_WATCHDOG_ID) continue;
-				const def = findWatchdog(config, id);
-				if (!def) continue;
-				const inputs = files.slice(0, 5).flatMap((file) => {
-					// Só o trecho alterado: candidato fora do diff vira ruído de código
-					// pré-existente no brief do watchdog.
-					const snippet = diff.byFile.get(file);
-					return snippet ? [{ file, snippet }] : [];
-				});
-				candidates.push(
-					...(await analyzer.analyze({
+			// Uma chamada por watchdog, concorrência limitada (antes era serial e
+			// dominava o prepare em PRs com muitos domínios).
+			const entries = Object.entries(classification.watchdogs).filter(
+				([id]) => id !== GENERAL_WATCHDOG_ID,
+			);
+			const perWatchdog = await mapPool(
+				entries,
+				ai.projectConfig.aiConcurrency,
+				async ([id, files]) => {
+					const def = findWatchdog(config, id);
+					if (!def) return [];
+					const inputs = files.slice(0, 5).flatMap((file) => {
+						// Só o trecho alterado: candidato fora do diff vira ruído de código
+						// pré-existente no brief do watchdog.
+						const snippet = diff.byFile.get(file);
+						return snippet ? [{ file, snippet }] : [];
+					});
+					return analyzer.analyze({
 						watchdogId: id,
 						name: def.name,
 						rules: def.rules,
 						files: inputs,
-					})),
-				);
-			}
+					});
+				},
+			);
 			return save({
 				available: true,
 				model: ai.modelId,
 				threshold: JevCandidatesStore.THRESHOLD,
 				analyzedFiles: Object.values(classification.watchdogs).flat().length,
-				candidates,
+				candidates: perWatchdog.flat(),
 			});
 		}
 	}
@@ -788,7 +815,7 @@ async function buildAiPlans(
 	ai: AiClient | undefined,
 	opts: ReviewOptions,
 	business?: BusinessSummary,
-	diff?: DiffSource,
+	patch?: ReadonlyMap<string, string>,
 ): Promise<Map<string, BriefPlan>> {
 	const plans = new Map<string, BriefPlan>();
 	if (!ai || opts.noAi) return plans;
@@ -821,7 +848,7 @@ async function buildAiPlans(
 			ast: astFiles,
 			docs,
 			business,
-			snippets: buildSnippets(selected, diff),
+			snippets: buildSnippets(selected, patch),
 		});
 	}
 	return enricher.enrichAll(inputs);
@@ -838,6 +865,18 @@ export async function prepare(
 	onProgress?: PrepareProgress,
 ): Promise<PrepareResult> {
 	const messages: string[] = [];
+	const startedAt = systemClock();
+	const startedMs = Date.now();
+	const timings: PrepareStageTiming[] = [];
+	// Coleta durações para o `prepare-report.json` sem acoplar o `runStage` ao
+	// artefato; etapas concorrentes chegam fora de ordem e são registradas como
+	// vieram.
+	const timedProgress: PrepareProgress = (event) => {
+		if (event.type === "done") {
+			timings.push({ stage: event.stage, durationMs: event.durationMs });
+		}
+		emitProgress(onProgress, event);
+	};
 	ctx.work.ensure();
 	if (opts.clean) ctx.work.cleanFindings();
 	ctx.storage.updateReview(ctx.review.id, { base: opts.base, head: opts.head });
@@ -850,7 +889,7 @@ export async function prepare(
 		config,
 		opts.noAst ? undefined : ast,
 		ctx.git,
-		scopeProgress(onProgress),
+		scopeProgress(timedProgress),
 	).resolve(previous, headSha);
 
 	// Mesmo commit já revisado: preserva artefatos e triagem, sem re-revisar.
@@ -871,7 +910,7 @@ export async function prepare(
 		return { messages, activeIds: [] };
 	}
 
-	const { classification, diff } = scope;
+	const { classification, diff, patch } = scope;
 
 	// Run recém-criada e sem nenhum arquivo alterado: não persiste uma "run
 	// vazia" na lista. Acontece quando o comando roda no clone principal sem
@@ -916,7 +955,7 @@ export async function prepare(
 	const astAnalyses = scope.ast;
 	const astImpact =
 		astAnalyses && ast
-			? await runStage(onProgress, "impact", () => ast.impact(astAnalyses))
+			? await runStage(timedProgress, "impact", () => ast.impact(astAnalyses))
 			: undefined;
 	if (astAnalyses && ast?.enabled) {
 		const summary = {
@@ -950,9 +989,6 @@ export async function prepare(
 		(ai && !opts.noAi && new AiPreAnalyzer(ai).enabled) ||
 			(!opts.noJev && new JevClient().isConfigured()),
 	);
-	const jev = await runOptionalStage(onProgress, jevWillRun, "jev", () =>
-		resolveCandidates(opts, classification, ctx, config, diff, ai),
-	);
 
 	const activeIds = Object.keys(classification.watchdogs);
 	if (Object.keys(classification.files).length === 0) {
@@ -979,9 +1015,17 @@ export async function prepare(
 
 	persistContext(ctx);
 	const aiContext = ai && !opts.noAi ? new AiContextSummarizer(ai).enabled : false;
-	const context = await runOptionalStage(onProgress, aiContext, "context", () =>
-		resolveContextSummary(ctx, ai, opts),
-	);
+	// Contexto e pré-análise não dependem um do outro: rodam juntos. Antes, a
+	// pré-análise por IA (uma chamada por watchdog) era serial e dominava o
+	// prepare em PRs com muitos domínios.
+	const [context, jev] = await Promise.all([
+		runOptionalStage(timedProgress, aiContext, "context", () =>
+			resolveContextSummary(ctx, ai, opts),
+		),
+		runOptionalStage(timedProgress, jevWillRun, "jev", () =>
+			resolveCandidates(opts, classification, ctx, config, diff, ai),
+		),
+	]);
 
 	// Intenção da PR — sempre gerada (determinística) e enriquecida pela IA
 	// quando disponível. O brief do passo fica no staging para o subagente ou
@@ -999,22 +1043,41 @@ export async function prepare(
 		snippets: diff.byFile,
 		domains: businessDomains,
 	};
-	const business = await runStage(onProgress, "business", () =>
+	const business = await runStage(timedProgress, "business", () =>
 		resolveBusinessSummary(ctx, ai, opts, config, businessInput),
 	);
-	await appendBusinessCandidates(ctx, ai, opts, jev, business, businessInput);
 
 	const aiTechnical = ai && !opts.noAi ? new AiTechnicalSummarizer(ai).enabled : false;
-	await runOptionalStage(onProgress, aiTechnical, "technical", () =>
-		resolveTechnicalSummary(ctx, ai, opts, {
-			branch,
-			classification,
-			context,
-			ast: astAnalyses,
-			impact: astImpact,
-			domains: activeIds.map((id) => findWatchdog(config, id)?.name ?? id),
-		}),
-	);
+	const aiBriefs = ai && !opts.noAi ? new AiBriefEnricher(ai).enabled : false;
+	// Independentes entre si: hipóteses do `general`, resumo técnico e planos
+	// dos briefs. Rodam juntos depois que a intenção está pronta.
+	const [, , aiPlans] = await Promise.all([
+		appendBusinessCandidates(ctx, ai, opts, jev, business, businessInput),
+		runOptionalStage(timedProgress, aiTechnical, "technical", () =>
+			resolveTechnicalSummary(ctx, ai, opts, {
+				branch,
+				classification,
+				context,
+				ast: astAnalyses,
+				impact: astImpact,
+				domains: activeIds.map((id) => findWatchdog(config, id)?.name ?? id),
+			}),
+		),
+		runOptionalStage(timedProgress, aiBriefs, "ai-plans", () =>
+			buildAiPlans(
+				activeIds,
+				classification,
+				config,
+				context,
+				astAnalyses,
+				astImpact,
+				ai,
+				opts,
+				business,
+				patch,
+			),
+		),
+	]);
 
 	const manifestAst: ManifestAst | undefined = astAnalyses
 		? {
@@ -1035,21 +1098,6 @@ export async function prepare(
 			}
 		: undefined;
 
-	const aiBriefs = ai && !opts.noAi ? new AiBriefEnricher(ai).enabled : false;
-	const aiPlans = await runOptionalStage(onProgress, aiBriefs, "ai-plans", () =>
-		buildAiPlans(
-			activeIds,
-			classification,
-			config,
-			context,
-			astAnalyses,
-			astImpact,
-			ai,
-			opts,
-			business,
-			diff,
-		),
-	);
 	if (aiPlans.size > 0) {
 		ctx.storage.writeArtifact(ctx.review.id, {
 			name: "ai-briefs.json",
@@ -1078,7 +1126,7 @@ export async function prepare(
 				}
 			: undefined;
 
-	await runStage(onProgress, "briefs", () =>
+	await runStage(timedProgress, "briefs", () =>
 		writeBriefs(
 			activeIds,
 			classification,
@@ -1091,7 +1139,7 @@ export async function prepare(
 			astImpact,
 			aiPlans,
 			business,
-			diff,
+			patch,
 		),
 	);
 	const manifestBusiness: ManifestBusiness = {
@@ -1099,7 +1147,7 @@ export async function prepare(
 		model: business.source === "ai" ? ai?.modelId : undefined,
 		...summarizeBusiness(business),
 	};
-	await runStage(onProgress, "manifest", () =>
+	await runStage(timedProgress, "manifest", () =>
 		writeManifest(
 			ctx,
 			config,
@@ -1152,6 +1200,18 @@ export async function prepare(
 		);
 		ai?.recorder.write(ctx.storage, ctx.review.id);
 	}
+
+	// Duração por etapa (inclui as que rodaram em paralelo) para comparar runs.
+	ctx.storage.writeArtifact(ctx.review.id, {
+		name: "prepare-report.json",
+		kind: "prepare",
+		content: renderPrepareReport({
+			startedAt,
+			durationMs: Date.now() - startedMs,
+			stages: timings,
+			ai: aiUsage,
+		}),
+	});
 
 	messages.push(
 		`\nPróximo passo: despachar os sub-agentes (um por brief em ${displayPath(ctx.work.briefsDir)}/).`,

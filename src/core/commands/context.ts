@@ -12,7 +12,7 @@ import {
 	type PrContextRaw,
 	renderContextBrief,
 } from "../pr-context";
-import { sanitizeBranch } from "../report-builder";
+import { reviewSlug } from "../report-builder";
 import type { RepoIdentity, StorageProvider } from "../storage/types";
 import { type ContextPaths, ReviewWorkArea } from "../storage/work-area";
 
@@ -28,6 +28,8 @@ export function runContextCommand(
 	repo: RepoIdentity,
 	opts: {
 		branch?: string;
+		/** Variante A/B da run (ausente = principal). */
+		variant?: string;
 		/** Worktree onde a review roda (persistido na review). */
 		worktreePath?: string;
 		/** PR de origem (persistida na review). */
@@ -35,10 +37,12 @@ export function runContextCommand(
 	} = {},
 ): ContextRunResult {
 	const branch = opts.branch ?? currentBranch();
+	const variant = opts.variant?.trim() || undefined;
 	const review = storage.getOrCreateReview({
 		repo,
 		branch,
-		slug: sanitizeBranch(branch),
+		variant,
+		slug: reviewSlug(branch, variant),
 		worktreePath: opts.worktreePath,
 		prNumber: opts.prNumber,
 	});

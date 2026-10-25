@@ -142,6 +142,59 @@ function contract(
 			}
 		});
 
+		test("variantes A/B: mesma branch, runs separadas e findings isolados", () => {
+			const { storage, cleanup } = make();
+			try {
+				const repo = buildRepoIdentity(null, "/tmp/app");
+				const main = storage.getOrCreateReview({
+					repo,
+					branch: "feature/x",
+					slug: "feature-x",
+				});
+				const a = storage.getOrCreateReview({
+					repo,
+					branch: "feature/x",
+					variant: "baseline",
+					slug: "feature-x--baseline-abc123",
+				});
+				const b = storage.getOrCreateReview({
+					repo,
+					branch: "feature/x",
+					variant: "otimizado",
+					slug: "feature-x--otimizado-def456",
+				});
+				expect(new Set([main.id, a.id, b.id]).size).toBe(3);
+				expect(storage.findReview(repo.key, "feature/x")?.id).toBe(main.id);
+				expect(storage.findReview(repo.key, "feature/x", "baseline")?.id).toBe(
+					a.id,
+				);
+				expect(storage.findReview(repo.key, "feature/x", "otimizado")?.id).toBe(
+					b.id,
+				);
+				expect(storage.findReview(repo.key, "feature/x", "ausente")).toBeNull();
+
+				// Idempotente por (branch, variante).
+				expect(
+					storage.getOrCreateReview({
+						repo,
+						branch: "feature/x",
+						variant: "baseline",
+						slug: "outro",
+					}).id,
+				).toBe(a.id);
+				expect(storage.listReviews(repo.key)).toHaveLength(3);
+
+				// Findings/staging são por review.
+				storage.writeFindings(a.id, sampleState());
+				expect(storage.readFindings(a.id)?.findings.ab12cd34ef?.rule).toBe(
+					"regra",
+				);
+				expect(storage.readFindings(b.id)).toBeNull();
+			} finally {
+				cleanup();
+			}
+		});
+
 		test("findings: round-trip completo e preservação do short id", () => {
 			const { storage, cleanup } = make();
 			try {
@@ -441,6 +494,138 @@ describe("migração do schema SQLite", () => {
 			expect(storage.getReview(review.id)?.heartbeatAt).toBe(
 				"2026-01-01T00:05:00.000Z",
 			);
+		} finally {
+			storage.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("banco v4 ganha `variant` sem perder findings (rebuild da reviews)", () => {
+		const dir = mkdtempSync(join(tmpdir(), "houndsman-migrate-v4-"));
+		const path = join(dir, "houndsman.db");
+		const reviewId = "22222222-2222-4222-8222-222222222222";
+		const legacy = new Database(path);
+		try {
+			legacy.exec(`
+				CREATE TABLE reviews (
+					id TEXT PRIMARY KEY,
+					repo_key TEXT NOT NULL,
+					repo_root TEXT NOT NULL,
+					repo_remote TEXT,
+					branch TEXT NOT NULL,
+					slug TEXT NOT NULL,
+					base TEXT,
+					head TEXT,
+					head_sha TEXT,
+					reviewed_sha TEXT,
+					reviewed_at TEXT,
+					status TEXT,
+					started_at TEXT,
+					heartbeat_at TEXT,
+					worktree_path TEXT,
+					pr_number INTEGER,
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL,
+					UNIQUE(repo_key, branch)
+				);
+				CREATE TABLE findings (
+					id TEXT PRIMARY KEY,
+					review_id TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+					short_id TEXT NOT NULL,
+					fingerprint TEXT NOT NULL,
+					watchdog_ids TEXT NOT NULL,
+					rule TEXT NOT NULL,
+					severity TEXT NOT NULL,
+					file TEXT NOT NULL,
+					line INTEGER,
+					message TEXT NOT NULL,
+					action TEXT NOT NULL,
+					evidence TEXT,
+					scenario TEXT,
+					impact TEXT,
+					confidence REAL,
+					basis TEXT,
+					anchor TEXT,
+					found_at_sha TEXT,
+					count INTEGER NOT NULL DEFAULT 1,
+					present INTEGER NOT NULL DEFAULT 1,
+					decision TEXT NOT NULL,
+					comment TEXT,
+					exec_state TEXT NOT NULL,
+					github TEXT,
+					created_at TEXT NOT NULL,
+					updated_at TEXT NOT NULL,
+					UNIQUE(review_id, short_id),
+					UNIQUE(review_id, fingerprint)
+				);
+				PRAGMA user_version = 4;
+			`);
+			legacy.run(
+				`INSERT INTO reviews
+					(id, repo_key, repo_root, branch, slug, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+				[
+					reviewId,
+					"path:/repo",
+					dir,
+					"feature/x",
+					"feature-x",
+					"2026-01-01T00:00:00.000Z",
+					"2026-01-01T00:00:00.000Z",
+				],
+			);
+			legacy.run(
+				`INSERT INTO findings
+					(id, review_id, short_id, fingerprint, watchdog_ids, rule, severity,
+					 file, line, message, action, decision, exec_state, created_at, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				[
+					"33333333-3333-4333-8333-333333333333",
+					reviewId,
+					"ab12cd34ef",
+					"fp-legado",
+					'["alpha"]',
+					"regra",
+					"attention",
+					"src/a.ts",
+					3,
+					"msg",
+					"ação",
+					"pending",
+					"pending",
+					"2026-01-01T00:00:00.000Z",
+					"2026-01-01T00:00:00.000Z",
+				],
+			);
+		} finally {
+			legacy.close();
+		}
+
+		const storage = new SQLiteStorageProvider(path);
+		try {
+			const review = storage.getReview(reviewId);
+			expect(review?.variant).toBeUndefined();
+			// O rebuild preserva os filhos (FKs desligadas durante a troca).
+			expect(storage.readFindings(reviewId)?.findings.ab12cd34ef?.rule).toBe(
+				"regra",
+			);
+			// E a identidade agora aceita variantes na mesma branch.
+			const repo = buildRepoIdentity(null, dir);
+			const a = storage.getOrCreateReview({
+				repo,
+				branch: "feature/x",
+				variant: "baseline",
+				slug: "feature-x--baseline-abc123",
+			});
+			const b = storage.getOrCreateReview({
+				repo,
+				branch: "feature/x",
+				variant: "otimizado",
+				slug: "feature-x--otimizado-def456",
+			});
+			expect(a.id).not.toBe(b.id);
+			expect(a.id).not.toBe(reviewId);
+			expect(storage.findReview(a.repoKey, "feature/x", "baseline")?.id).toBe(a.id);
 		} finally {
 			storage.close();
 			rmSync(dir, { recursive: true, force: true });

@@ -5,6 +5,7 @@ Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
   --finalize          Consolida os findings em review.md
   context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
+  compare [a] [b]     Compara duas runs (A/B) por slug ou --branch/--a/--b
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   hunt [flags]        Harness local (maki): prepare → watchdogs via maki → finalize
                       (a skill /houndsman hunt continua existindo p/ agentes externos)
@@ -25,6 +26,7 @@ Flags:
   --base <branch>     Base do diff (default: main)
   --head <ref>        Head do diff (default: HEAD)
   --branch <nome>     Branch alvo (default: detecta do git)
+  --variant <label>   Rótulo da variante A/B (runs separadas para a mesma branch)
   --pr <n>            Revisa a PR em um worktree dedicado (cria/reusa automaticamente)
   --worktree <path>   Revisa em um worktree já existente
   --clean             Descarta findings brutos do staging anterior

@@ -48,6 +48,8 @@ import { fetchPrComments, type PrCommentsResponse } from "./pr-comments";
 export type RunListItem = {
 	slug: string;
 	branch: string;
+	/** Variante A/B (ausente = run principal da branch). */
+	variant?: string;
 	/** Worktree onde a run foi executada (ausente = clone principal). */
 	worktreePath?: string;
 	/** PR revisada (quando iniciada via `--pr`). */
@@ -63,6 +65,8 @@ export type RunListItem = {
 export type RunDetail = {
 	slug: string;
 	branch: string;
+	/** Variante A/B (ausente = run principal da branch). */
+	variant?: string;
 	/** Worktree onde a run foi executada (ausente = clone principal). */
 	worktreePath?: string;
 	/** PR revisada (quando iniciada via `--pr`). */
@@ -129,6 +133,7 @@ export class RunRepository {
 		return this.storage.listReviews(this.repo.key).map((review) => {
 			const state = this.storage.readFindings(review.id);
 			return {
+				variant: review.variant,
 				slug: review.slug,
 				branch: review.branch,
 				worktreePath: review.worktreePath,
@@ -144,11 +149,11 @@ export class RunRepository {
 
 	/** Mapa branch → slug das runs (usado para casar PRs com execuções). */
 	branchIndex(): Map<string, string> {
-		return new Map(
-			this.storage
-				.listReviews(this.repo.key)
-				.map((review) => [review.branch, review.slug]),
-		);
+		const index = new Map<string, string>();
+		for (const review of this.reviewsForBranchLinks()) {
+			if (!index.has(review.branch)) index.set(review.branch, review.slug);
+		}
+		return index;
 	}
 
 	/** Mapa branch → run + worktree (sidebar de PRs). */
@@ -156,15 +161,30 @@ export class RunRepository {
 		string,
 		{ slug: string; worktreePath?: string; prNumber?: number }
 	> {
-		return new Map(
-			this.storage.listReviews(this.repo.key).map((review) => [
-				review.branch,
-				{
-					slug: review.slug,
-					worktreePath: review.worktreePath,
-					prNumber: review.prNumber,
-				},
-			]),
+		const index = new Map<
+			string,
+			{ slug: string; worktreePath?: string; prNumber?: number }
+		>();
+		for (const review of this.reviewsForBranchLinks()) {
+			if (index.has(review.branch)) continue;
+			index.set(review.branch, {
+				slug: review.slug,
+				worktreePath: review.worktreePath,
+				prNumber: review.prNumber,
+			});
+		}
+		return index;
+	}
+
+	/**
+	 * Runs ordenadas para links de PR: a principal da branch primeiro (uma
+	 * variante A/B não deve "roubar" o atalho da PR), depois as mais recentes.
+	 */
+	private reviewsForBranchLinks(): ReviewRecord[] {
+		return [...this.storage.listReviews(this.repo.key)].sort(
+			(a, b) =>
+				Number(Boolean(a.variant)) - Number(Boolean(b.variant)) ||
+				b.updatedAt.localeCompare(a.updatedAt),
 		);
 	}
 
@@ -180,6 +200,7 @@ export class RunRepository {
 		}>(review, "classification.json");
 		return {
 			slug: review.slug,
+			variant: review.variant,
 			branch: review.branch,
 			worktreePath: review.worktreePath,
 			prNumber: review.prNumber,
