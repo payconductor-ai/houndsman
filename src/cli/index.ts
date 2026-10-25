@@ -12,7 +12,7 @@
  *
  * Comandos:
  *   (default)            Passo 1 — preparar (classificação + briefs + manifesto)
- *   --finalize           Passo 3 — consolidar os findings em review.md
+ *   --finalize           Passo 3 — consolidar os findings no resumo final
  *   context              Passo 0 — coletar o contexto da PR via `gh`
  *   findings <sub>       Triagem/correção dos findings (list/set/done/sync/batch/verify/submit/...)
  *   hunt [flags]         Harness local (maki): prepare → watchdogs via maki → finalize

@@ -240,7 +240,7 @@ export function sectionBlocks(text: string, title: string): MarkdownBlock[] {
 const FILE_EXTENSION =
 	/\.(?:[cm]?[jt]sx?|json|md|ya?ml|toml|css|scss|html?|py|go|rs|java|kt|cs|php|rb|sh|sql|txt|lock)$/i;
 
-/** Caminho/arquivo dentro de um texto corrido (`src/foo.ts`, `review.md`). */
+/** Caminho/arquivo dentro de um texto corrido (`src/foo.ts`, `manifest.json`). */
 const PATH_TOKEN =
 	/(?:[\w.-]+[\\/])*[\w-]+\.(?:[cm]?[jt]sx?|json|md|ya?ml|toml|css|scss|html?|py|go|rs|java|kt|cs|php|rb|sh|sql|txt|lock)\b/g;
 

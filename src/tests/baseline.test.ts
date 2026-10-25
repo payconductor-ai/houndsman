@@ -29,12 +29,6 @@ import { defineHoundsmanConfig } from "../core/config";
 import { defaultOptions, finalize, prepare, reviewContext } from "../core/orchestrator";
 import { displayPath } from "../core/paths";
 import { RESUME_MAX_CHARS } from "../core/renderers/resume-renderer";
-import {
-	type MergedFinding,
-	renderDomainReport,
-	renderReport,
-	type WatchdogReport,
-} from "../core/report-builder";
 import { resolveRepoIdentity } from "../core/storage/repo-identity";
 import { SQLiteStorageProvider } from "../core/storage/sqlite/sqlite-storage";
 import { defineWatchdog } from "../core/types";
@@ -158,112 +152,6 @@ describe("baseline — brief", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Relatório
-// ---------------------------------------------------------------------------
-
-const reports: WatchdogReport[] = [
-	{
-		watchdogId: "alpha",
-		reviewedFiles: ["src/alpha/a.ts", "src/alpha/b.ts"],
-		skipped: ["src/alpha/c.ts"],
-		findings: [
-			{
-				rule: "Nunca usar `any`.",
-				severity: "blocking",
-				file: "src/alpha/a.ts",
-				line: 1,
-				message: "any detectado",
-				action: "tipar",
-				evidence: "export const a: any = 1;",
-				id: "id-alpha",
-			},
-			{
-				rule: "Promover: validar a entrada.",
-				severity: "attention",
-				file: "src/alpha/b.ts",
-				line: 2,
-				message: "sem validação",
-				action: "adicionar schema",
-				id: "id-beta",
-			},
-		],
-	},
-	{
-		watchdogId: "beta",
-		reviewedFiles: ["src/beta/x.test.ts"],
-		skipped: [],
-		findings: [],
-	},
-];
-
-const merged: MergedFinding[] = [
-	{ ...reports[0].findings[0], watchdogs: ["alpha"] },
-	{ ...reports[0].findings[1], watchdogs: ["alpha", "beta"] },
-];
-
-const reportContext = {
-	available: true,
-	source: {
-		number: 42,
-		title: "Entrega X",
-		url: "https://example.test/pull/42",
-		head: "feature/x",
-		base: "main",
-	},
-	objective: "Entregar X",
-	motivation: "Reduzir Y",
-	changeSummary: ["Faz A", "Remove B"],
-};
-
-describe("baseline — relatório", () => {
-	test("renderReport consolidado", () => {
-		const md = renderReport(
-			"feature/x",
-			reports,
-			merged,
-			{ classified: { alpha: ["src/alpha/a.ts", "src/alpha/b.ts"], beta: [] } },
-			reportContext,
-			[
-				{
-					watchdogId: "alpha",
-					rule: "Nunca usar `any`.",
-					severity: "blocking",
-					file: "src/alpha/a.ts",
-					confidence: 0.82,
-					questionKey: "alpha::rule-0",
-				},
-			],
-			(id) => (id === "alpha" ? "Alpha" : "Beta"),
-			[
-				{
-					id: "alpha",
-					name: "Alpha",
-					file: "review.alpha.md",
-					findings: 2,
-					reviewedFiles: 2,
-					expectedFiles: 2,
-				},
-			],
-		);
-
-		expect(normalizeArtifacts(md)).toMatchSnapshot();
-	});
-
-	test("renderDomainReport isolado", () => {
-		const md = renderDomainReport(
-			"feature/x",
-			reports[0],
-			merged,
-			2,
-			reportContext,
-			(id) => (id === "alpha" ? "Alpha" : "Beta"),
-		);
-
-		expect(normalizeArtifacts(md)).toMatchSnapshot();
-	});
-});
-
-// ---------------------------------------------------------------------------
 // Camada gerada pelo setup/update
 // ---------------------------------------------------------------------------
 
@@ -321,7 +209,7 @@ describe("baseline — camada gerada", () => {
 // ---------------------------------------------------------------------------
 
 describe("baseline — artefatos de prepare/finalize", () => {
-	test("gera classification, brief, manifest, review e state", async () => {
+	test("gera classification, brief, manifest, resumo e state", async () => {
 		const cwd = mkdtempSync(join(tmpdir(), "houndsman-baseline-run-"));
 		const originalCwd = process.cwd();
 		const originalHome = process.env.HOUNDSMAN_HOME;
@@ -450,15 +338,15 @@ describe("baseline — artefatos de prepare/finalize", () => {
 			const finalized = finalize(opts, "main", config, ctx);
 			expect(normalize(finalized.messages.join("\n"))).toMatchSnapshot();
 
-			for (const name of ["review.md", "review.alpha.md"]) {
-				const artifact = storage.readArtifact(review.id, name);
-				expect(normalize(artifact?.content ?? "")).toMatchSnapshot(name);
-			}
+			// Único artefato humano: o resumo final (negócio, técnico, cobertura, conclusão).
 			const resume = storage.readArtifact(review.id, "review-resume.md");
 			expect(resume?.kind).toBe("resume");
 			expect(resume?.content).toContain("## Pontos técnicos");
 			expect(resume?.content).toContain("Remoções");
+			expect(resume?.content).toContain("## Cobertura por domínio");
+			expect(resume?.content).toContain("## Conclusão");
 			expect((resume?.content ?? "").length).toBeLessThanOrEqual(RESUME_MAX_CHARS);
+			expect(normalize(resume?.content ?? "")).toMatchSnapshot("review-resume.md");
 			expect(
 				normalize(JSON.stringify(storage.readFindings(review.id), null, 2)),
 			).toMatchSnapshot("state.json");
@@ -521,7 +409,7 @@ const REQUIRED_EXPORTS = [
 	"ProjectScaffolder",
 	"FixBatchBuilder",
 	"BriefRenderer",
-	"ReportRenderer",
+	"renderReviewResume",
 	"ManifestWriter",
 	"applyFindingUpdate",
 	"assetPath",
@@ -558,7 +446,6 @@ const REQUIRED_EXPORTS = [
 	"reanchor",
 	"relFromRoot",
 	"renderBrief",
-	"renderDomainReport",
 	"reorder",
 	"resolveConfigPath",
 	"resolveJevConcurrency",

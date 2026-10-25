@@ -35,8 +35,8 @@ flowchart TD
     L --> N
     M --> N
 
-    N --> O["Agente principal analisa o relatório consolidado"]
-    O --> P["Resumo final de violações e problemas"]
+    N --> O["CLI grava triagem + resumo final"]
+    O --> P["Agente lê o review-resume.md e responde"]
 
     classDef agent fill:#e8def8,stroke:#7952a8,color:#24133d
     classDef cli fill:#dbeafe,stroke:#3973ac,color:#102a43
@@ -69,12 +69,13 @@ flowchart TD
 5. **Findings em JSON.** Cada watchdog grava `findings/<id>.json` com schema fixo
    (`OUTPUT-FORMAT.md`) — markdown livre não consolida.
 6. **Consolidação.** `houndsman --finalize` valida os JSONs, deduplica por `(file, line, rule)`
-   (watchdogs sobrepostos não geram achado duplicado), agrupa por severidade **e por arquivo** e
-   grava um `review.<watchdog>.md` por domínio com achados. Também persiste a triagem no
-   storage — cada finding ganha um `id` e um **fingerprint de conteúdo** (a linha é cache,
-   não identidade), base da triagem (Passo 4).
-7. **Leitura final.** O agente principal lê o `review.md` consolidado e produz o resumo de
-   violações e problemas.
+   (watchdogs sobrepostos não geram achado duplicado), agrupa por severidade **e por arquivo**
+   e persiste a triagem no storage — cada finding ganha um `id` e um **fingerprint de conteúdo**
+   (a linha é cache, não identidade), base da triagem (Passo 4).
+7. **Resumo final.** O CLI grava **um único** artefato humano, `review-resume.md`: modelo de
+   intenção, pontos técnicos, tabela de cobertura por domínio (achados · revisados/esperados ·
+   faltam), candidatos não confirmados e conclusão. Achados individuais ficam na triagem
+   (`findings`) e na UI — não são duplicados em markdown.
 8. **Triagem (opcional).** `houndsman server` abre a UI local para marcar cada finding como
    `pending`/`execute`/`ignore` e acompanhar a execução; o agente usa
    `houndsman findings list/set/done/sync` para o auto-fix (as linhas mudam — o motor reancora

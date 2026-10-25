@@ -49,7 +49,7 @@ O CLI só substitui o despacho manual dos subagentes por processos maki headless
 | 1. Preparar | `bun run houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
 | 1.5. Intenção | *(subagente)* | skill, só sem IA | `business-summary.json` enriquecido (só quando não veio da IA) |
 | 2. Revisar | *(subagentes)* | skill | `findings/<watchdog>.json` (inclui o `general`, sempre ativo) |
-| 3. Finalizar | `bun run houndsman --finalize` | skill | `review.md` |
+| 3. Finalizar | `bun run houndsman --finalize` | skill | `review-resume.md` + triagem no storage |
 
 > **Alvo = PR** (ex.: “revise a PR 456”): use `houndsman --pr 456` e
 > `houndsman --pr 456 --finalize`. O prepare coleta o contexto via `gh`, cria um **worktree**
@@ -64,7 +64,7 @@ O CLI só substitui o despacho manual dos subagentes por processos maki headless
 | `houndsman context` | Contexto da PR via `gh` (`--pr <n>`/`--worktree <path>`) — o prepare já coleta com `--pr` |
 | `houndsman` | Passo 1 — preparar (gera os briefs) |
 | `houndsman --pr <n>` | Passo 1 em worktree dedicado (revisões paralelas) |
-| `houndsman --finalize` | Passo 3 — gerar o relatório (`--pr <n>` reusa o worktree) |
+| `houndsman --finalize` | Passo 3 — gravar a triagem e o resumo final (`--pr <n>` reusa o worktree) |
 | `houndsman hunt [--pr <n>]` | Harness local opcional (maki): prepare → watchdogs → finalize |
 | `houndsman compare` | Compara duas runs/variantes (`--list`, `--a`, `--b` ou dois slugs) |
 | `houndsman hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
@@ -96,7 +96,7 @@ Runs, findings e artefatos vivem no **storage global** (SQLite em `<HOUNDSMAN_HO
 | `business-summary.json` / `business-brief.md` | Modelo de intenção da PR e o brief do passo |
 | `manifest.json` | Resumo (watchdogs, arquivos, deletados, contexto, intenção, orçamento, churn) |
 | `briefs/<watchdog>.md` | Brief enviado a cada sub-agente (auditoria) |
-| `review.md` / `review.<watchdog>.md` | Relatório consolidado e por domínio |
+| `review-resume.md` | Resumo final: negócio, pontos técnicos, cobertura por domínio e conclusão |
 | `verify.md` | Relatório do `findings verify` |
 | `context.json` / `context-brief.md` / `context-summary.json` | Contexto da PR |
 

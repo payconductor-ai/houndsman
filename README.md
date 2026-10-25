@@ -133,7 +133,7 @@ mostra o worktree ativo de cada PR e permite criá-lo pela sidebar.
    ├─ Passo 0  contexto da PR (gh, opcional)
    ├─ Passo 1  classifica o diff → briefs por watchdog (incremental quando possível)
    ├─ Passo 2  N subagentes revisam em paralelo
-   ├─ Passo 3  consolida em review.md + triagem no storage
+   ├─ Passo 3  grava o resumo final (review-resume.md) + triagem no storage
    ├─ Passo 4  valida na UI (server) e marca os achados a executar
    ├─ Passo 5  fix corrige o grupo atual → status fix_done
    └─ Passo 6  verify confere o que resolveu, sem re-revisar

@@ -174,7 +174,7 @@ function overflowSection(args: WatchdogRenderArgs): string[] {
 		"",
 		`> ${overflow.length} arquivo(s) do seu domínio ficaram fora do orçamento`,
 		"> (menor churn). Não os leia: registre-os em `skipped` com o motivo",
-		'> "budget" para que a cobertura do relatório fique honesta.',
+		'> "budget" para que a cobertura do resumo fique honesta.',
 		"",
 		...overflow.map(codeItem),
 		"",

@@ -157,7 +157,7 @@ export function FindingCard({
 					</span>
 				)}
 				{!finding.present && (
-					<span class="tag" title="Não aparece no último relatório consolidado">
+					<span class="tag" title="Não aparece na última revisão">
 						ausente
 					</span>
 				)}

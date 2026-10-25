@@ -203,7 +203,7 @@ export function renderContextBrief(
 
 	lines.push("## Objetivo", "");
 	lines.push(
-		"Resumir a PR para abrir o relatório de revisão em **Objetivo**,",
+		"Resumir a PR para abrir o resumo final em **Objetivo**,",
 		"**Motivação** e **Resumo das alterações** (pt-BR).",
 		"",
 	);
@@ -228,9 +228,7 @@ export function renderContextBrief(
 	lines.push("```", "");
 
 	lines.push("## Regras", "");
-	lines.push(
-		"- O resumo abre o relatório e o resumo final; nos briefs ele é recortado.",
-	);
+	lines.push("- O resumo abre o resumo final; nos briefs ele é recortado.");
 	lines.push("- Baseie-se **somente** no `context.json` — não invente intenção.");
 	lines.push(
 		"- `objective`: até 2 frases (≤ 400 caracteres) sobre o que a PR entrega.",

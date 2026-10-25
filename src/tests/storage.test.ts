@@ -248,18 +248,18 @@ function contract(
 					slug: "main",
 				});
 				const first = storage.writeArtifact(review.id, {
-					name: "review.md",
-					kind: "review",
+					name: "review-resume.md",
+					kind: "resume",
 					content: "# Review\n",
 				});
 				expect(first.id).toMatch(UUID);
 				const second = storage.writeArtifact(review.id, {
-					name: "review.md",
-					kind: "review",
+					name: "review-resume.md",
+					kind: "resume",
 					content: "# Review 2\n",
 				});
 				expect(second.id).toBe(first.id);
-				expect(storage.readArtifact(review.id, "review.md")?.content).toBe(
+				expect(storage.readArtifact(review.id, "review-resume.md")?.content).toBe(
 					"# Review 2\n",
 				);
 				storage.writeArtifact(review.id, {
@@ -268,7 +268,7 @@ function contract(
 					content: "{}",
 				});
 				expect(storage.listArtifacts(review.id).map((item) => item.name)).toEqual(
-					["manifest.json", "review.md"],
+					["manifest.json", "review-resume.md"],
 				);
 				storage.deleteArtifact(review.id, "manifest.json");
 				expect(storage.listArtifacts(review.id)).toHaveLength(1);
@@ -288,14 +288,14 @@ function contract(
 				});
 				storage.writeFindings(review.id, sampleState("main"));
 				storage.writeArtifact(review.id, {
-					name: "review.md",
-					kind: "review",
+					name: "review-resume.md",
+					kind: "resume",
 					content: "# Review\n",
 				});
 				storage.deleteReview(review.id);
 				expect(storage.getReview(review.id)).toBeNull();
 				expect(storage.readFindings(review.id)).toBeNull();
-				expect(storage.readArtifact(review.id, "review.md")).toBeNull();
+				expect(storage.readArtifact(review.id, "review-resume.md")).toBeNull();
 			} finally {
 				cleanup();
 			}

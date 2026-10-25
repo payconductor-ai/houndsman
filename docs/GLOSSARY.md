@@ -43,7 +43,7 @@ Leitura das tabelas: **Termo** → **o que significa aqui** → **onde vive / ap
 | **Passo 0 — contexto** | Coleta a PR via `gh` e resume objetivo/motivação/alterações. Opcional (falha-aberto). | `houndsman context` → `context.json`, `context-brief.md`, `context-summary.json` |
 | **Passo 1 — preparar** | Classifica o diff, coleta o churn, roda o AST/Jev e grava **briefs** + o modelo de intenção. | `houndsman` → `classification.json`, `ast-summary.json`, `ast-impact.json`, `candidates.json`, `business-summary.json`, `business-brief.md`, `briefs/`, `manifest.json` |
 | **Passo 2 — revisar** | N+1 subagentes (em **ondas**) executam os briefs — incluindo o `general` — e gravam os achados. | `findings/<watchdog>.json` |
-| **Passo 3 — finalizar** | Valida, deduplica, agrupa e renderiza o relatório. | `houndsman --finalize` → `review.md`, `review-resume.md` |
+| **Passo 3 — finalizar** | Valida, deduplica e grava a triagem + o resumo final. | `houndsman --finalize` → `review-resume.md` |
 | **Passo 1.5** | Apelido do Jev dentro do Passo 1. | `candidates.json` |
 
 > Por que comandos separados? Entre o Passo 1 e o 3 acontece trabalho de LLM (os subagentes).
@@ -67,10 +67,8 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **finding / achado** | Uma violação: `rule`, `severity`, `file`, `line?`, `message`, `action`, `evidence?`, `scenario?`, `impact?`, `confidence?`, `basis?`. |
 | **`manifest.json`** | Resumo da execução (watchdogs, arquivos, **orçamento**, **churn**, Jev, contexto). |
 | **`candidates.json`** | Candidatos do Jev (indícios — **não** achados). |
-| **`review.md`** | Relatório consolidado (o entregável da revisão). |
-| **`review-resume.md`** | Resumo final para leitura humana (≤ 5k caracteres): visão de negócio + pontos técnicos estruturais (módulos, contratos, dependências e impacto) — sem espelhar findings. Números (arquivos/churn/domínios) ficam nos cards da UI. Não é lido por watchdogs nem participa de etapas seguintes. |
+| **`review-resume.md`** | **Único** artefato humano da revisão (≤ 8k caracteres): modelo de intenção, pontos técnicos, tabela de cobertura por domínio (achados · revisados/esperados · faltam), candidatos não confirmados e conclusão. Os achados individuais vivem na triagem (`findings`/UI), sem duplicação em markdown. Não é lido por watchdogs nem participa de etapas seguintes. |
 | **`technical-summary.json`** | Pontos técnicos estruturais usados no resumo final: origem (`ai`/`deterministic`), commit coberto e destaques por área. Gerado no prepare e consumido pelo finalize. |
-| **`review.<watchdog>.md`** | Relatório isolado por domínio (só quando há achados); indexado no consolidado. |
 | **registro de review** | Identidade (repo/branch), commit revisado, status (`reviewing`/`review_done`/`fixing`/`fix_done`) e timestamps. |
 | **registros de findings** | Id curto, fingerprint, decisão, execução e histórico — ver seção 12. |
 | **`verify.md`** | Relatório do `findings verify` (resolvidos/persistem/incertos) — ver seção 12. |
@@ -209,7 +207,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 
 | Termo | Significado |
 | --- | --- |
-| **finding id** | Id curto aleatório de um finding (aceita prefixo único no CLI), persistido no storage e exibido no `review.md`. |
+| **finding id** | Id curto aleatório de um finding (aceita prefixo único no CLI), persistido no storage e exibido na UI de triagem. |
 | **fingerprint** | Hash de `arquivo + regra + âncora` — identidade **estável** entre re-execuções do `--finalize`. |
 | **âncora (anchor)** | Linha ofensora normalizada + contexto (linha anterior/seguinte). A `line` é **cache**, não identidade. |
 | **line drift** | Deslocamento de linhas após um auto-fix; resolvido reancorando por conteúdo (`findings sync`). |

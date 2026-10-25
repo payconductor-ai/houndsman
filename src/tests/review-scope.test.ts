@@ -300,13 +300,16 @@ describe("prepare/finalize — mesmo commit", () => {
 				record.id,
 				"classification.json",
 			)?.content;
-			const reportBefore = storage.readArtifact(record.id, "review.md")?.content;
+			const reportBefore = storage.readArtifact(
+				record.id,
+				"review-resume.md",
+			)?.content;
 			const findingsBefore = JSON.stringify(
 				storage.readFindings(record.id)?.findings,
 			);
 			const reviewedBefore = storage.getReview(record.id)?.reviewedSha;
 			expect(classificationBefore).toBeTruthy();
-			expect(reportBefore).toContain("src/alpha/a.ts");
+			expect(reportBefore).toContain("## Cobertura por domínio");
 
 			// Mesmo commit: prepare vira no-op e nada é reescrito.
 			ctx = reviewContext(storage, storage.getReview(record.id) ?? record);
@@ -317,7 +320,7 @@ describe("prepare/finalize — mesmo commit", () => {
 			expect(storage.readArtifact(record.id, "classification.json")?.content).toBe(
 				classificationBefore,
 			);
-			expect(storage.readArtifact(record.id, "review.md")?.content).toBe(
+			expect(storage.readArtifact(record.id, "review-resume.md")?.content).toBe(
 				reportBefore,
 			);
 			expect(storage.getReview(record.id)?.status).toBe("review_done");
@@ -331,7 +334,7 @@ describe("prepare/finalize — mesmo commit", () => {
 				reviewContext(storage, storage.getReview(record.id) ?? record),
 			);
 			expect(finalizedAgain.messages.join("\n")).toContain("Nada a finalizar");
-			expect(storage.readArtifact(record.id, "review.md")?.content).toBe(
+			expect(storage.readArtifact(record.id, "review-resume.md")?.content).toBe(
 				reportBefore,
 			);
 			expect(JSON.stringify(storage.readFindings(record.id)?.findings)).toBe(

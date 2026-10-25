@@ -83,11 +83,9 @@ export function describeRunStatus(
 
 /** Ordem canônica dos tipos de artefato na lista da UI. */
 const KIND_ORDER: ArtifactKind[] = [
-	"review",
 	"compare",
 	"resume",
 	"technical",
-	"domain-review",
 	"verify",
 	"brief",
 	"manifest",
@@ -111,11 +109,9 @@ const KIND_ORDER: ArtifactKind[] = [
 /** Grupo visual de cada tipo (relatórios, briefs, núcleo, contexto…). */
 const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: number }> =
 	{
-		review: { key: "report", label: "Relatórios", order: 0 },
 		compare: { key: "report", label: "Relatórios", order: 0 },
 		resume: { key: "report", label: "Relatórios", order: 0 },
 		technical: { key: "core", label: "Núcleo da revisão", order: 3 },
-		"domain-review": { key: "report", label: "Relatórios", order: 0 },
 		verify: { key: "verify", label: "Verificação", order: 1 },
 		brief: { key: "brief", label: "Briefs (auditoria)", order: 2 },
 		prepare: { key: "core", label: "Núcleo da revisão", order: 3 },
@@ -138,11 +134,9 @@ const GROUP_BY_KIND: Record<ArtifactKind, { key: string; label: string; order: n
 
 /** Rótulo curto do tipo (badge do item). */
 export const ARTIFACT_KIND_LABELS: Record<ArtifactKind, string> = {
-	review: "relatório",
 	compare: "comparação",
 	resume: "resumo",
 	technical: "pontos técnicos",
-	"domain-review": "domínio",
 	verify: "verify",
 	prepare: "prepare",
 	brief: "brief",
@@ -173,16 +167,12 @@ export function displayArtifactName(meta: ArtifactMeta): string {
 /** Descrição curta do artefato (cabeçalho do painel). */
 export function describeArtifact(meta: ArtifactMeta): string {
 	switch (meta.kind) {
-		case "review":
-			return "Relatório consolidado da revisão — o entregável.";
 		case "compare":
 			return "Comparação A/B entre duas runs: achados novos/sumidos, cobertura, tempo e tokens.";
 		case "resume":
-			return "Resumo final da revisão: visão de negócio e estrutura técnica (leitura humana).";
+			return "Resumo final: negócio, pontos técnicos, cobertura por domínio e conclusão.";
 		case "technical":
 			return "Destaques estruturais da mudança (módulos, contratos, dependências) usados no resumo final.";
-		case "domain-review":
-			return "Relatório isolado do domínio: achados daquele watchdog.";
 		case "verify":
 			return "Resultado do `findings verify` (resolvidos, persistentes e incertos).";
 		case "prepare":

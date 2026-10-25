@@ -89,7 +89,7 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
       ↓
 [2] N subagentes     ─► findings/<watchdog>.json
       ↓
-[3] --finalize       ─► review.md + triagem no storage
+[3] --finalize       ─► review-resume.md + triagem no storage
 ```
 
 - **Passo 0** — `context` coleta a PR via `gh`. Ausente/sem login/sem PR → `available:false`
@@ -102,10 +102,10 @@ houndsman context   ─► context.json ─► subagente ─► context-summary.
   e deve ser registrado em `skipped`.
 - **Passo 2** — um subagente por brief (despachados em **ondas**) grava
   `findings/<watchdog>.json` (schema em `src/skill/OUTPUT-FORMAT.md`).
-- **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, agrupa por severidade
-  **e por arquivo**, grava `review.md` + um `review.<watchdog>.md` por domínio com achados,
-  anexa a tabela de cobertura e persiste a triagem (id + fingerprint de conteúdo
-  por finding). **Falha** se faltar algum `findings/<watchdog>.json`.
+- **Passo 3** — valida o schema, deduplica por `(file, line, rule)`, persiste a triagem
+  (id + fingerprint de conteúdo por finding) e grava o **resumo final** (`review-resume.md`)
+  com negócio, pontos técnicos, cobertura por domínio e conclusão. **Falha** se faltar algum
+  `findings/<watchdog>.json`.
 
 > Por que comandos separados? Entre o Passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 

@@ -8,17 +8,38 @@
  */
 
 import { type BusinessSummary, renderBusinessLines } from "../business-summary";
+import type { JevCandidate } from "../jev";
 import type { ContextSummary, MergedFinding } from "../report-builder";
 import { systemClock } from "../services/clock";
 import type { TechnicalSummary } from "../technical-summary";
 
-/** Teto de caracteres do artefato (inclui cabeçalho e quebras de linha). */
-export const RESUME_MAX_CHARS = 5000;
+/**
+ * Teto de caracteres do artefato (inclui cabeçalho e quebras de linha).
+ *
+ * As tabelas e a conclusão têm orçamento reservado — só o texto narrativo
+ * (negócio/técnico) é cortado quando o resumo cresce.
+ */
+export const RESUME_MAX_CHARS = 8000;
+
+/** Fração do orçamento narrativo destinada ao resumo de negócio. */
+const BUSINESS_SHARE = 0.6;
+
+/** Piso do orçamento narrativo mesmo em PRs com muitos domínios. */
+const MIN_NARRATIVE_CHARS = 1200;
 
 /** Dados de classificação usados no resumo. */
 export type ResumeClassification = {
 	files: Record<string, { status: string }>;
 	watchdogs: Record<string, string[]>;
+};
+
+/** Cobertura de um domínio (watchdog) na revisão. */
+export type ResumeDomain = {
+	id: string;
+	name: string;
+	findings: number;
+	reviewedFiles: number;
+	expectedFiles: number;
 };
 
 export type ReviewResumeInput = {
@@ -32,6 +53,12 @@ export type ReviewResumeInput = {
 	findings: readonly MergedFinding[];
 	/** Pontos técnicos estruturais (não achados). */
 	technical?: TechnicalSummary | null;
+	/** Cobertura por domínio (arquivos revisados × esperados). */
+	domains?: readonly ResumeDomain[];
+	/** Candidatos da pré-análise que nenhum watchdog confirmou. */
+	candidates?: readonly JevCandidate[];
+	/** Aviso opcional no topo (ex.: revisão incremental). */
+	note?: string;
 };
 
 const STATUS_BY_SEVERITY: Record<"blocking" | "attention" | "clean", string> = {
@@ -64,6 +91,7 @@ function businessSection(input: ReviewResumeInput): string[] {
 		const rendered = renderBusinessLines(business).filter(
 			(line) => !line.startsWith("**Intenção:**"),
 		);
+		while (rendered[0] === "") rendered.shift();
 		if (rendered.length > 0) lines.push(...rendered, "");
 		if (input.context?.motivation) {
 			lines.push(`**Por quê:** ${truncate(input.context.motivation, 480)}`, "");
@@ -128,9 +156,70 @@ function clamp(markdown: string, max: number): string {
 	return `${(cut > 0 ? head.slice(0, cut) : head).trimEnd()}\n…`;
 }
 
+/** Conclusão com os totais por severidade. */
+function conclusionSection(findings: readonly MergedFinding[]): string[] {
+	const counts = {
+		blocking: findings.filter((f) => f.severity === "blocking").length,
+		attention: findings.filter((f) => f.severity === "attention").length,
+		suggestion: findings.filter((f) => f.severity === "suggestion").length,
+		nit: findings.filter((f) => f.severity === "nit").length,
+	};
+	return [
+		"## Conclusão",
+		"",
+		`**Resumo:** ${counts.blocking} bloqueantes · ${counts.attention} atenção · ${counts.suggestion} sugestões · ${counts.nit} nits.`,
+		"",
+	];
+}
+
+/** Cobertura por domínio: achados, arquivos revisados e o que ficou de fora. */
+function coverageSection(domains: readonly ResumeDomain[]): string[] {
+	if (domains.length === 0) return [];
+	const lines = [
+		"## Cobertura por domínio",
+		"",
+		"| Domínio | Achados | Revisados | Faltam |",
+		"|---|---|---|---|",
+	];
+	for (const domain of domains) {
+		const missing = Math.max(0, domain.expectedFiles - domain.reviewedFiles);
+		lines.push(
+			`| ${domain.name} | ${domain.findings} | ${domain.reviewedFiles}/${domain.expectedFiles} | ${missing > 0 ? missing : "—"} |`,
+		);
+	}
+	lines.push("");
+	return lines;
+}
+
+/** Candidatos da pré-análise que nenhum watchdog confirmou (não bloqueiam). */
+function candidatesSection(
+	candidates: readonly JevCandidate[],
+	findings: readonly MergedFinding[],
+): string[] {
+	if (candidates.length === 0) return [];
+	const confirmed = new Set(findings.map((f) => `${f.file}|${f.rule}`));
+	const pending = candidates.filter((c) => !confirmed.has(`${c.file}|${c.rule}`));
+	if (pending.length === 0) return [];
+	const lines = [
+		`## Candidatos não verificados (${pending.length})`,
+		"",
+		"> Indícios da pré-análise que nenhum watchdog confirmou. Não bloqueiam.",
+		"",
+	];
+	for (const candidate of pending.slice(0, 8)) {
+		lines.push(
+			`- \`${candidate.file}\` · ${candidate.severity} · ${truncate(candidate.rule, 160)}`,
+		);
+	}
+	if (pending.length > 8) lines.push(`- … +${pending.length - 8}`);
+	lines.push("");
+	return lines;
+}
+
 /**
  * Renderiza o resumo final. Determinístico e sem chamadas externas: o texto
- * nasce do contexto já disponível e dos pontos técnicos persistidos.
+ * nasce do contexto já disponível, do modelo de intenção, dos pontos técnicos
+ * e da cobertura por domínio. `review-resume.md` é o único artefato humano.
  */
 export function renderReviewResume(input: ReviewResumeInput): string {
 	const blockers = input.findings.filter((f) => f.severity === "blocking").length;
@@ -142,14 +231,34 @@ export function renderReviewResume(input: ReviewResumeInput): string {
 				? STATUS_BY_SEVERITY.attention
 				: STATUS_BY_SEVERITY.clean;
 
-	const lines = [
+	const header = [
 		`# Resumo da revisão — ${input.branch}`,
 		"",
 		`**Data:** ${input.date ?? systemClock().slice(0, 10)} · **Status:** ${status}`,
-		"",
-		...businessSection(input),
-		...technicalSection(input.technical),
-	];
+		...(input.note?.trim() ? ["", input.note.trim()] : []),
+	].join("\n");
 
-	return clamp(`${lines.join("\n").trimEnd()}\n`, RESUME_MAX_CHARS);
+	const coverage = coverageSection(input.domains ?? []).join("\n");
+	const candidates = candidatesSection(input.candidates ?? [], input.findings).join(
+		"\n",
+	);
+	const conclusion = conclusionSection(input.findings).join("\n");
+
+	// Tabelas e conclusão primeiro: o que sobra é o orçamento do texto narrativo.
+	const reserved = [header, coverage, candidates, conclusion]
+		.filter((part) => part.length > 0)
+		.join("\n\n").length;
+	const budget = Math.max(MIN_NARRATIVE_CHARS, RESUME_MAX_CHARS - reserved);
+	const businessMax = Math.floor(budget * BUSINESS_SHARE);
+	const business = clamp(businessSection(input).join("\n"), businessMax);
+	const technical = clamp(
+		technicalSection(input.technical).join("\n"),
+		budget - businessMax,
+	);
+
+	const body = [header, business, technical, coverage, candidates, conclusion]
+		.map((part) => part.trim())
+		.filter((part) => part.length > 0)
+		.join("\n\n");
+	return `${body}\n`;
 }

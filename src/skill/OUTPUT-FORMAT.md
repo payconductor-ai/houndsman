@@ -1,7 +1,8 @@
 # Formato de Saída dos Watchdogs
 
 Todo watchdog DEVE gravar **um arquivo JSON** com seus achados. O `report-builder.ts`
-consolida os JSONs no artefato `review.md` do storage global.
+valida e deduplica os JSONs; o `--finalize` grava a triagem no storage e o
+`review-resume.md` com a cobertura por domínio.
 
 > **Não** escrever markdown livre no chat. O único output consumido pelo pipeline é o JSON.
 

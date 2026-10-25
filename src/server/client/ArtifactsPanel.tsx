@@ -19,9 +19,11 @@ import {
 import { formatJson, highlightJson } from "./utils/json-highlight";
 import type { ArtifactMeta } from "./utils/types";
 
-/** Prefere o relatório consolidado; senão, o primeiro artefato disponível. */
+/** Prefere o resumo final; senão, o primeiro artefato disponível. */
 function pickDefault(items: ArtifactMeta[]): string {
-	return (items.find((item) => item.name === "review.md") ?? items[0])?.name ?? "";
+	return (
+		(items.find((item) => item.name === "review-resume.md") ?? items[0])?.name ?? ""
+	);
 }
 
 /** JSON com destaque de sintaxe (tokens em spans, sem lib externa). */

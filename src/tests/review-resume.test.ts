@@ -95,6 +95,63 @@ describe("renderReviewResume", () => {
 		expect(md).toContain("Sem mudanças estruturais detectadas nesta revisão.");
 	});
 
+	test("inclui cobertura por domínio, candidatos e conclusão", () => {
+		const md = renderReviewResume({
+			branch: "feat/x",
+			date: "2026-10-17",
+			classification,
+			findings: [
+				finding({ severity: "blocking" }),
+				finding({ severity: "attention", file: "src/b.ts" }),
+			],
+			domains: [
+				{
+					id: "alpha",
+					name: "Alpha",
+					findings: 1,
+					reviewedFiles: 1,
+					expectedFiles: 2,
+				},
+				{
+					id: "beta",
+					name: "Beta",
+					findings: 1,
+					reviewedFiles: 1,
+					expectedFiles: 1,
+				},
+			],
+			candidates: [
+				{
+					watchdogId: "alpha",
+					rule: "Suspeita X",
+					severity: "attention",
+					file: "src/c.ts",
+					confidence: 0.7,
+					questionKey: "q1",
+				},
+				{
+					watchdogId: "alpha",
+					rule: "regra",
+					severity: "attention",
+					file: "src/a.ts",
+					confidence: 0.7,
+					questionKey: "q2",
+				},
+			],
+		});
+
+		expect(md).toContain("## Cobertura por domínio");
+		expect(md).toContain("| Alpha | 1 | 1/2 | 1 |");
+		expect(md).toContain("| Beta | 1 | 1/1 | — |");
+		expect(md).toContain("## Candidatos não verificados (1)");
+		expect(md).toContain("Suspeita X");
+		expect(md).not.toContain("`src/a.ts` ·");
+		expect(md).toContain("## Conclusão");
+		expect(md).toContain(
+			"**Resumo:** 1 bloqueantes · 1 atenção · 0 sugestões · 0 nits.",
+		);
+	});
+
 	test("respeita o teto de caracteres", () => {
 		const findings = Array.from({ length: 40 }, (_, index) =>
 			finding({
@@ -124,6 +181,8 @@ describe("renderReviewResume", () => {
 		});
 
 		expect(md.length).toBeLessThanOrEqual(RESUME_MAX_CHARS);
-		expect(md.endsWith("…")).toBe(true);
+		// O corte acontece no texto narrativo; tabelas e conclusão seguem inteiras.
+		expect(md).toContain("\n…");
+		expect(md).toContain("## Conclusão");
 	});
 });

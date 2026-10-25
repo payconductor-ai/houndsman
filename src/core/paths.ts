@@ -56,9 +56,6 @@ export const BUSINESS_BRIEF_FILE = "business-brief.md";
 /** Relatório da verificação de findings (artefato `verify.md`). */
 export const VERIFY_FILE = "verify.md";
 
-/** Relatório consolidado da review (artefato `review.md`). */
-export const REVIEW_FILE = "review.md";
-
 /** Resumo final da review (artefato `review-resume.md`) — leitura humana apenas. */
 export const REVIEW_RESUME_FILE = "review-resume.md";
 

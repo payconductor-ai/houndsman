@@ -9,7 +9,8 @@ import { GENERAL_WATCHDOG_ID } from "./builtins";
 import type { HoundsmanConfig } from "./config";
 import { env } from "./env";
 import { JevQuestionFactory } from "./jev";
-import { renderReport, sanitizeBranch } from "./report-builder";
+import { renderReviewResume } from "./renderers/resume-renderer";
+import { sanitizeBranch } from "./report-builder";
 import { hasExplicitPolarity } from "./rule-text";
 import type { WatchdogMeta } from "./types";
 
@@ -90,34 +91,31 @@ function checkEmergent(config: HoundsmanConfig, warnings: string[]): void {
 }
 
 /** Smoke test dos helpers críticos de renderização. */
-function checkRendering(config: HoundsmanConfig, problems: string[]): void {
+function checkRendering(problems: string[]): void {
 	if (sanitizeBranch("feature/x") !== "feature-x") {
 		problems.push("sanitizeBranch não está normalizando branches");
 	}
-	const sampleId = config.watchdogIds[0] ?? "watchdog";
-	const report = {
-		watchdogId: sampleId,
-		reviewedFiles: [],
-		skipped: [],
+	const base = { branch: "main", date: "2026-01-01" } as const;
+	const empty = renderReviewResume({
+		...base,
+		classification: { files: {}, watchdogs: {} },
 		findings: [],
-	};
-	const md = renderReport("main", [report], [], {});
-	if (!md.includes("✅ Aprovado")) {
-		problems.push("renderReport não marcou status aprovado sem achados");
+	});
+	if (!empty.includes("✅ Aprovado")) {
+		problems.push("renderReviewResume não marcou status aprovado sem achados");
 	}
-	const withContext = renderReport(
-		"main",
-		[report],
-		[],
-		{},
-		{
+	const withContext = renderReviewResume({
+		...base,
+		classification: { files: {}, watchdogs: {} },
+		findings: [],
+		context: {
 			available: true,
 			objective: "Entregar X",
 			changeSummary: ["Faz A"],
 		},
-	);
-	if (!withContext.includes("## Contexto da PR")) {
-		problems.push("renderReport não incluiu a seção de contexto");
+	});
+	if (!withContext.includes("Entregar X")) {
+		problems.push("renderReviewResume não incluiu o contexto da PR");
 	}
 }
 
@@ -343,7 +341,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkFallbacks(config, warnings);
 	checkReservedIds(config, warnings);
 	checkEmergent(config, warnings);
-	checkRendering(config, problems);
+	checkRendering(problems);
 	checkRulePolarity(config, warnings);
 	checkRuleDuplication(config, warnings);
 	checkMetadataPrecision(config, warnings);

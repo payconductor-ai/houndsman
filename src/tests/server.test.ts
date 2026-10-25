@@ -64,8 +64,8 @@ function makeEnv(): {
 		content: JSON.stringify({ watchdogs: { alpha: ["src/alpha/f.ts"] } }),
 	});
 	storage.writeArtifact(review.id, {
-		name: "review.md",
-		kind: "review",
+		name: "review-resume.md",
+		kind: "resume",
 		content: "# Review\n",
 	});
 	storage.writeArtifact(review.id, {
@@ -386,7 +386,7 @@ describe("server API", () => {
 				expect.arrayContaining([
 					"manifest.json",
 					"classification.json",
-					"review.md",
+					"review-resume.md",
 					"briefs/alpha.md",
 				]),
 			);
@@ -406,7 +406,10 @@ describe("server API", () => {
 			expect(ok.status).toBe(200);
 			expect(await ok.json()).toEqual({ branch: "main" });
 
-			const review = await get(handler, "/api/runs/main/artifacts/review.md");
+			const review = await get(
+				handler,
+				"/api/runs/main/artifacts/review-resume.md",
+			);
 			expect(review.status).toBe(200);
 			expect(await review.text()).toContain("# Review");
 

@@ -44,7 +44,7 @@ src/alpha/**
 
 > 1 arquivo(s) do seu domínio ficaram fora do orçamento
 > (menor churn). Não os leia: registre-os em \`skipped\` com o motivo
-> "budget" para que a cobertura do relatório fique honesta.
+> "budget" para que a cobertura do resumo fique honesta.
 
 - \`src/alpha/c.ts\`
 
@@ -70,104 +70,6 @@ src/alpha/**
 6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
-exports[`baseline — relatório renderReport consolidado 1`] = `
-"# PR Review — feature/x
-
-**Data:** <date>
-**Watchdogs ativos:** alpha, beta
-**Achados:** 1 bloqueantes · 1 atenção · 0 sugestões · 0 nits
-
-## Contexto da PR
-
-**PR:** #42 Entrega X — https://example.test/pull/42
-**Branch:** \`feature/x\` → \`main\`
-**Objetivo:** Entregar X
-**Motivação:** Reduzir Y
-
-**Resumo das alterações:**
-
-- Faz A
-- Remove B
-
-## Relatórios por domínio
-
-| Watchdog | Achados | Revisados | Relatório |
-|---|---|---|---|
-| Alpha | 2 | 2/2 | [\`review.alpha.md\`](review.alpha.md) |
-
-## Cobertura
-
-| Watchdog | Arquivos revisados | Findings |
-|---|---|---|
-| Alpha | 2 | 2 |
-| Beta | 1 | 0 |
-
-## Conclusão
-
-**Status:** ❌ Mudanças Necessárias
-**Resumo:** 1 violações bloqueantes, 1 pontos de atenção, 0 sugestões e 0 nits.
-
-## ❌ blocking
-
-### \`src/alpha/a.ts\`
-
-- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`id-alpha\`
-  any detectado
-  **Ação:** tipar
-  **Evidência:** \`export const a: any = 1;\`
-
-## ⚠️ attention
-
-### \`src/alpha/b.ts\`
-
-- **Promover: validar a entrada.** — \`src/alpha/b.ts:2\` · _Alpha, Beta_ · \`id-beta\`
-  sem validação
-  **Ação:** adicionar schema
-"
-`;
-
-exports[`baseline — relatório renderDomainReport isolado 1`] = `
-"# Review — Alpha (\`alpha\`) — feature/x
-
-**Data:** <date>
-**Arquivos revisados:** 2/2
-**Achados:** 2
-
-## Contexto da PR
-
-**PR:** #42 Entrega X — https://example.test/pull/42
-**Branch:** \`feature/x\` → \`main\`
-**Objetivo:** Entregar X
-**Motivação:** Reduzir Y
-
-**Resumo das alterações:**
-
-- Faz A
-- Remove B
-
-## ❌ blocking
-
-### \`src/alpha/a.ts\`
-
-- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`id-alpha\`
-  any detectado
-  **Ação:** tipar
-  **Evidência:** \`export const a: any = 1;\`
-
-## ⚠️ attention
-
-### \`src/alpha/b.ts\`
-
-- **Promover: validar a entrada.** — \`src/alpha/b.ts:2\` · _Alpha, Beta_ · \`id-beta\`
-  sem validação
-  **Ação:** adicionar schema
-
-## Não revisados
-
-- \`src/alpha/c.ts\`
-"
-`;
-
 exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1`] = `
 [
   ".agents/skills/houndsman/SKILL.md",
@@ -181,7 +83,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1
   ".houndsman/core/skill/OUTPUT-FORMAT.md",
   ".houndsman/core/skill/README.md",
   ".houndsman/core/skill/SETUP.md",
-  ".houndsman/core/skill/example-review.md",
+  ".houndsman/core/skill/example-resume.md",
   ".houndsman/core/skill/fix.md",
   ".houndsman/core/skill/hunt.md",
   ".houndsman/core/skill/train.md",
@@ -293,7 +195,7 @@ houndsman --pr 456 --finalize
 - \`.houndsman/core/skill/OUTPUT-FORMAT.md\` — schema do JSON de saída dos watchdogs.
 - \`.houndsman/core/skill/AUDIT-PROTOCOL.md\` — taxonomia da auditoria de regras (Modo B do \`train\`).
 - \`.houndsman/core/skill/SETUP.md\` · \`.houndsman/core/skill/README.md\` — configuração e visão geral.
-- \`.houndsman/core/skill/example-review.md\` — exemplo de relatório.
+- \`.houndsman/core/skill/example-resume.md\` — exemplo do resumo final.
 "
 ,
   ".claude/skills/houndsman/SKILL.md": 
@@ -391,7 +293,7 @@ houndsman --pr 456 --finalize
 - \`.houndsman/core/skill/OUTPUT-FORMAT.md\` — schema do JSON de saída dos watchdogs.
 - \`.houndsman/core/skill/AUDIT-PROTOCOL.md\` — taxonomia da auditoria de regras (Modo B do \`train\`).
 - \`.houndsman/core/skill/SETUP.md\` · \`.houndsman/core/skill/README.md\` — configuração e visão geral.
-- \`.houndsman/core/skill/example-review.md\` — exemplo de relatório.
+- \`.houndsman/core/skill/example-resume.md\` — exemplo do resumo final.
 "
 ,
   ".houndsman/.gitignore": 
@@ -692,19 +594,19 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "e7781bd408d0cd12",
+    "sha256": "50f7f9bf74c54f87",
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "2d9c1de9e37d31aa",
+    "sha256": "fb2569074db3819e",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
     "sha256": "5720c48ede6c84ea",
   },
   {
-    "file": ".houndsman/core/skill/example-review.md",
-    "sha256": "c69f2888cddba865",
+    "file": ".houndsman/core/skill/example-resume.md",
+    "sha256": "4993f56afdf2ffd1",
   },
   {
     "file": ".houndsman/core/skill/fix.md",
@@ -712,7 +614,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "2db0c3df1f99bfe6",
+    "sha256": "3bff941edd1d6870",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -725,7 +627,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
 ]
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state 1`] = `
 "Discovery: 1 watchdog(s) de domínio + revisor general, 3 arquivo(s), 1 deletado(s).
 Briefs: <cwd>/.home/work/<uuid>/briefs/
 Deletado (breaking change): src/alpha/old.ts
@@ -739,7 +641,7 @@ Próximo passo: despachar os sub-agentes (um por brief em <cwd>/.home/work/<uuid
 Quando os findings estiverem gravados: bun run houndsman --finalize"
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: classification.json 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: classification.json 1`] = `
 "{
   "watchdogs": {
     "alpha": [
@@ -814,7 +716,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: manifest.json 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: manifest.json 1`] = `
 "{
   "branch": "main",
   "slug": "main",
@@ -891,7 +793,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 "
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: briefs/alpha.md 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: briefs/alpha.md 1`] = `
 "# Brief — Alpha (\`alpha\`)
 
 **Branch:** main
@@ -986,68 +888,41 @@ index 0000000..f4082f0
 "
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state 2`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state 2`] = `
 "Triagem: sqlite:<cwd>\\houndsman.db#<uuid> — 1 finding(s).
-Relatório: sqlite:<cwd>\\houndsman.db#<uuid> — 1 bloqueante(s), 0 atenção."
+Resumo: sqlite:<cwd>\\houndsman.db#<uuid> (review-resume.md) — 1 bloqueante(s), 0 atenção."
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: review.md 1`] = `
-"# PR Review — main
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: review-resume.md 1`] = `
+"# Resumo da revisão — main
 
-**Data:** <date>
-**Watchdogs ativos:** alpha, general
-**Achados:** 1 bloqueantes · 0 atenção · 0 sugestões · 0 nits
+**Data:** <date> · **Status:** ❌ Mudanças necessárias
 
-## Relatórios por domínio
+## Resumo de negócio
 
-| Watchdog | Achados | Revisados | Relatório |
+**Fluxos (1):**
+- **Alpha**
+  arquivos: src/alpha/a.ts, src/alpha/b.ts
+
+## Pontos técnicos
+
+- **Estrutura** — Novo diretório \`src/alpha\` com 1 arquivo(s).
+- **Remoções** — \`src/alpha/old.ts\`
+
+## Cobertura por domínio
+
+| Domínio | Achados | Revisados | Faltam |
 |---|---|---|---|
-| Alpha | 1 | 2/2 | [\`review.alpha.md\`](review.alpha.md) |
-
-## Cobertura
-
-| Watchdog | Arquivos revisados | Findings |
-|---|---|---|
-| Alpha | 2 | 1 |
-| Lógica e domínio (fluxo) | 2 | 0 |
+| Alpha | 1 | 2/2 | — |
+| Lógica e domínio (fluxo) | 0 | 2/2 | — |
 
 ## Conclusão
 
-**Status:** ❌ Mudanças Necessárias
-**Resumo:** 1 violações bloqueantes, 0 pontos de atenção, 0 sugestões e 0 nits.
-
-## ❌ blocking
-
-### \`src/alpha/a.ts\`
-
-- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_ · \`<id>\`
-  any detectado
-  **Ação:** tipar
-  **Evidência:** \`export const a: any = 1;\`
-
+**Resumo:** 1 bloqueantes · 0 atenção · 0 sugestões · 0 nits.
 "
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: review.alpha.md 1`] = `
-"# Review — Alpha (\`alpha\`) — main
-
-**Data:** <date>
-**Arquivos revisados:** 2/2
-**Achados:** 1
-
-## ❌ blocking
-
-### \`src/alpha/a.ts\`
-
-- **Nunca usar \`any\`.** — \`src/alpha/a.ts:1\` · _Alpha_
-  any detectado
-  **Ação:** tipar
-  **Evidência:** \`export const a: any = 1;\`
-
-"
-`;
-
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: state.json 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: state.json 1`] = `
 "{
   "version": 2,
   "branch": "main",
@@ -1093,7 +968,7 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 }"
 `;
 
-exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, review e state: run.json 1`] = `
+exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state: run.json 1`] = `
 "{
   "id": "<uuid>",
   "repoKey": "path:<cwd>",

@@ -69,7 +69,7 @@ src/
 │   ├── services/            # GitRepository, GhClient, FileClassifier, Verifier,
 │   │                        # FixBatchBuilder, ProjectFiles, Clock,
 │   │                        # WorktreeManager, PrResolver
-│   ├── renderers/           # BriefRenderer, ReportRenderer, ManifestWriter
+│   ├── renderers/           # BriefRenderer, ResumeRenderer, ManifestWriter
 │   ├── compare.ts           # comparação A/B entre duas runs (funções puras), presenters
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── business-summary.ts  # intenção da PR (fluxos/invariantes/contratos)
@@ -90,7 +90,7 @@ src/
 │   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
 │   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
 │   ├── hunt/                # harness local opcional (maki): install, runner e relatório
-│   ├── report-builder.ts    # dedupe/render do relatório (funções puras)
+│   ├── report-builder.ts    # valid./dedupe dos findings (funções puras)
 │   ├── technical-summary.ts # pontos técnicos estruturais do resumo final
 │   ├── brief.ts             # defaultRenderBrief + PROCEDURE (funções puras)
 │   ├── verify.ts            # verificação de findings (tier local + Jev)

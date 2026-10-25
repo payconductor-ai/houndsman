@@ -116,11 +116,11 @@ describe("parseInline", () => {
 	});
 
 	test("destaca caminhos de arquivo no texto corrido", () => {
-		expect(parseInline("veja src/foo/bar.ts e review.md")).toEqual([
+		expect(parseInline("veja src/foo/bar.ts e manifest.json")).toEqual([
 			{ type: "text", text: "veja " },
 			{ type: "path", text: "src/foo/bar.ts" },
 			{ type: "text", text: " e " },
-			{ type: "path", text: "review.md" },
+			{ type: "path", text: "manifest.json" },
 		]);
 	});
 });
@@ -128,7 +128,7 @@ describe("parseInline", () => {
 describe("isFilePath", () => {
 	test("reconhece arquivos e caminhos, sem confundir texto comum", () => {
 		expect(isFilePath("src/foo/bar.ts")).toBe(true);
-		expect(isFilePath("review.md")).toBe(true);
+		expect(isFilePath("manifest.json")).toBe(true);
 		expect(isFilePath("./scripts/ci.sh")).toBe(true);
 		expect(isFilePath("M/D")).toBe(false);
 		expect(isFilePath("duas palavras.ts")).toBe(false);

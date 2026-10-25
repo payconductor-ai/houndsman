@@ -1,6 +1,6 @@
 /**
  * Orquestração do houndsman (biblioteca): preparar (classificação + briefs +
- * manifesto + Jev) e finalizar (findings → dedupe → relatório).
+ * manifesto + Jev) e finalizar (findings → dedupe → resumo final).
  *
  * Genérico: recebe o `HoundsmanConfig` por parâmetro (injeção explícita).
  * Entrypoints: `cli/index.ts` (`houndsman`). Aqui não há `process.argv`.
@@ -12,8 +12,8 @@
  *     findings/<id>.json  saída dos sub-agentes (schema skill/OUTPUT-FORMAT.md)
  *     context*.json/md    contexto da PR (Passo 0)
  *
- * Artefatos persistidos: classification, candidates, manifest, review.md,
- * review.<watchdog>.md, context e context-summary.
+ * Artefatos persistidos: classification, candidates, manifest, review-resume.md,
+ * context e context-summary.
  */
 
 import { existsSync } from "node:fs";
@@ -80,7 +80,6 @@ import {
 	BUSINESS_SUMMARY_FILE,
 	displayPath,
 	OUTPUT_FORMAT_PATH,
-	REVIEW_FILE,
 	REVIEW_RESUME_FILE,
 	TECHNICAL_SUMMARY_FILE,
 } from "./paths";
@@ -93,14 +92,11 @@ import {
 	type ManifestBusiness,
 	ManifestWriter,
 } from "./renderers/manifest-writer";
-import { ReportRenderer } from "./renderers/report-renderer";
-import { renderReviewResume } from "./renderers/resume-renderer";
+import { type ResumeDomain, renderReviewResume } from "./renderers/resume-renderer";
 import {
 	type ContextSummary,
-	type DomainReport,
 	dedupeFindings,
 	parseContextSummary,
-	sanitizeBranch,
 	type WatchdogReport,
 } from "./report-builder";
 import { writeRunStatus } from "./run-status";
@@ -212,7 +208,7 @@ function shortSha(sha: string): string {
 	return sha.slice(0, 7);
 }
 
-/** Aviso no topo do `review.md` quando a revisão foi incremental (senão vazio). */
+/** Aviso no topo do resumo quando a revisão foi incremental (senão vazio). */
 function incrementalNote(classification: RunClassification): string {
 	if (classification.mode !== "incremental" || !classification.reviewedFrom) return "";
 	const carried = classification.carryover?.length ?? 0;
@@ -905,7 +901,7 @@ export async function prepare(
 			`Nenhuma alteração desde a última revisão (${shortSha(scope.reviewedFrom)}).`,
 			pendingCycle
 				? "Nada novo a preparar — o ciclo em andamento continua; rode `--finalize` quando os findings estiverem gravados."
-				: "Nada a revisar — o relatório anterior foi mantido. Use `--full` para re-revisar.",
+				: "Nada a revisar — o resumo anterior foi mantido. Use `--full` para re-revisar.",
 		);
 		return { messages, activeIds: [] };
 	}
@@ -1383,45 +1379,24 @@ function buildTechnicalFallback(
 }
 
 /**
- * Grava um `review.<watchdog>.md` por watchdog com achados e devolve o índice.
- * Mantém o `review.md` consolidado navegável em PRs grandes (centenas de achados).
+ * Cobertura por domínio (achados × arquivos revisados/esperados) para a tabela
+ * do resumo final. Não grava relatório por domínio: os achados vivem na triagem
+ * (`findings`), que já é filtrável por watchdog na UI.
  */
-function writeDomainReports(
-	ctx: ReviewContext,
-	branch: string,
-	reports: WatchdogReport[],
+function summarizeDomains(
+	reports: readonly WatchdogReport[],
 	classification: ClassificationResult,
-	context: ContextSummary | null,
 	nameOf: (id: string) => string,
-): DomainReport[] {
-	const domains: DomainReport[] = [];
-	const renderer = new ReportRenderer(nameOf);
-	for (const report of reports) {
-		const findings = dedupeFindings([report]);
-		if (findings.length === 0) continue;
-		const file = `review.${sanitizeBranch(report.watchdogId)}.md`;
-		const expected = classification.watchdogs[report.watchdogId] ?? [];
-		ctx.storage.writeArtifact(ctx.review.id, {
-			name: file,
-			kind: "domain-review",
-			content: `${renderer.renderDomain(
-				branch,
-				report,
-				findings,
-				expected.length,
-				context,
-			)}\n`,
-		});
-		domains.push({
+): ResumeDomain[] {
+	return reports
+		.map((report) => ({
 			id: report.watchdogId,
 			name: nameOf(report.watchdogId),
-			file,
-			findings: findings.length,
+			findings: dedupeFindings([report]).length,
 			reviewedFiles: report.reviewedFiles.length,
-			expectedFiles: expected.length,
-		});
-	}
-	return domains;
+			expectedFiles: (classification.watchdogs[report.watchdogId] ?? []).length,
+		}))
+		.sort((a, b) => b.findings - a.findings || a.name.localeCompare(b.name));
 }
 
 export type FinalizeResult = {
@@ -1432,7 +1407,7 @@ export type FinalizeResult = {
 };
 
 /**
- * Passo 2 — consolida os findings em review.md.
+ * Passo 2 — consolida os findings no resumo final (`review-resume.md`).
  * Lança se houver findings pendentes (o CLI decide o exit code).
  */
 export function finalize(
@@ -1442,8 +1417,8 @@ export function finalize(
 	ctx: ReviewContext,
 ): FinalizeResult {
 	// `--finalize` só consolida um ciclo preparado (status `reviewing`). Sem esta
-	// guarda, um prepare no-op seguido de `--finalize` reescreveria o relatório
-	// anterior com a classificação antiga (perdendo os relatórios por domínio).
+	// guarda, um prepare no-op seguido de `--finalize` reescreveria o resumo
+	// anterior com a classificação antiga (perdendo a cobertura por domínio).
 	// O `ctx.review` é um snapshot: relê o status atual do storage.
 	const status = ctx.storage.getReview(ctx.review.id)?.status ?? null;
 	if (status !== "reviewing") {
@@ -1457,7 +1432,7 @@ export function finalize(
 			attention: present.filter((f) => f.severity === "attention").length,
 			messages: [
 				`Nada a finalizar: nenhum ciclo de revisão pendente (status: ${status ?? "sem status"}).`,
-				"Se nada mudou desde a última revisão, o relatório anterior foi mantido; use `--full` para re-revisar.",
+				"Se nada mudou desde a última revisão, o resumo anterior foi mantido; use `--full` para re-revisar.",
 			],
 		};
 	}
@@ -1565,40 +1540,23 @@ export function finalize(
 	const technical =
 		readPersistedTechnicalSummary(ctx) ?? buildTechnicalFallback(ctx, classification);
 	const nameOf = (id: string): string => findWatchdog(config, id)?.name ?? id;
-	const domains = writeDomainReports(
-		ctx,
-		branch,
-		reports,
-		classification,
-		context,
-		nameOf,
-	);
-	const markdown = new ReportRenderer(nameOf).render(
-		branch,
-		reports,
-		merged,
-		{ classified: classification.watchdogs },
-		context,
-		jev.available ? jev.candidates : undefined,
-		domains,
-	);
-	ctx.storage.writeArtifact(ctx.review.id, {
-		name: REVIEW_FILE,
-		kind: "review",
-		content: `${incrementalNote(classification)}${markdown}\n`,
-	});
-	// Resumo final para leitura humana — não participa de nenhuma etapa seguinte.
+	const domains = summarizeDomains(reports, classification, nameOf);
+	// Resumo final — único artefato humano: negócio, técnico, cobertura e
+	// conclusão. Os achados ficam na triagem (storage/UI), não duplicados aqui.
 	ctx.storage.writeArtifact(ctx.review.id, {
 		name: REVIEW_RESUME_FILE,
 		kind: "resume",
 		content: renderReviewResume({
 			branch,
 			date: now.slice(0, 10),
+			note: incrementalNote(classification),
 			context,
 			business,
 			classification,
 			findings: merged,
 			technical,
+			domains,
+			candidates: jev.available ? jev.candidates : undefined,
 		}),
 	});
 
@@ -1610,7 +1568,7 @@ export function finalize(
 	const blockers = merged.filter((f) => f.severity === "blocking").length;
 	const attention = merged.filter((f) => f.severity === "attention").length;
 	messages.push(
-		`Relatório: ${location} — ${blockers} bloqueante(s), ${attention} atenção.`,
+		`Resumo: ${location} (${REVIEW_RESUME_FILE}) — ${blockers} bloqueante(s), ${attention} atenção.`,
 	);
 
 	// O staging já cumpriu o papel (briefs/findings/contexto estão no storage).

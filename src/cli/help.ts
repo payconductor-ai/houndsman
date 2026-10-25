@@ -3,7 +3,7 @@ export const HELP = `Uso: houndsman [comando] [flags]
 
 Comandos:
   (nenhum)            Prepara a revisão (classification + briefs + manifesto)
-  --finalize          Consolida os findings em review.md
+  --finalize          Consolida os findings e grava o resumo final
   context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
   compare [a] [b]     Compara duas runs (A/B) por slug ou --branch/--a/--b
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)

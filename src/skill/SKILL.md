@@ -92,4 +92,4 @@ houndsman --pr 456 --finalize
 - `.houndsman/core/skill/OUTPUT-FORMAT.md` — schema do JSON de saída dos watchdogs.
 - `.houndsman/core/skill/AUDIT-PROTOCOL.md` — taxonomia da auditoria de regras (Modo B do `train`).
 - `.houndsman/core/skill/SETUP.md` · `.houndsman/core/skill/README.md` — configuração e visão geral.
-- `.houndsman/core/skill/example-review.md` — exemplo de relatório.
+- `.houndsman/core/skill/example-resume.md` — exemplo do resumo final.

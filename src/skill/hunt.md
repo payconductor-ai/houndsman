@@ -51,7 +51,7 @@ mudanças antes de push.
 | 1. Preparar | `houndsman` | skill | `classification.json` + `candidates.json` + `business-summary.json` + `briefs/` + `manifest.json` |
 | 1.5. Intenção | *(subagente)* | skill, só sem IA | `business-summary.json` enriquecido (`source: "reviewer"`) |
 | 2. Revisar | *(subagentes)* | skill (via `runSubagent`) | `findings/<watchdog>.json` (um por watchdog, incluindo `general`) |
-| 3. Finalizar | `houndsman --finalize` | skill | `review.md` + triagem/status no storage |
+| 3. Finalizar | `houndsman --finalize` | skill | `review-resume.md` + triagem/status no storage |
 
 > Por que comandos separados? Entre o passo 1 e o 3 acontece trabalho de LLM (os subagentes).
 > Depois do passo 3, a correção dos achados é a capability **`fix`** — ver `fix.md`.
@@ -173,10 +173,10 @@ Cada `--finalize` grava o **commit revisado** (`reviewedSha` da review no storag
 seguinte, se o `HEAD` descende desse commit (sem rebase), o motor revisa **só o delta** — os
 arquivos alterados desde a última revisão — e **carrega** os findings dos arquivos inalterados
 (carry-over), sem re-revisá-los. O `manifest.json` traz o bloco `incremental` (`from`,
-`changedFiles`, `carried`) e o `review.md` abre com um aviso.
+`changedFiles`, `carried`) e o `review-resume.md` abre com um aviso.
 
 - Sem mudanças desde a última revisão → **no-op**: o prepare não gera briefs nem reescreve
-  artefatos (classification, manifest, review.md), e o `--finalize` também vira no-op — pare o
+  artefatos (classification, manifest, review-resume.md), e o `--finalize` também vira no-op — pare o
   fluxo aí (nenhum subagente é despachado).
 - Rebase/force-push (histórico reescrito) → cai automaticamente no **review completo**.
 - Forçar completo: `houndsman --full` (ou `--clean`, que também descarta a triagem anterior).
@@ -292,61 +292,51 @@ houndsman --finalize              # alvo = branch atual
 Falha com mensagem clara se faltar algum `findings/<watchdog>.json` no staging. Quando todos existem:
 1. Valida o schema de cada JSON
 2. Deduplica achados por `(file, line, rule)` mesclando watchdogs sobrepostos
-3. Grava um `review.<watchdog>.md` por watchdog com achados e indexa no `review.md`
-   (**Relatórios por domínio**) — mantém o relatório consolidado enxuto
-4. Grava o `review.md` abrindo pelo **sumário**: contexto, relatórios por domínio, cobertura e
-   conclusão — antes dos achados
-5. Agrupa os achados por severidade (❌ blocking > ⚠️ attention > 💡 suggestion > 🔎 nit) e
-   **por arquivo** dentro de cada severidade (navegabilidade em PRs grandes)
-6. Anexa os candidatos da pré-análise (Jev/IA) não confirmados em `🔎 Candidatos não verificados` ao final
-   (não bloqueiam)
-7. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
-   finding, preservados entre execuções9. Marca como **`done`** os findings que sumiram do relatório (corrigidos manualmente entre
+3. Persiste a **triagem** no storage — um `id` curto e um `fingerprint` de conteúdo por
+   finding, preservados entre execuções
+4. Marca como **`done`** os findings que sumiram do relatório (corrigidos manualmente entre
    revisões) e **resolve as conversas correspondentes no GitHub** — só as ainda abertas, e
-   falha-aberto (sem `gh`/PR o relatório segue igual)
+   falha-aberto (sem `gh`/PR o resumo segue igual)
+5. Grava o **resumo final** (`review-resume.md`): negócio, pontos técnicos, **tabela de
+   cobertura por domínio** (achados · revisados/esperados · faltam), candidatos não
+   confirmados e **conclusão**. É o único relatório em markdown — os achados ficam na triagem
+   (`findings`, UI), sem serem duplicados em arquivo
+
+> **Resultado da revisão:** leia o `review-resume.md` (a saída do `--finalize` imprime o
+> caminho no storage). Ele é o contexto final para responder ao usuário sobre o resultado;
+> os achados individuais vêm de `findings list --json`.
+
 Após finalizar, corrija os achados com a capability **`fix`** (`fix.md`): a UI ou os
 comandos `findings` levam do achado à correção.
 
 ---
 
-## Estrutura do Relatório
+## Estrutura do Resumo Final
 
 ```markdown
-# Review — [branch]
+# Resumo da revisão — [branch]
 
-**Data:** YYYY-MM-DD
-**Watchdogs ativos:** [lista]
-**Achados:** N bloqueantes · N atenção · N sugestões · N nits
+**Data:** YYYY-MM-DD · **Status:** ✅ Aprovado / ⚠️ Aprovado com Ressalvas / ❌ Mudanças Necessárias
 
-## Contexto da PR
-**PR:** #123 Título — url
-**Branch:** `feature/x` → `main`
-**Objetivo:** ...
-**Resumo das alterações:**
-- ...
+## Resumo de negócio
+...
 
-## Relatórios por domínio
-| Watchdog | Achados | Revisados | Relatório |
+## Pontos técnicos
+- **Contratos** — ...
+
+## Cobertura por domínio
+| Domínio | Achados | Revisados | Faltam |
 |---|---|---|---|
 
-## Cobertura
-| Watchdog | Arquivos revisados | Findings |
-|---|---|---|
+## Candidatos não verificados (N)   ← se houver
+- `arquivo` · severity · regra
 
 ## Conclusão
-**Status:** ✅ Aprovado / ⚠️ Aprovado com Ressalvas / ❌ Mudanças Necessárias
-
-## ❌ blocking
-### `src/routes/order-route.ts`
-- **<regra>** — `src/routes/order-route.ts:5` · _<watchdogs>_
-  <mensagem>
-  **Ação:** <ação>
-
-## 🔎 Candidatos não verificados (Jev)   ← se houver, sempre ao final
+**Resumo:** N bloqueantes · N atenção · N sugestões · N nits.
 ```
 
-> O **sumário** (relatórios por domínio, cobertura e conclusão) vem **antes** dos achados;
-> os pontos específicos ficam no fim.
+> Tabelas e conclusão têm orçamento reservado: crescer o texto de negócio nunca as corta.
+> Achados individuais (com `id` de triagem) vivem na UI (`Findings`) e em `findings list --json`.
 
 ---
 
@@ -363,7 +353,7 @@ git diff --name-status (base...head)
         ↓
 [2] N+1 subagentes em paralelo ──►  findings/<watchdog>.json (+ findings/general.json)
         ↓
-[3] houndsman --finalize       ──►  review.md + triagem no storage (review_done)
+[3] houndsman --finalize       ──►  review-resume.md + triagem no storage (review_done)
         ↓
 [4] server (UI)                ──►  validar a revisão + marcar decision: execute
         ↓
