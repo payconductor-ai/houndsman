@@ -14,6 +14,7 @@ import type {
 	HoundsmanAst,
 	HoundsmanConfig,
 	HoundsmanHunt,
+	HoundsmanPriority,
 	HoundsmanStorage,
 	HoundsmanWorktrees,
 } from "./config";
@@ -103,6 +104,11 @@ export class ProjectConfig<TId extends string = string> {
 
 	get docMappings(): readonly (readonly [RegExp, readonly string[]])[] {
 		return this.raw.docMappings;
+	}
+
+	/** Prioridade por caminho (vazio = churn puro, comportamento antigo). */
+	get priorities(): readonly HoundsmanPriority[] {
+		return this.raw.priorities ?? [];
 	}
 
 	/** Config de IA (objeto vazio quando ausente). */

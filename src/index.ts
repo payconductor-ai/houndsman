@@ -107,6 +107,7 @@ export type {
 	HoundsmanConfig,
 	HoundsmanConfigInput,
 	HoundsmanHunt,
+	HoundsmanPriority,
 	HoundsmanStorage,
 } from "./core/config";
 export {

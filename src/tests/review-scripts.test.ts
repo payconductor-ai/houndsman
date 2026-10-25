@@ -451,6 +451,51 @@ describe("triage", () => {
 		expect(overflow).toEqual(["a.ts"]);
 	});
 
+	test("prioridade soma ao churn (linhas equivalentes) sem virar tier rígido", () => {
+		const priorities = [{ pattern: /^server\/db\//, bonus: 300 }];
+		const files = ["client/big.ts", "server/db/small.ts"];
+		expect(
+			sortByRisk(
+				files,
+				{
+					"client/big.ts": { additions: 200, deletions: 0 },
+					"server/db/small.ts": { additions: 10, deletions: 0 },
+				},
+				priorities,
+			),
+		).toEqual(["server/db/small.ts", "client/big.ts"]);
+		// Churn puro continua vencendo quando é muito maior (400 > 10 + 300).
+		expect(
+			sortByRisk(
+				files,
+				{
+					"client/big.ts": { additions: 400, deletions: 0 },
+					"server/db/small.ts": { additions: 10, deletions: 0 },
+				},
+				priorities,
+			),
+		).toEqual(["client/big.ts", "server/db/small.ts"]);
+		// Sem prioridade configurada, comportamento antigo.
+		expect(
+			sortByRisk(files, {
+				"client/big.ts": { additions: 200, deletions: 0 },
+				"server/db/small.ts": { additions: 10, deletions: 0 },
+			}),
+		).toEqual(["client/big.ts", "server/db/small.ts"]);
+		// O orçamento respeita a prioridade.
+		expect(
+			selectByBudget(
+				files,
+				{
+					"client/big.ts": { additions: 200, deletions: 0 },
+					"server/db/small.ts": { additions: 10, deletions: 0 },
+				},
+				1,
+				priorities,
+			).selected,
+		).toEqual(["server/db/small.ts"]);
+	});
+
 	test("maxFiles não-positivo desativa o orçamento", () => {
 		const { selected, overflow } = selectByBudget(["a.ts", "b.ts"], churn, 0);
 		expect(selected).toHaveLength(2);

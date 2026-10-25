@@ -464,6 +464,12 @@ export type HoundsmanHunt = {
 	binaryPath?: string;
 };
 
+/** Prioridade por caminho — \`bonus\` em linhas de churn equivalentes. */
+export type HoundsmanPriority = {
+	pattern: RegExp;
+	bonus: number;
+};
+
 /** Contrato de configuração do motor. */
 export type HoundsmanConfig<TId extends string = string> = {
 	projectName: string;
@@ -472,6 +478,8 @@ export type HoundsmanConfig<TId extends string = string> = {
 	watchdogs: Record<TId, WatchdogDefinition>;
 	exclusions: readonly RegExp[];
 	docMappings: readonly (readonly [RegExp, readonly string[]])[];
+	/** Prioridade por caminho (opcional; a primeira regra que casar vence). */
+	priorities?: readonly HoundsmanPriority[];
 	alwaysIncludeDocs?: readonly string[];
 	budgets?: HoundsmanBudgets;
 	concurrency?: HoundsmanConcurrency;
@@ -586,6 +594,12 @@ export const houndsmanConfig = {
 	watchdogs: WATCHDOG_DEFINITIONS,
 	exclusions: EXCLUSION_PATTERNS,
 	docMappings: DOC_MAPPINGS,
+	// Prioridade por caminho (opcional): bônus em "linhas de churn equivalentes".
+	// A primeira regra que casar vence; sem regra, o risco é o churn puro.
+	// priorities: [
+	//   { pattern: /^src\\/(db|repositories)\\//, bonus: 300 },
+	//   { pattern: /^src\\/(services|domain)\\//, bonus: 200 },
+	// ],
 } satisfies HoundsmanConfig;
 
 export default houndsmanConfig;
@@ -610,7 +624,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
-    "sha256": "5720c48ede6c84ea",
+    "sha256": "343e154536b3f39c",
   },
   {
     "file": ".houndsman/core/skill/example-resume.md",
@@ -622,7 +636,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "682c65795602ff8b",
+    "sha256": "42bc13abfc8efd2a",
   },
   {
     "file": ".houndsman/core/skill/train.md",

@@ -5,6 +5,7 @@
  * consultas usadas pelo orquestrador (arquivos por watchdog, orçamento, churn).
  */
 
+import type { HoundsmanPriority } from "../config";
 import type { ClassificationResult } from "../file-classifier";
 import type { ChurnMap } from "../types";
 import { type BudgetSelection, selectByBudget } from "./budget";
@@ -72,8 +73,17 @@ export class Classification {
 	}
 
 	/** Aplica o orçamento aos arquivos de um watchdog. */
-	budgetFor(id: string, maxFiles: number): BudgetSelection {
-		return selectByBudget(this.watchdogsFor(id), this.data.churn, maxFiles);
+	budgetFor(
+		id: string,
+		maxFiles: number,
+		priorities?: readonly HoundsmanPriority[],
+	): BudgetSelection {
+		return selectByBudget(
+			this.watchdogsFor(id),
+			this.data.churn,
+			maxFiles,
+			priorities,
+		);
 	}
 
 	/** Totais de churn do diff. */

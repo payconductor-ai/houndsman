@@ -120,6 +120,15 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
   citados pelos **fluxos do modelo de intenção** + os de maior churn, limitados a 15 com
   diff de até 2k cada. O restante é declarado em `skipped` (`fora do fluxo`) — profundidade
   nos arquivos que importam para a lógica, com a lacuna explícita.
+- **Prioridade por caminho (config-driven).** `priorities: [{ pattern, bonus }]` soma o `bonus`
+  (em linhas de churn equivalentes) ao risco do arquivo. Ex.: `db` +300, `services` +200,
+  `client` 0. Um arquivo de 10 linhas em `db` (310) passa na frente de 200 linhas em `client`
+  (200), mas perde para 400 linhas em `client` (400). Ordena o orçamento, o rateio do diff e o
+  recorte do `general`; sem config, churn puro.
+- **Propagação mecânica.** Micro-alterações idênticas (≤3 linhas) em ≥5 arquivos viram **um**
+  bloco no brief: padrão dominante + outliers, em vez de N diffs de uma linha. E contratos
+  alterados cujos importadores **não** estão no diff aparecem em *Possível propagação
+  incompleta* (o caso "atualizaram 100 e esqueceram 3").
 - **Modelo de intenção recortado.** O `general` vê o modelo completo; cada domínio recebe só
   os fluxos que tocam seus arquivos (e não recebe o caminho do JSON canônico), evitando que
   persiga fluxos de outros watchdogs.

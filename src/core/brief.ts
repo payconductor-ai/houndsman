@@ -456,6 +456,61 @@ function aiPlanSection(args: WatchdogRenderArgs): string[] {
 }
 
 /**
+ * Micro-alterações iguais em muitos arquivos: mostra o padrão dominante e os
+ * outliers em vez de N diffs de uma linha.
+ */
+function propagationSection(args: WatchdogRenderArgs): string[] {
+	const cluster = args.propagation;
+	if (!cluster || cluster.files.length === 0) return [];
+	const sample = cluster.files.slice(0, 5).map(inlineCode).join(", ");
+	const rest = cluster.files.length > 5 ? ` (+${cluster.files.length - 5})` : "";
+	const lines = [
+		"## Propagação mecânica",
+		"",
+		`> ${cluster.files.length} arquivo(s) com a mesma micro-alteração (≤3 linhas).`,
+		"> Revise o padrão e os outliers; **não abra** os demais — registre-os em",
+		"> `skipped` com o motivo `propagação mecânica`.",
+		"",
+		"```diff",
+		...cluster.lines.map((line) => `+${line}`),
+		"```",
+		"",
+		`Arquivos: ${sample}${rest}`,
+		"",
+	];
+	if (cluster.outliers.length > 0) {
+		lines.push("**Outliers (revisar):**", "");
+		for (const outlier of cluster.outliers) {
+			lines.push(
+				`- ${inlineCode(outlier.file)}: \`${shorten(outlier.lines.join(" ⏎ "), 160)}\``,
+			);
+		}
+		lines.push("");
+	}
+	return lines;
+}
+
+/** Contratos alterados cujos importadores não aparecem no diff. */
+function propagationGapSection(args: WatchdogRenderArgs): string[] {
+	const gaps = args.propagationGaps ?? [];
+	if (gaps.length === 0) return [];
+	const lines = [
+		"## Possível propagação incompleta",
+		"",
+		"> Contratos alterados cujos importadores **não** aparecem no diff. Confirme",
+		"> se cada um precisa acompanhar a mudança antes de concluir.",
+		"",
+	];
+	for (const gap of gaps) {
+		lines.push(
+			`- ${inlineCode(gap.file)} → ${gap.importers.map(inlineCode).join(", ")}`,
+		);
+	}
+	lines.push("");
+	return lines;
+}
+
+/**
  * Estrutura/delta dos arquivos do watchdog (AST). É um mapa para orientar a
  * leitura — o watchdog confirma no código e não trata como achado.
  */
@@ -521,6 +576,8 @@ export function defaultRenderBrief(
 
 	lines.push(...businessSection(args));
 	lines.push(...snippetsSection(args));
+	lines.push(...propagationSection(args));
+	lines.push(...propagationGapSection(args));
 	lines.push(...flowReviewSection(args));
 	lines.push(...aiPlanSection(args));
 	lines.push(...astSection(args));

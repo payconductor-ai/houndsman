@@ -105,6 +105,25 @@ describe("brief — trechos alterados", () => {
 		});
 		expect(markdown).not.toContain("## Trechos alterados (diff)");
 	});
+
+	test("renderiza propagação mecânica e lacunas de importadores", () => {
+		const markdown = renderBrief(alphaWatchdog, {
+			...baseArgs,
+			propagation: {
+				lines: ["await pay(charge, true);"],
+				files: ["src/alpha/a.ts", "src/alpha/b.ts"],
+				outliers: [
+					{ file: "src/alpha/c.ts", lines: ["await pay(charge, false);"] },
+				],
+			},
+			propagationGaps: [{ file: "src/alpha/a.ts", importers: ["src/beta/b.ts"] }],
+		});
+		expect(markdown).toContain("## Propagação mecânica");
+		expect(markdown).toContain("await pay(charge, true)");
+		expect(markdown).toContain("Outliers (revisar)");
+		expect(markdown).toContain("## Possível propagação incompleta");
+		expect(markdown).toContain("src/beta/b.ts");
+	});
 });
 
 describe("prepare-report", () => {

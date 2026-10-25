@@ -32,6 +32,7 @@ import { summarizeScope } from "../changed-scope";
 import { mapPool } from "../concurrency";
 import {
 	type HoundsmanConfig,
+	type HoundsmanPriority,
 	resolveJevConcurrency,
 	resolveMaxFilesPerBrief,
 } from "../config";
@@ -49,6 +50,7 @@ import {
 } from "../defaults";
 import type { DiffSource } from "../diff-source";
 import { discoverDocs } from "../doc-discoverer";
+import { sortByRisk } from "../domain/budget";
 import { Classification } from "../domain/classification";
 import { Watchdog } from "../domain/watchdog";
 import { ENV_NAMES } from "../env";
@@ -70,6 +72,7 @@ import {
 } from "../paths";
 import { type PrepareStageTiming, renderPrepareReport } from "../prepare-report";
 import { ProjectConfig } from "../project-config";
+import { detectPropagation, detectPropagationGaps } from "../propagation";
 import { BriefRenderer } from "../renderers/brief-renderer";
 import {
 	type ManifestAi,
@@ -215,8 +218,9 @@ function budgetFor(
 	classification: ClassificationResult,
 	id: string,
 	maxFiles: number,
+	priorities?: readonly HoundsmanPriority[],
 ): BudgetSelection {
-	return Classification.from(classification).budgetFor(id, maxFiles);
+	return Classification.from(classification).budgetFor(id, maxFiles, priorities);
 }
 
 /** Churn total (linhas alteradas) da PR. */
@@ -246,13 +250,14 @@ export function shouldSliceGeneral(
 
 /**
  * Arquivos do recorte de fluxo: os citados pelos fluxos do modelo de intenção
- * primeiro, completando com os de maior churn. O resto vai para `overflow`
- * (declarado em `skipped`).
+ * primeiro, completando pelos de maior **risco** (churn + prioridade). O resto
+ * vai para `overflow` (declarado em `skipped`).
  */
 export function generalFlowFiles(
 	classification: Pick<ClassificationResult, "watchdogs" | "churn">,
 	business: BusinessSummary | null | undefined,
 	maxFiles: number,
+	priorities?: readonly HoundsmanPriority[],
 ): { selected: string[]; overflow: string[] } {
 	const all = classification.watchdogs[GENERAL_WATCHDOG_ID] ?? [];
 	const normalize = (value: string): string =>
@@ -265,9 +270,7 @@ export function generalFlowFiles(
 			if (match && !flowFiles.includes(match)) flowFiles.push(match);
 		}
 	}
-	const byChurn = [...all].sort(
-		(a, b) => churnLines(classification, b) - churnLines(classification, a),
-	);
+	const byChurn = sortByRisk(all, classification.churn, priorities);
 	const selected: string[] = [];
 	const seen = new Set<string>();
 	for (const file of [...flowFiles, ...byChurn]) {
@@ -277,14 +280,6 @@ export function generalFlowFiles(
 		selected.push(file);
 	}
 	return { selected, overflow: all.filter((file) => !seen.has(file)) };
-}
-
-function churnLines(
-	classification: Pick<ClassificationResult, "churn">,
-	file: string,
-): number {
-	const churn = classification.churn[file];
-	return (churn?.additions ?? 0) + (churn?.deletions ?? 0);
 }
 
 function jevSummary(jev: JevCandidatesFile): string[] {
@@ -347,11 +342,12 @@ function budgetMessage(
 	const maxFiles = resolveMaxFilesPerBrief(config);
 	let overflow = 0;
 	for (const id of Object.keys(classification.watchdogs)) {
-		overflow += budgetFor(classification, id, maxFiles).overflow.length;
+		overflow += budgetFor(classification, id, maxFiles, config.priorities ?? [])
+			.overflow.length;
 	}
 	if (overflow === 0) return [];
 	return [
-		`Orçamento: ${maxFiles} arquivo(s)/brief — ${overflow} fora do orçamento (menor churn; registrar em skipped).`,
+		`Orçamento: ${maxFiles} arquivo(s)/brief — ${overflow} fora do orçamento (menor risco; registrar em skipped).`,
 	];
 }
 
@@ -860,8 +856,13 @@ export class PreparePipeline {
 			const isGeneral = id === GENERAL_WATCHDOG_ID;
 			const sliced = isGeneral && shouldSliceGeneral(classification);
 			const { selected, overflow } = sliced
-				? generalFlowFiles(classification, business, GENERAL_FLOW_MAX_FILES)
-				: budgetFor(classification, id, maxFilesPerBrief);
+				? generalFlowFiles(
+						classification,
+						business,
+						GENERAL_FLOW_MAX_FILES,
+						config.priorities,
+					)
+				: budgetFor(classification, id, maxFilesPerBrief, config.priorities);
 			if (sliced) {
 				summary.generalSliced = {
 					selected: selected.length,
@@ -879,6 +880,19 @@ export class PreparePipeline {
 					},
 				];
 			});
+			// Micro-alterações iguais: 1 representante + outliers em vez de N diffs.
+			const propagation = detectPropagation(
+				[...selected, ...overflow],
+				patch,
+				classification.churn,
+			);
+			// Contratos alterados com importadores fora do diff (possível lacuna).
+			const propagationGaps = detectPropagationGaps(
+				selected,
+				astAnalyses,
+				astImpact,
+				new Set(Object.keys(classification.files)),
+			);
 			const brief = renderer.render(new Watchdog(def), {
 				watchdogId: id,
 				files: selected,
@@ -897,6 +911,8 @@ export class PreparePipeline {
 				aiPlan: aiPlans?.get(id),
 				business,
 				businessSummaryPath: business ? work.businessPaths.summary : undefined,
+				propagation,
+				propagationGaps,
 				// Todos os watchdogs recebem o diff: sem ele o subagente relê o arquivo
 				// inteiro só para enxergar as linhas alteradas. O `general` vê mais.
 				snippets: buildBriefSnippets(
@@ -1241,7 +1257,12 @@ export class PreparePipeline {
 		for (const id of activeIds) {
 			const def = findWatchdog(config, id);
 			if (!def) continue;
-			const { selected } = budgetFor(classification, id, maxFilesPerBrief);
+			const { selected } = budgetFor(
+				classification,
+				id,
+				maxFilesPerBrief,
+				config.priorities,
+			);
 			const astFiles: AstFileBrief[] = selected.flatMap((file) => {
 				const analysis = astAnalyses?.get(file);
 				if (!analysis?.delta) return [];

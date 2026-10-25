@@ -166,6 +166,9 @@ arquivos da PR. Cada brief recebe no máximo `budgets.maxFilesPerBrief` arquivos
   arquivos num único domínio.
 - Ajuste em `houndsman.config.ts`: `budgets: { maxFilesPerBrief: 60 }` e
   `concurrency: { jev: 8 }`. Valores não-positivos caem no default (o `doctor` avisa).
+- **Prioridade por caminho (opcional):** `priorities: [{ pattern, bonus }]` soma `bonus`
+  (em linhas de churn equivalentes) ao risco do arquivo. Ex.: `db`/`repositories` valem
+  +300, `services` +200; `client`/admin ficam em 0. A primeira regra que casar vence.
 
 ### Pré-análise Jev (Passo 1.5, opcional)
 

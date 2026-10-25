@@ -165,6 +165,20 @@ export type HoundsmanStorage = {
 };
 
 /**
+ * Regra de prioridade por caminho (ordenada; a primeira que casar vence).
+ *
+ * `bonus` é expresso em **linhas de churn equivalentes**: o risco do arquivo vira
+ * `churn + bonus`. Ex.: com `bonus: 300`, 10 linhas em `db/` (310) passam na
+ * frente de 200 linhas em `client/` (200), mas perdem para 400 linhas em `client/`.
+ */
+export type HoundsmanPriority = {
+	/** Padrão sobre o caminho relativo (ex.: `/^server\\/src\\/db\\//`). */
+	pattern: RegExp;
+	/** Peso em linhas de churn equivalentes (≥ 0). */
+	bonus: number;
+};
+
+/**
  * Configuração completa do motor de revisão para um projeto.
  *
  * `TId` é o union de ids de watchdog do projeto (ex.: `WatchdogId`).
@@ -187,6 +201,11 @@ export type HoundsmanConfig<TId extends string = string> = {
 	exclusions: readonly RegExp[];
 	/** Mapeamentos path → documentação relevante. */
 	docMappings: readonly (readonly [RegExp, readonly string[]])[];
+	/**
+	 * Prioridade por caminho (opcional). Ordena arquivos no orçamento, no rateio
+	 * do diff e no recorte do `general` — a primeira regra que casar vence.
+	 */
+	priorities?: readonly HoundsmanPriority[];
 	/** Docs sempre incluídos nos briefs (default: `DEFAULT_ALWAYS_INCLUDE_DOCS`). */
 	alwaysIncludeDocs?: readonly string[];
 	/** Limites de triage para PRs grandes (default: `DEFAULT_MAX_FILES_PER_BRIEF`). */

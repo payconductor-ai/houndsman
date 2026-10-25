@@ -90,6 +90,18 @@ function checkEmergent(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
+/** Prioridades por caminho: RegExp + bônus finito e não-negativo. */
+function checkPriorities(config: HoundsmanConfig, problems: string[]): void {
+	for (const [index, rule] of (config.priorities ?? []).entries()) {
+		if (!(rule.pattern instanceof RegExp)) {
+			problems.push(`priorities[${index}].pattern precisa ser uma RegExp`);
+		}
+		if (!Number.isFinite(rule.bonus) || rule.bonus < 0) {
+			problems.push(`priorities[${index}].bonus precisa ser número ≥ 0`);
+		}
+	}
+}
+
 /** Smoke test dos helpers críticos de renderização. */
 function checkRendering(problems: string[]): void {
 	if (sanitizeBranch("feature/x") !== "feature-x") {
@@ -346,6 +358,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkRuleDuplication(config, warnings);
 	checkMetadataPrecision(config, warnings);
 	checkBudgets(config, warnings);
+	checkPriorities(config, problems);
 	checkAstConfig(config, problems, warnings);
 	checkAiConfig(config, problems, warnings);
 	const jevQuestions = checkJevSpecs(config, problems);

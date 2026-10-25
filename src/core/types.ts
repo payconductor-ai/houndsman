@@ -142,6 +142,28 @@ export type WatchdogRenderArgs = {
 	flowReview?: boolean;
 	/** Escopo do diff por arquivo (símbolos alterados; hunks como fallback). */
 	changedScope?: ChangedScope;
+	/** Micro-alterações iguais em muitos arquivos (propagação mecânica). */
+	propagation?: PropagationCluster | null;
+	/** Contratos alterados cujos importadores não mudaram (possível lacuna). */
+	propagationGaps?: readonly PropagationGap[];
+};
+
+/** Cluster de propagação mecânica (ex.: novo parâmetro em 100 call sites). */
+export type PropagationCluster = {
+	/** Linhas adicionadas normalizadas (o padrão dominante). */
+	lines: string[];
+	/** Arquivos que seguem o padrão. */
+	files: string[];
+	/** Arquivos com micro-alteração que NÃO seguem o padrão. */
+	outliers: { file: string; lines: string[] }[];
+};
+
+/** Contrato que mudou e tem importadores fora do diff. */
+export type PropagationGap = {
+	/** Arquivo do contrato (o que mudou). */
+	file: string;
+	/** Importadores que não aparecem no diff. */
+	importers: string[];
 };
 
 /** Definição completa de um watchdog — 1 por arquivo em `project/watchdogs/`. */

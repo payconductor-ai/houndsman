@@ -106,6 +106,7 @@ Definido em `src/core/config.ts` (pacote) e espelhado em `.houndsman/core/types.
 | `watchdogs` | Definições dos watchdogs (incluem `classify`); os **ids são derivados** das chaves. |
 | `exclusions` | Arquivos que nunca entram na revisão. |
 | `docMappings` | Path → documentação de contexto. |
+| `priorities` | **Opcional** — prioridade por caminho `[{ pattern: RegExp, bonus: number }]`. O `bonus` soma ao churn ("linhas equivalentes"); a primeira regra que casar vence. Ordena o orçamento, o rateio do diff e o recorte do `general`. Sem config: churn puro. |
 | `alwaysIncludeDocs` | Docs sempre presentes nos briefs (default `["AGENTS.md"]`). |
 | `budgets` | **Opcional** — teto de arquivos por brief (`maxFilesPerBrief`, default `40`); o excedente vira "fora do orçamento" (registrar em `skipped`). |
 | `concurrency` | **Opcional** — chamadas Jev simultâneas (`jev`, default `5`). |
