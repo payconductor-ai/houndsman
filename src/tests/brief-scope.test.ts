@@ -10,7 +10,12 @@ import { describe, expect, test } from "bun:test";
 import { renderBrief } from "../core/brief";
 import { generalWatchdog } from "../core/builtins";
 import type { BusinessSummary } from "../core/business-summary";
-import { buildBriefSnippets, truncatePatch } from "../core/engine/prepare-pipeline";
+import {
+	buildBriefSnippets,
+	generalFlowFiles,
+	shouldSliceGeneral,
+	truncatePatch,
+} from "../core/engine/prepare-pipeline";
 import { buildPrepareReport } from "../core/prepare-report";
 import type { WatchdogRenderArgs } from "../core/types";
 import { alphaWatchdog } from "./fixtures/fake-project";
@@ -168,5 +173,59 @@ describe("prepare — orçamento de snippets", () => {
 		expect(cut).toContain("[trecho truncado");
 		expect(cut.startsWith("+linha de codigo")).toBe(true);
 		expect(truncatePatch("curto", 100)).toBe("curto");
+	});
+});
+
+describe("general — recorte por fluxo", () => {
+	const flowBusiness: BusinessSummary = {
+		source: "ai",
+		flows: [
+			{
+				name: "Renovação",
+				trigger: "job",
+				expected: "assinatura renovada",
+				files: ["./src/alpha/a.ts"],
+			},
+		],
+		invariants: [],
+		contracts: [],
+		states: [],
+	};
+
+	test("dispara por nº de arquivos ou por linhas alteradas", () => {
+		const manyFiles = Array.from({ length: 41 }, (_, i) => `src/f${i}.ts`);
+		expect(shouldSliceGeneral({ watchdogs: { general: manyFiles }, churn: {} })).toBe(
+			true,
+		);
+		expect(
+			shouldSliceGeneral({
+				watchdogs: { general: ["src/a.ts"] },
+				churn: { "src/a.ts": { additions: 1_200, deletions: 900 } },
+			}),
+		).toBe(true);
+		expect(
+			shouldSliceGeneral({
+				watchdogs: { general: ["src/a.ts"] },
+				churn: { "src/a.ts": { additions: 10, deletions: 5 } },
+			}),
+		).toBe(false);
+	});
+
+	test("prioriza os arquivos dos fluxos e limita o recorte", () => {
+		const files = [
+			"src/alpha/a.ts",
+			...Array.from({ length: 19 }, (_, i) => `src/f${i}.ts`),
+		];
+		const result = generalFlowFiles(
+			{
+				watchdogs: { general: files },
+				churn: { "src/f19.ts": { additions: 100, deletions: 0 } },
+			},
+			flowBusiness,
+			3,
+		);
+		expect(result.selected).toHaveLength(3);
+		expect(result.selected[0]).toBe("src/alpha/a.ts");
+		expect(result.overflow).toHaveLength(17);
 	});
 });

@@ -40,6 +40,8 @@ export type ResumeDomain = {
 	findings: number;
 	reviewedFiles: number;
 	expectedFiles: number;
+	/** Arquivos do escopo declarados em `skipped` (não revisados por decisão). */
+	skippedFiles?: number;
 };
 
 export type ReviewResumeInput = {
@@ -172,22 +174,30 @@ function conclusionSection(findings: readonly MergedFinding[]): string[] {
 	];
 }
 
-/** Cobertura por domínio: achados, arquivos revisados e o que ficou de fora. */
+/** Cobertura por domínio: revisados, declarados fora do recorte e lacunas. */
 function coverageSection(domains: readonly ResumeDomain[]): string[] {
 	if (domains.length === 0) return [];
 	const lines = [
 		"## Cobertura por domínio",
 		"",
-		"| Domínio | Achados | Revisados | Faltam |",
-		"|---|---|---|---|",
+		"| Domínio | Achados | Revisados | Fora do recorte | Faltam |",
+		"|---|---|---|---|---|",
 	];
 	for (const domain of domains) {
-		const missing = Math.max(0, domain.expectedFiles - domain.reviewedFiles);
+		const skipped = domain.skippedFiles ?? 0;
+		const missing = Math.max(
+			0,
+			domain.expectedFiles - domain.reviewedFiles - skipped,
+		);
 		lines.push(
-			`| ${domain.name} | ${domain.findings} | ${domain.reviewedFiles}/${domain.expectedFiles} | ${missing > 0 ? missing : "—"} |`,
+			`| ${domain.name} | ${domain.findings} | ${domain.reviewedFiles}/${domain.expectedFiles} | ${skipped > 0 ? skipped : "—"} | ${missing > 0 ? missing : "—"} |`,
 		);
 	}
-	lines.push("");
+	lines.push(
+		"",
+		"> `Faltam` = arquivos do escopo sem revisão e sem declaração em `skipped`.",
+		"",
+	);
 	return lines;
 }
 

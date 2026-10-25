@@ -193,18 +193,18 @@ function fileItems(args: WatchdogRenderArgs): string[] {
 }
 
 /**
- * Arquivos do domínio fora do orçamento (triage de PRs grandes): o watchdog NÃO
+ * Arquivos do domínio fora do recorte (orçamento ou fluxo): o watchdog NÃO
  * deve lê-los, mas precisa registrá-los em `skipped` — cobertura honesta.
  */
 function overflowSection(args: WatchdogRenderArgs): string[] {
 	const overflow = args.overflow ?? [];
 	if (overflow.length === 0) return [];
 	return [
-		"## Fora do orçamento (NÃO revisar)",
+		"## Fora do recorte (NÃO revisar)",
 		"",
-		`> ${overflow.length} arquivo(s) do seu domínio ficaram fora do orçamento`,
-		"> (menor churn). Não os leia: registre-os em `skipped` com o motivo",
-		'> "budget" para que a cobertura do resumo fique honesta.',
+		`> ${overflow.length} arquivo(s) do escopo ficaram fora do recorte`,
+		"> (orçamento ou prioridade de fluxo). Não os leia: registre-os em `skipped`",
+		"> com o motivo (`budget` ou `fora do fluxo`) para que a cobertura fique honesta.",
 		"",
 		...overflow.map(codeItem),
 		"",

@@ -57,13 +57,27 @@ export function coverageOf(
 	return { reviewed: reviewed.size, expected: expected.size };
 }
 
-/** Arquivos do escopo que o relatório não declarou ter revisado. */
-export function missingFiles(
+/** Arquivos do escopo que não foram revisados nem declarados em `skipped`. */
+export function unaccountedFiles(
 	reviewedFiles: readonly string[],
+	skippedFiles: readonly string[],
 	expectedFiles: readonly string[],
 ): string[] {
+	const accounted = new Set([...reviewedFiles, ...skippedFiles]);
+	return expectedFiles.filter((file) => !accounted.has(file));
+}
+
+/** Arquivos do escopo declarados em `skipped` (e não revisados). */
+export function skippedInScope(
+	reviewedFiles: readonly string[],
+	skippedFiles: readonly string[],
+	expectedFiles: readonly string[],
+): number {
 	const reviewed = new Set(reviewedFiles);
-	return expectedFiles.filter((file) => !reviewed.has(file));
+	const expected = new Set(expectedFiles);
+	return new Set(
+		skippedFiles.filter((file) => expected.has(file) && !reviewed.has(file)),
+	).size;
 }
 
 /**
@@ -78,16 +92,19 @@ function summarizeDomains(
 ): ResumeDomain[] {
 	return reports
 		.map((report) => {
-			const coverage = coverageOf(
-				report.reviewedFiles,
-				classification.watchdogs[report.watchdogId] ?? [],
-			);
+			const expected = classification.watchdogs[report.watchdogId] ?? [];
+			const coverage = coverageOf(report.reviewedFiles, expected);
 			return {
 				id: report.watchdogId,
 				name: nameOf(report.watchdogId),
 				findings: dedupeFindings([report]).length,
 				reviewedFiles: coverage.reviewed,
 				expectedFiles: coverage.expected,
+				skippedFiles: skippedInScope(
+					report.reviewedFiles,
+					report.skipped,
+					expected,
+				),
 			};
 		})
 		.sort((a, b) => b.findings - a.findings || a.name.localeCompare(b.name));
@@ -274,7 +291,11 @@ export class FinalizePipeline {
 		// Lacuna de cobertura: arquivos do escopo que ninguém declarou ter revisado.
 		const gaps = reports.flatMap((report) => {
 			const expected = classification.watchdogs[report.watchdogId] ?? [];
-			const missing = missingFiles(report.reviewedFiles, expected);
+			const missing = unaccountedFiles(
+				report.reviewedFiles,
+				report.skipped,
+				expected,
+			);
 			if (missing.length === 0) return [];
 			return [
 				{

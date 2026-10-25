@@ -40,11 +40,11 @@ src/alpha/**
 - \`src/alpha/a.ts\` (modified, +3/−1)
 - \`src/alpha/b.ts\` (added, +2/−0)
 
-## Fora do orçamento (NÃO revisar)
+## Fora do recorte (NÃO revisar)
 
-> 1 arquivo(s) do seu domínio ficaram fora do orçamento
-> (menor churn). Não os leia: registre-os em \`skipped\` com o motivo
-> "budget" para que a cobertura do resumo fique honesta.
+> 1 arquivo(s) do escopo ficaram fora do recorte
+> (orçamento ou prioridade de fluxo). Não os leia: registre-os em \`skipped\`
+> com o motivo (\`budget\` ou \`fora do fluxo\`) para que a cobertura fique honesta.
 
 - \`src/alpha/c.ts\`
 
@@ -622,7 +622,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "6919ee5a79e13af1",
+    "sha256": "682c65795602ff8b",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -928,10 +928,12 @@ exports[`baseline — artefatos de prepare/finalize gera classification, brief, 
 
 ## Cobertura por domínio
 
-| Domínio | Achados | Revisados | Faltam |
-|---|---|---|---|
-| Alpha | 1 | 2/2 | — |
-| Lógica e domínio (fluxo) | 0 | 2/2 | — |
+| Domínio | Achados | Revisados | Fora do recorte | Faltam |
+|---|---|---|---|---|
+| Alpha | 1 | 2/2 | — | — |
+| Lógica e domínio (fluxo) | 0 | 2/2 | — | — |
+
+> \`Faltam\` = arquivos do escopo sem revisão e sem declaração em \`skipped\`.
 
 ## Conclusão
 

@@ -42,6 +42,10 @@ import {
 	DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
 	GENERAL_BRIEF_SNIPPET_CHARS,
 	GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE,
+	GENERAL_FLOW_MAX_FILES,
+	GENERAL_FLOW_MIN_FILES,
+	GENERAL_FLOW_MIN_LINES,
+	GENERAL_FLOW_SNIPPET_CHARS_PER_FILE,
 } from "../defaults";
 import type { DiffSource } from "../diff-source";
 import { discoverDocs } from "../doc-discoverer";
@@ -213,6 +217,74 @@ function budgetFor(
 	maxFiles: number,
 ): BudgetSelection {
 	return Classification.from(classification).budgetFor(id, maxFiles);
+}
+
+/** Churn total (linhas alteradas) da PR. */
+function changedLines(classification: Pick<ClassificationResult, "churn">): number {
+	return Object.values(classification.churn).reduce(
+		(sum, item) => sum + (item?.additions ?? 0) + (item?.deletions ?? 0),
+		0,
+	);
+}
+
+/**
+ * `true` quando a PR é grande o bastante para o `general` revisar por fluxo.
+ *
+ * Amostrar 40 arquivos com ~800 chars cada não sustenta revisão de lógica:
+ * o recorte por fluxo troca cobertura por profundidade nos arquivos que
+ * participam dos fluxos do modelo de intenção.
+ */
+export function shouldSliceGeneral(
+	classification: Pick<ClassificationResult, "watchdogs" | "churn">,
+): boolean {
+	const files = (classification.watchdogs[GENERAL_WATCHDOG_ID] ?? []).length;
+	return (
+		files > GENERAL_FLOW_MIN_FILES ||
+		changedLines(classification) >= GENERAL_FLOW_MIN_LINES
+	);
+}
+
+/**
+ * Arquivos do recorte de fluxo: os citados pelos fluxos do modelo de intenção
+ * primeiro, completando com os de maior churn. O resto vai para `overflow`
+ * (declarado em `skipped`).
+ */
+export function generalFlowFiles(
+	classification: Pick<ClassificationResult, "watchdogs" | "churn">,
+	business: BusinessSummary | null | undefined,
+	maxFiles: number,
+): { selected: string[]; overflow: string[] } {
+	const all = classification.watchdogs[GENERAL_WATCHDOG_ID] ?? [];
+	const normalize = (value: string): string =>
+		value.replace(/\\/g, "/").replace(/^\.\//, "");
+	const own = new Map(all.map((file) => [normalize(file), file]));
+	const flowFiles: string[] = [];
+	for (const flow of business?.flows ?? []) {
+		for (const file of flow.files ?? []) {
+			const match = own.get(normalize(file));
+			if (match && !flowFiles.includes(match)) flowFiles.push(match);
+		}
+	}
+	const byChurn = [...all].sort(
+		(a, b) => churnLines(classification, b) - churnLines(classification, a),
+	);
+	const selected: string[] = [];
+	const seen = new Set<string>();
+	for (const file of [...flowFiles, ...byChurn]) {
+		if (selected.length >= maxFiles) break;
+		if (seen.has(file)) continue;
+		seen.add(file);
+		selected.push(file);
+	}
+	return { selected, overflow: all.filter((file) => !seen.has(file)) };
+}
+
+function churnLines(
+	classification: Pick<ClassificationResult, "churn">,
+	file: string,
+): number {
+	const churn = classification.churn[file];
+	return (churn?.additions ?? 0) + (churn?.deletions ?? 0);
 }
 
 function jevSummary(jev: JevCandidatesFile): string[] {
@@ -628,7 +700,7 @@ export class PreparePipeline {
 					}
 				: undefined;
 
-		await runStage(timedProgress, "briefs", () =>
+		const briefs = await runStage(timedProgress, "briefs", () =>
 			this.writeBriefs(
 				activeIds,
 				classification,
@@ -690,6 +762,11 @@ export class PreparePipeline {
 		if (aiPlans.size > 0) {
 			messages.push(
 				`IA: plano de revisão em ${aiPlans.size} brief(s) (sugestão, não substitui regras).`,
+			);
+		}
+		if (briefs.generalSliced) {
+			messages.push(
+				`General: recorte por fluxo (${briefs.generalSliced.selected}/${briefs.generalSliced.total} arquivos) — os demais devem ser registrados em \`skipped\`.`,
 			);
 		}
 		if (ai && ((aiUsage?.calls ?? 0) > 0 || ai.recorder.attempts > 0)) {
@@ -770,20 +847,27 @@ export class PreparePipeline {
 		aiPlans?: ReadonlyMap<string, BriefPlan>,
 		business?: BusinessSummary,
 		patch?: ReadonlyMap<string, string>,
-	): void {
+	): { generalSliced?: { selected: number; total: number } } {
 		const { ctx, config } = this;
 		const work = ctx.work;
 		const docs = discoverDocs(Object.keys(classification.files), config);
 		const maxFilesPerBrief = resolveMaxFilesPerBrief(config);
 		const renderer = new BriefRenderer();
+		const summary: { generalSliced?: { selected: number; total: number } } = {};
 		for (const id of activeIds) {
 			const def = findWatchdog(config, id);
 			if (!def) continue;
-			const { selected, overflow } = budgetFor(
-				classification,
-				id,
-				maxFilesPerBrief,
-			);
+			const isGeneral = id === GENERAL_WATCHDOG_ID;
+			const sliced = isGeneral && shouldSliceGeneral(classification);
+			const { selected, overflow } = sliced
+				? generalFlowFiles(classification, business, GENERAL_FLOW_MAX_FILES)
+				: budgetFor(classification, id, maxFilesPerBrief);
+			if (sliced) {
+				summary.generalSliced = {
+					selected: selected.length,
+					total: (classification.watchdogs[id] ?? []).length,
+				};
+			}
 			const astFiles: AstFileBrief[] = selected.flatMap((file) => {
 				const analysis = astAnalyses?.get(file);
 				if (!analysis?.delta) return [];
@@ -795,7 +879,6 @@ export class PreparePipeline {
 					},
 				];
 			});
-			const isGeneral = id === GENERAL_WATCHDOG_ID;
 			const brief = renderer.render(new Watchdog(def), {
 				watchdogId: id,
 				files: selected,
@@ -822,7 +905,9 @@ export class PreparePipeline {
 					isGeneral
 						? {
 								total: GENERAL_BRIEF_SNIPPET_CHARS,
-								perFile: GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE,
+								perFile: sliced
+									? GENERAL_FLOW_SNIPPET_CHARS_PER_FILE
+									: GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE,
 							}
 						: undefined,
 				),
@@ -837,6 +922,7 @@ export class PreparePipeline {
 				content,
 			});
 		}
+		return summary;
 	}
 
 	/**

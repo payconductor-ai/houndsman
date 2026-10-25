@@ -14,7 +14,7 @@ import {
 } from "../core/config";
 import { parseDiffIndex, parseNumstat } from "../core/diff-source";
 import { discoverDocs } from "../core/doc-discoverer";
-import { coverageOf, missingFiles } from "../core/engine/finalize-pipeline";
+import { coverageOf, unaccountedFiles } from "../core/engine/finalize-pipeline";
 import { overlapMessage } from "../core/engine/prepare-pipeline";
 import {
 	type ClassificationResult,
@@ -580,9 +580,13 @@ describe("report-builder", () => {
 		expect(coverage).toEqual({ reviewed: 2, expected: 3 });
 	});
 
-	test("lista os arquivos do escopo que não foram declarados", () => {
+	test("lista arquivos sem revisão e sem declaração em skipped", () => {
 		expect(
-			missingFiles(["src/a.ts", "src/fora.ts"], ["src/a.ts", "src/b.ts"]),
+			unaccountedFiles(
+				["src/a.ts", "src/fora.ts"],
+				["src/c.ts"],
+				["src/a.ts", "src/c.ts", "src/b.ts"],
+			),
 		).toEqual(["src/b.ts"]);
 	});
 
@@ -700,7 +704,7 @@ describe("houndsman brief", () => {
 		expect(brief).toContain("**Objetivo:** Entregar X");
 	});
 
-	test("mostra churn e lista arquivos fora do orçamento", () => {
+	test("mostra churn e lista arquivos fora do recorte", () => {
 		const brief = renderBrief(alphaWatchdog, {
 			watchdogId: "alpha",
 			files: ["src/alpha/keep.ts"],
@@ -714,7 +718,7 @@ describe("houndsman brief", () => {
 			deleted: [],
 		});
 		expect(brief).toContain("+12/−3");
-		expect(brief).toContain("Fora do orçamento");
+		expect(brief).toContain("Fora do recorte");
 		expect(brief).toContain("src/alpha/skip.ts");
 	});
 

@@ -115,6 +115,11 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
 - **Orçamento de exploração.** O brief declara o teto de leitura/busca do subagente
   (6/6 por domínio, 10/10 no `general`). Sem prova dentro do brief + orçamento, não há
   achado — é o que impedia o `general` de gastar 10+ minutos rastreando a PR inteira.
+- **Recorte por fluxo do `general`.** Acima de **40 arquivos** ou **2.000 linhas alteradas**,
+  o `general` deixa de amostrar 40 arquivos (~800 chars cada) e passa a revisar os arquivos
+  citados pelos **fluxos do modelo de intenção** + os de maior churn, limitados a 15 com
+  diff de até 2k cada. O restante é declarado em `skipped` (`fora do fluxo`) — profundidade
+  nos arquivos que importam para a lógica, com a lacuna explícita.
 - **Modelo de intenção recortado.** O `general` vê o modelo completo; cada domínio recebe só
   os fluxos que tocam seus arquivos (e não recebe o caminho do JSON canônico), evitando que
   persiga fluxos de outros watchdogs.

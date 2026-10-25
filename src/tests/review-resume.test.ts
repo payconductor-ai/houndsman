@@ -141,8 +141,8 @@ describe("renderReviewResume", () => {
 		});
 
 		expect(md).toContain("## Cobertura por domínio");
-		expect(md).toContain("| Alpha | 1 | 1/2 | 1 |");
-		expect(md).toContain("| Beta | 1 | 1/1 | — |");
+		expect(md).toContain("| Alpha | 1 | 1/2 | — | 1 |");
+		expect(md).toContain("| Beta | 1 | 1/1 | — | — |");
 		expect(md).toContain("## Candidatos não verificados (1)");
 		expect(md).toContain("Suspeita X");
 		expect(md).not.toContain("`src/a.ts` ·");

@@ -83,6 +83,22 @@ export const BRIEF_SNIPPET_FLOOR_RATIO = 0.5;
 /** Piso de chars por arquivo no rateio igual (evita trechos inúteis). */
 export const BRIEF_SNIPPET_MIN_PER_FILE = 120;
 
+/**
+ * A partir daqui o `general` revisa por **fluxo** em vez de amostrar arquivos.
+ *
+ * Em PRs grandes, 40 arquivos com ~800 chars cada viram amostragem: melhor ver
+ * os arquivos que participam dos fluxos do modelo de intenção (com diff de
+ * verdade) e declarar o resto em `skipped`.
+ */
+export const GENERAL_FLOW_MIN_FILES = 40;
+export const GENERAL_FLOW_MIN_LINES = 2_000;
+
+/** Arquivos do recorte de fluxo do `general`. */
+export const GENERAL_FLOW_MAX_FILES = 15;
+
+/** Diff por arquivo no recorte de fluxo — profundidade em vez de cobertura. */
+export const GENERAL_FLOW_SNIPPET_CHARS_PER_FILE = 2_000;
+
 /** Retentativas default quando a saída do watchdog é inválida. */
 export const DEFAULT_HUNT_RETRIES = 1;
 

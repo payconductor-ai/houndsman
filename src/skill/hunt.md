@@ -154,9 +154,14 @@ com **churn** (linhas adicionadas/removidas) por arquivo — o custo não cresce
 arquivos da PR. Cada brief recebe no máximo `budgets.maxFilesPerBrief` arquivos (default 40),
 **priorizados pelo maior churn**:
 
-- O excedente vai para a seção **Fora do orçamento (NÃO revisar)** do brief e o watchdog deve
-  registrá-lo em `skipped` — a tabela de **Cobertura** mostra o que ficou de fora (nunca some
-  silenciosamente).
+- No **`general`**, acima de **40 arquivos** ou **2.000 linhas alteradas** o prepare aplica o
+  **recorte por fluxo**: até 15 arquivos (os citados pelos fluxos do modelo de intenção + os de
+  maior churn), com diff de até 2k por arquivo. O restante vai para **Fora do recorte** e deve
+  ser registrado em `skipped` (`fora do fluxo`). A tabela de cobertura do resumo mostra
+  `Revisados`, `Fora do recorte` e `Faltam` (sem declaração).
+- O excedente do orçamento vai para a seção **Fora do recorte (NÃO revisar)** do brief e o
+  watchdog deve registrá-lo em `skipped` — a tabela de **Cobertura** mostra o que ficou de fora
+  (nunca some silenciosamente).
 - Isso mantém o contexto do subagente limitado mesmo num PR de 10k linhas com centenas de
   arquivos num único domínio.
 - Ajuste em `houndsman.config.ts`: `budgets: { maxFilesPerBrief: 60 }` e
@@ -280,8 +285,8 @@ Em `reviewedFiles`, liste apenas arquivos do seu domínio (subconjunto do brief)
 ```
 
 Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).
-Sem achados → `"findings": []` (arquivo obrigatório). Arquivos na seção **Fora do orçamento**
-não são lidos: registre-os em `skipped`.
+Sem achados → `"findings": []` (arquivo obrigatório). Arquivos na seção **Fora do recorte**
+não são lidos: registre-os em `skipped` com o motivo (`budget` ou `fora do fluxo`).
 
 **NUNCA enviar:** `git diff` completo · histórico de commits · arquivos de outros domínios ·
 o `business-summary.json` inteiro (o brief já traz o recorte do domínio) · `AGENTS.md` completo
