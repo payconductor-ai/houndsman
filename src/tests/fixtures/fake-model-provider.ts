@@ -30,6 +30,7 @@ export class FakeModelProvider implements ModelProvider {
 	constructor(
 		private readonly handler: FakeHandler,
 		modelId = "fake-model",
+		private readonly finishReason = "stop",
 	) {
 		this.modelId = modelId;
 	}
@@ -41,7 +42,7 @@ export class FakeModelProvider implements ModelProvider {
 		return {
 			output: output as T,
 			usage: fakeUsage(),
-			finishReason: "stop",
+			finishReason: this.finishReason,
 		};
 	}
 }

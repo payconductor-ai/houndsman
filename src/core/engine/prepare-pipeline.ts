@@ -36,6 +36,8 @@ import {
 	resolveMaxFilesPerBrief,
 } from "../config";
 import {
+	BRIEF_SNIPPET_FLOOR_RATIO,
+	BRIEF_SNIPPET_MIN_PER_FILE,
 	DEFAULT_BRIEF_SNIPPET_CHARS,
 	DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
 	GENERAL_BRIEF_SNIPPET_CHARS,
@@ -127,26 +129,81 @@ export type PrepareDeps = {
 	onProgress?: PrepareProgress;
 };
 
-/** Trechos do diff para o brief: cap por arquivo e cap total. */
-function buildSnippets(
+/** Marcador de corte no trecho (o subagente sabe que falta código). */
+const SNIPPET_TRUNCATED_MARKER = "… [trecho truncado — abra o arquivo para o restante]";
+
+/**
+ * Corta o patch preservando linhas inteiras e sinalizando o corte.
+ *
+ * Cortar no meio de um hunk entregava diff inválido como se estivesse completo
+ * — o subagente concluía sobre código que não viu.
+ */
+export function truncatePatch(text: string, limit: number): string {
+	if (text.length <= limit) return text;
+	const room = Math.max(0, limit - SNIPPET_TRUNCATED_MARKER.length - 1);
+	const head = text.slice(0, room);
+	const cut = head.lastIndexOf("\n");
+	return `${(cut > 0 ? head.slice(0, cut) : head).trimEnd()}\n${SNIPPET_TRUNCATED_MARKER}`;
+}
+
+/**
+ * Trechos do diff para o brief, distribuídos entre os arquivos.
+ *
+ * Metade do teto vai em partes iguais (todo arquivo revisável tem contexto); o
+ * resto completa os maiores primeiro, na ordem recebida (já ordenada por
+ * churn). Sem o rateio, os primeiros arquivos consumiam o teto e o subagente
+ * abria os demais à mão — justamente o que o brief evita.
+ */
+export function buildBriefSnippets(
 	files: readonly string[],
 	patch: ReadonlyMap<string, string> | undefined,
-	maxTotal = DEFAULT_BRIEF_SNIPPET_CHARS,
-	maxPerFile = DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
+	options: {
+		total?: number;
+		perFile?: number;
+		floorRatio?: number;
+		minPerFile?: number;
+	} = {},
 ): { file: string; snippet: string }[] {
 	if (!patch) return [];
-	const snippets: { file: string; snippet: string }[] = [];
-	let used = 0;
-	for (const file of files) {
+	const total = options.total ?? DEFAULT_BRIEF_SNIPPET_CHARS;
+	const perFile = options.perFile ?? DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE;
+	const floorRatio = options.floorRatio ?? BRIEF_SNIPPET_FLOOR_RATIO;
+	const minPerFile = options.minPerFile ?? BRIEF_SNIPPET_MIN_PER_FILE;
+
+	const entries = files.flatMap((file) => {
 		const text = patch.get(file);
-		if (!text) continue;
-		const remaining = maxTotal - used;
-		if (remaining <= 0) break;
-		const snippet = text.slice(0, Math.min(maxPerFile, remaining));
-		used += snippet.length;
-		snippets.push({ file, snippet });
+		return text ? [{ file, text, take: 0 }] : [];
+	});
+	if (entries.length === 0) return [];
+
+	const floorBudget = Math.min(total, Math.floor(total * floorRatio));
+	const share = Math.max(
+		minPerFile,
+		Math.min(perFile, Math.floor(floorBudget / entries.length)),
+	);
+	let used = 0;
+	for (const entry of entries) {
+		entry.take = Math.min(share, entry.text.length);
+		used += entry.take;
 	}
-	return snippets;
+
+	let remaining = Math.max(0, total - used);
+	for (const entry of entries) {
+		if (remaining <= 0) break;
+		const room = Math.min(
+			perFile - entry.take,
+			entry.text.length - entry.take,
+			remaining,
+		);
+		if (room <= 0) continue;
+		entry.take += room;
+		remaining -= room;
+	}
+
+	return entries.map((entry) => ({
+		file: entry.file,
+		snippet: truncatePatch(entry.text, entry.take),
+	}));
 }
 
 /** Aplica o orçamento aos arquivos de um watchdog. */
@@ -165,6 +222,19 @@ function jevSummary(jev: JevCandidatesFile): string[] {
 		`Jev: ${jev.candidates.length} candidato(s) em ${jev.analyzedFiles ?? 0} arquivo(s)` +
 			(skipped > 0 ? `, ${skipped} com falha.` : "."),
 	];
+}
+
+/** Lista curta das features que falharam (para a mensagem do CLI). */
+function summarizeFailures(
+	failures: readonly { feature: string; error: string }[],
+): string {
+	const byFeature = new Map<string, string>();
+	for (const failure of failures) {
+		if (!byFeature.has(failure.feature)) {
+			byFeature.set(failure.feature, failure.error.slice(0, 120));
+		}
+	}
+	return [...byFeature].map(([feature, error]) => `${feature} (${error})`).join("; ");
 }
 
 function discoveryMessages(
@@ -601,11 +671,15 @@ export class PreparePipeline {
 				`IA: plano de revisão em ${aiPlans.size} brief(s) (sugestão, não substitui regras).`,
 			);
 		}
-		if (aiUsage && aiUsage.calls > 0) {
+		if (ai && ((aiUsage?.calls ?? 0) > 0 || ai.recorder.attempts > 0)) {
+			const usage = ai.recorder.total;
+			const failures = ai.recorder.failures.length;
 			messages.push(
-				`IA: ${aiUsage.calls} chamada(s), ${aiUsage.totalTokens} token(s).`,
+				failures > 0
+					? `IA: ${usage.calls}/${ai.recorder.attempts} chamada(s) ok, ${usage.totalTokens} token(s), ${failures} falha(s): ${summarizeFailures(ai.recorder.failures)}.`
+					: `IA: ${usage.calls} chamada(s), ${usage.totalTokens} token(s).`,
 			);
-			ai?.recorder.write(ctx.storage, ctx.review.id);
+			ai.recorder.write(ctx.storage, ctx.review.id);
 		}
 
 		// Duração por etapa (inclui as que rodaram em paralelo) para comparar runs.
@@ -616,7 +690,7 @@ export class PreparePipeline {
 				startedAt,
 				durationMs: Date.now() - startedMs,
 				stages: timings,
-				ai: aiUsage,
+				ai: ai?.recorder.summary,
 			}),
 		});
 
@@ -721,13 +795,15 @@ export class PreparePipeline {
 				businessSummaryPath: business ? work.businessPaths.summary : undefined,
 				// Todos os watchdogs recebem o diff: sem ele o subagente relê o arquivo
 				// inteiro só para enxergar as linhas alteradas. O `general` vê mais.
-				snippets: buildSnippets(
+				snippets: buildBriefSnippets(
 					selected,
 					patch,
-					isGeneral ? GENERAL_BRIEF_SNIPPET_CHARS : DEFAULT_BRIEF_SNIPPET_CHARS,
 					isGeneral
-						? GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE
-						: DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE,
+						? {
+								total: GENERAL_BRIEF_SNIPPET_CHARS,
+								perFile: GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE,
+							}
+						: undefined,
 				),
 				changedScope: classification.changedScope,
 			});
@@ -1082,7 +1158,7 @@ export class PreparePipeline {
 				ast: astFiles,
 				docs,
 				business,
-				snippets: buildSnippets(selected, patch),
+				snippets: buildBriefSnippets(selected, patch),
 			});
 		}
 		return enricher.enrichAll(inputs);

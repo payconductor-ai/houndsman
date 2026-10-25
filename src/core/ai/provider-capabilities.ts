@@ -43,3 +43,15 @@ export function temperatureApplies(
 	if (provider !== "deepseek") return true;
 	return !deepSeekThinkingEnabled(modelId, providerOptions);
 }
+
+/**
+ * Opções para tarefas estruturadas curtas (resumo, plano, classificação).
+ *
+ * O thinking do DeepSeek V4 consome o teto de saída e dominava a latência: a
+ * resposta JSON truncava (`finishReason: "length"`) e a feature caía no
+ * fallback sem produzir nada. Desligar o raciocínio nessas chamadas mantém o
+ * schema e corta a latência. Providers não-DeepSeek ignoram a chave.
+ */
+export const LEAN_PROVIDER_OPTIONS: AiProviderOptions = {
+	deepseek: { thinking: { type: "disabled" } },
+};

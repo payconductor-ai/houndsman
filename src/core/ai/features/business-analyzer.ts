@@ -44,7 +44,7 @@ export class AiBusinessAnalyzer {
 				buildBusinessPromptPayload(input.payload),
 			),
 			outputSchema: BusinessHypothesesSchema,
-			maxOutputTokens: 1_200,
+			maxOutputTokens: 1_600,
 		});
 		if (!result.ok) return [];
 		return result.output.hypotheses

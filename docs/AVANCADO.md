@@ -108,8 +108,13 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
 **chamadas de IA do prepare**. O motor corta os dois:
 
 - **Trechos alterados no brief.** Todos os watchdogs recebem `## Trechos alterados (diff)`
-  (patch `-U0`, só linhas alteradas; caps de 1.5k/arquivo e 12k/brief — o `general` recebe
-  2.5k/24k). O subagente começa pelo diff e abre o arquivo apenas para contexto adjacente.
+  (patch `-U0`, só linhas alteradas). O teto é **rateado entre todos os arquivos** do brief
+  (metade em partes iguais, o resto por churn): 24k/brief e 4k/arquivo no domínio,
+  32k/5k no `general`. Trecho cortado vem marcado (`… [trecho truncado]`), nunca como se
+  fosse o diff inteiro.
+- **Orçamento de exploração.** O brief declara o teto de leitura/busca do subagente
+  (6/6 por domínio, 10/10 no `general`). Sem prova dentro do brief + orçamento, não há
+  achado — é o que impedia o `general` de gastar 10+ minutos rastreando a PR inteira.
 - **Modelo de intenção recortado.** O `general` vê o modelo completo; cada domínio recebe só
   os fluxos que tocam seus arquivos (e não recebe o caminho do JSON canônico), evitando que
   persiga fluxos de outros watchdogs.
@@ -120,9 +125,9 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
 - **Despacho da skill.** Despache todos os briefs da onda no **mesmo bloco** de tool calls;
   serializar N subagentes custa N × o tempo de um.
 
-Para diagnosticar, o prepare grava `prepare-report.json` (duração por etapa + uso de IA) e o
-CLI imprime cada etapa. No `houndsman hunt`, `hunt-report.json` traz `durationMs`, `numTurns`
-e tokens por watchdog.
+Para diagnosticar, o prepare grava `prepare-report.json` (duração por etapa + uso de IA,
+**tentativas e falhas** por feature) e o CLI imprime cada etapa. No `houndsman hunt`,
+`hunt-report.json` traz `durationMs`, `numTurns` e tokens por watchdog.
 
 ### Teste A/B (variantes da mesma PR)
 

@@ -10,6 +10,7 @@ import type { AiProviderOptions } from "../config";
 import type { ProjectConfig } from "../project-config";
 import { AiConfigurationError, errorMessage } from "./errors";
 import { ModelFactory } from "./model-factory";
+import { LEAN_PROVIDER_OPTIONS } from "./provider-capabilities";
 import type { AiResult, AiUsage, ModelProvider, ModelRequest } from "./types";
 import { AiUsageBudget } from "./usage-budget";
 import { AiUsageRecorder } from "./usage-recorder";
@@ -109,7 +110,13 @@ export class AiClient {
 	): Promise<AiResult<T>> {
 		return this.run(
 			feature,
-			{ ...request, outputSchema: request.outputSchema },
+			{
+				...request,
+				outputSchema: request.outputSchema,
+				providerOptions:
+					request.providerOptions ??
+					leanProviderOptions(this.project.aiProviderOptions),
+			},
 			model,
 		);
 	}
@@ -183,6 +190,7 @@ export class AiClient {
 			return { ok: false, error: errorMessage(error) };
 		}
 
+		const startedAt = Date.now();
 		try {
 			const provider = await this.requireProvider(model);
 			const response = await provider.generate({
@@ -193,6 +201,17 @@ export class AiClient {
 				),
 				signal: combineSignals(request.signal, this.project.aiTimeoutMs),
 			});
+			// Objeto truncado não é resultado parcial útil: sem o JSON completo a
+			// feature inteira caía silenciosamente no fallback. Registra e falha.
+			if (request.outputSchema && response.finishReason === "length") {
+				const error = `Resposta truncada (finishReason=length; maxOutputTokens=${request.maxOutputTokens ?? "sem teto"}).`;
+				this.recorder.recordFailure(feature, provider.modelId, {
+					durationMs: Date.now() - startedAt,
+					error,
+					finishReason: response.finishReason,
+				});
+				return { ok: false, error };
+			}
 			this.budget.record(response.usage);
 			this.recorder.record(feature, provider.modelId, response.usage);
 			return {
@@ -202,7 +221,12 @@ export class AiClient {
 				model: provider.modelId,
 			};
 		} catch (error) {
-			return { ok: false, error: errorMessage(error) };
+			const message = errorMessage(error);
+			this.recorder.recordFailure(feature, model ?? this.modelId, {
+				durationMs: Date.now() - startedAt,
+				error: message,
+			});
+			return { ok: false, error: message };
 		}
 	}
 }
@@ -219,6 +243,18 @@ function mergeProviderOptions(
 		merged[provider] = { ...base[provider], ...values };
 	}
 	return merged;
+}
+
+/**
+ * Opções enxutas para objetos estruturados: thinking desligado, salvo quando o
+ * projeto já configurou `thinking` explicitamente — aí a config manda.
+ */
+function leanProviderOptions(
+	base: AiProviderOptions | undefined,
+): AiProviderOptions | undefined {
+	const configured = base?.deepseek;
+	if (configured && "thinking" in configured) return undefined;
+	return LEAN_PROVIDER_OPTIONS;
 }
 
 /** Combina o sinal do chamador com o timeout configurado. */

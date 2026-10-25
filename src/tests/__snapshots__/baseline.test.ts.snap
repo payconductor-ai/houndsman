@@ -60,12 +60,20 @@ src/alpha/**
 
 - \`src/alpha/old.ts\`
 
+## Orçamento de exploração
+
+> O diff já está no brief. Limite **neste brief**: 6 leitura(s) de arquivo
+> e 6 busca(s) (grep).
+> Abra arquivo só para chamador/contexto de um símbolo citado nos trechos.
+> Se a prova não estiver no brief nem nesse orçamento, **não é achado** —
+> registre a dúvida no campo \`action\` do finding mais próximo ou descarte.
+
 ## Procedimento
 
 1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
-2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.
-3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.
-4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.
+2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Trecho com o marcador \`… [trecho truncado]\` pode ser aberto, uma vez, para o restante.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
 6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
@@ -614,7 +622,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "3bff941edd1d6870",
+    "sha256": "0c1193e23ca71656",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -877,12 +885,20 @@ index 0000000..f4082f0
 
 - \`src/alpha/old.ts\`
 
+## Orçamento de exploração
+
+> O diff já está no brief. Limite **neste brief**: 6 leitura(s) de arquivo
+> e 6 busca(s) (grep).
+> Abra arquivo só para chamador/contexto de um símbolo citado nos trechos.
+> Se a prova não estiver no brief nem nesse orçamento, **não é achado** —
+> registre a dúvida no campo \`action\` do finding mais próximo ou descarte.
+
 ## Procedimento
 
 1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.
-2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.
-3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.
-4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.
+2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Trecho com o marcador \`… [trecho truncado]\` pode ser aberto, uma vez, para o restante.
+3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
+4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.
 6. **CONCLUDE** — grave o JSON no caminho de output, com \`reviewedFiles\` preenchido (arquivo cujo trecho está no brief conta como revisado) e \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "

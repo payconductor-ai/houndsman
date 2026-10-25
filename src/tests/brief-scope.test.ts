@@ -10,6 +10,7 @@ import { describe, expect, test } from "bun:test";
 import { renderBrief } from "../core/brief";
 import { generalWatchdog } from "../core/builtins";
 import type { BusinessSummary } from "../core/business-summary";
+import { buildBriefSnippets, truncatePatch } from "../core/engine/prepare-pipeline";
 import { buildPrepareReport } from "../core/prepare-report";
 import type { WatchdogRenderArgs } from "../core/types";
 import { alphaWatchdog } from "./fixtures/fake-project";
@@ -102,7 +103,7 @@ describe("brief — trechos alterados", () => {
 });
 
 describe("prepare-report", () => {
-	test("preserva etapas e uso de IA", () => {
+	test("preserva etapas, uso de IA e falhas", () => {
 		const report = buildPrepareReport({
 			startedAt: "2026-10-25T00:00:00.000Z",
 			durationMs: 1_500,
@@ -115,6 +116,16 @@ describe("prepare-report", () => {
 				outputTokens: 5,
 				totalTokens: 15,
 				calls: 1,
+				attempts: 2,
+				failures: [
+					{
+						feature: "brief",
+						model: "deepseek-v4-pro",
+						durationMs: 12,
+						error: "Resposta truncada",
+						finishReason: "length",
+					},
+				],
 			},
 		});
 		expect(report.version).toBe(1);
@@ -124,5 +135,38 @@ describe("prepare-report", () => {
 			"technical",
 		]);
 		expect(report.ai?.calls).toBe(1);
+		expect(report.ai?.attempts).toBe(2);
+		expect(report.ai?.failures[0]?.finishReason).toBe("length");
+	});
+});
+
+describe("prepare — orçamento de snippets", () => {
+	const patch = (chars: number) =>
+		Array.from(
+			{ length: Math.ceil(chars / 40) },
+			() => "+linha de codigo alterada",
+		).join("\n");
+
+	test("distribui o teto entre todos os arquivos (não só nos primeiros)", () => {
+		const files = Array.from({ length: 10 }, (_, i) => `src/f${i}.ts`);
+		const snippets = buildBriefSnippets(
+			files,
+			new Map(files.map((file) => [file, patch(2_000)])),
+			{ total: 10_000, perFile: 4_000 },
+		);
+		expect(snippets).toHaveLength(10);
+		// Todos começam com uma parte igual; o excedente vai para os primeiros.
+		expect(snippets[0]?.snippet.length).toBeGreaterThan(
+			snippets[9]?.snippet.length ?? 0,
+		);
+		expect(snippets.every((item) => item.snippet.length > 0)).toBe(true);
+	});
+
+	test("corta em linha inteira e sinaliza o trecho truncado", () => {
+		const cut = truncatePatch(patch(1_000), 120);
+		expect(cut.length).toBeLessThanOrEqual(120);
+		expect(cut).toContain("[trecho truncado");
+		expect(cut.startsWith("+linha de codigo")).toBe(true);
+		expect(truncatePatch("curto", 100)).toBe("curto");
 	});
 });

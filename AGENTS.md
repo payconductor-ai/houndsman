@@ -144,7 +144,10 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   símbolo folha do AST que contém cada âncora do `git diff -U0` + âncoras soltas; sem AST,
   caem para os hunks — e o injeta no brief e na pré-análise. Finding
   com `line` fora das faixas é código pré-existente, não escopo da revisão. Nunca volte a
-  mandar o watchdog "ler o arquivo inteiro".
+  mandar o watchdog "ler o arquivo inteiro". O brief recebe o patch `-U0` com o teto **rateado
+  entre todos os arquivos** (metade igual, o resto por churn) e declara um **orçamento de
+  exploração** (6 leituras/6 buscas por domínio; 10/10 no `general`) — sem prova dentro dele,
+  não há achado.
 - **Revisão de lógica é obrigatória.** O `prepare` injeta o watchdog reservado `general` em
   **todo** ciclo, com todos os arquivos alterados; não há flag de desligar (`--no-ai` não o
   remove). Ele audita fluxo/capacidade/credencial/estado e emite `Lógica:`/`Domínio:`.

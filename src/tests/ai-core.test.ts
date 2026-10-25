@@ -155,6 +155,52 @@ describe("temperature e providerOptions", () => {
 			deepseek: { thinking: { type: "disabled" } },
 		});
 	});
+
+	test("objetos estruturados desligam thinking por default", async () => {
+		const provider = new FakeModelProvider(() => ({ ok: true }));
+		const client = new AiClient({ project, provider });
+		await client.generateObject("business", {
+			prompt: "oi",
+			outputSchema: z.object({ ok: z.boolean() }),
+		});
+		expect(provider.requests[0]?.providerOptions).toEqual({
+			deepseek: { thinking: { type: "disabled" } },
+		});
+	});
+
+	test("thinking configurado pelo projeto vence o default", async () => {
+		const configured = new ProjectConfig({
+			...fakeHoundsmanConfig,
+			ai: { providerOptions: { deepseek: { thinking: { type: "enabled" } } } },
+		});
+		const provider = new FakeModelProvider(() => ({ ok: true }));
+		const client = new AiClient({ project: configured, provider });
+		await client.generateObject("business", {
+			prompt: "oi",
+			outputSchema: z.object({ ok: z.boolean() }),
+		});
+		expect(provider.requests[0]?.providerOptions).toEqual({
+			deepseek: { thinking: { type: "enabled" } },
+		});
+	});
+
+	test("resposta truncada falha e é registrada sem debitar o budget", async () => {
+		const provider = new FakeModelProvider(
+			() => ({ ok: true }),
+			"fake-model",
+			"length",
+		);
+		const client = new AiClient({ project, provider });
+		const result = await client.generateObject("brief", {
+			prompt: "oi",
+			outputSchema: z.object({ ok: z.boolean() }),
+			maxOutputTokens: 100,
+		});
+		expect(result.ok).toBe(false);
+		expect(client.recorder.total.calls).toBe(0);
+		expect(client.recorder.failures[0]?.finishReason).toBe("length");
+		expect(client.recorder.summary.attempts).toBe(1);
+	});
 });
 
 describe("avisos do AI SDK", () => {

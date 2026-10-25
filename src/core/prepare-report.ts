@@ -14,14 +14,29 @@ export type PrepareStageTiming = {
 	durationMs: number;
 };
 
+/** Chamada de IA que falhou (timeout, truncamento, schema inválido). */
+export type PrepareAiFailure = {
+	feature: string;
+	model: string;
+	durationMs: number;
+	error: string;
+	finishReason?: string;
+};
+
+/** Uso de IA do prepare: tokens das chamadas boas + tentativas/falhas. */
+export type PrepareAiReport = AiUsage & {
+	attempts: number;
+	failures: readonly PrepareAiFailure[];
+};
+
 /** Entrada do relatório. */
 export type PrepareReportInput = {
 	/** Início do prepare (ISO). */
 	startedAt: string;
 	durationMs: number;
 	stages: readonly PrepareStageTiming[];
-	/** Uso agregado de IA (quando configurada). */
-	ai?: AiUsage;
+	/** Uso agregado de IA e falhas (quando configurada). */
+	ai?: PrepareAiReport;
 };
 
 /** Monta o objeto persistido. */
@@ -31,7 +46,12 @@ export function buildPrepareReport(input: PrepareReportInput) {
 		startedAt: input.startedAt,
 		durationMs: input.durationMs,
 		stages: input.stages.map((item) => ({ ...item })),
-		ai: input.ai ?? null,
+		ai: input.ai
+			? {
+					...input.ai,
+					failures: input.ai.failures.map((failure) => ({ ...failure })),
+				}
+			: null,
 	};
 }
 

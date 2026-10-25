@@ -27,12 +27,42 @@ import {
  */
 export const PROCEDURE: readonly string[] = [
 	"1. **RECONSTRUCT** — leia o recorte do *Modelo de intenção (negócio)* e diga para si mesmo o que a mudança DEVE entregar (fluxos, invariantes, contratos). Sem modelo, derive do contexto da PR.",
-	"2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Abra o arquivo apenas para linhas vizinhas ou contexto de um símbolo citado.",
-	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST). Não persiga fluxos/arquivos de outros watchdogs.",
-	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas; no máximo 2 buscas por símbolo. Pare quando tiver a prova.",
+	"2. **SCOPE** — os *Trechos alterados (diff)* já estão no brief: **não releia o arquivo inteiro** para vê-los. Trecho com o marcador `… [trecho truncado]` pode ser aberto, uma vez, para o restante.",
+	"3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.",
+	"4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.",
 	"5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado.",
 	'6. **CONCLUDE** — grave o JSON no caminho de output, com `reviewedFiles` preenchido (arquivo cujo trecho está no brief conta como revisado) e `line` dentro das faixas alteradas. Sem achados → `"findings": []` (arquivo obrigatório). Não escreva markdown livre.',
 ];
+
+/**
+ * Orçamento de exploração por brief.
+ *
+ * O diff já cobre o essencial; o resto é para chamador/contexto de um símbolo
+ * citado. Sem teto, o subagente entrava em loop de leitura e cada brief levava
+ * minutos — o `general` era o pior caso (PR inteira).
+ */
+const EXPLORATION_BUDGET = {
+	general: { reads: 10, searches: 10 },
+	domain: { reads: 6, searches: 6 },
+} as const;
+
+/** Seção com o teto de leituras/buscas do brief (visível para o modelo). */
+function explorationSection(args: WatchdogRenderArgs): string[] {
+	const budget =
+		args.watchdogId === GENERAL_WATCHDOG_ID
+			? EXPLORATION_BUDGET.general
+			: EXPLORATION_BUDGET.domain;
+	return [
+		"## Orçamento de exploração",
+		"",
+		`> O diff já está no brief. Limite **neste brief**: ${budget.reads} leitura(s) de arquivo`,
+		`> e ${budget.searches} busca(s) (grep).`,
+		"> Abra arquivo só para chamador/contexto de um símbolo citado nos trechos.",
+		"> Se a prova não estiver no brief nem nesse orçamento, **não é achado** —",
+		"> registre a dúvida no campo `action` do finding mais próximo ou descarte.",
+		"",
+	];
+}
 
 /** Limites do contexto injetado em cada brief (o resumo final é maior). */
 const BRIEF_CONTEXT_LIMITS = {
@@ -524,6 +554,7 @@ export function defaultRenderBrief(
 
 	lines.push(...deletedSection(args, def));
 	lines.push(...optionalList("Não carregar", def.exclude));
+	lines.push(...explorationSection(args));
 	lines.push("## Procedimento", "", ...PROCEDURE);
 
 	return lines;

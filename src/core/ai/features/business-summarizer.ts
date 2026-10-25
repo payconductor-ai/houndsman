@@ -31,7 +31,8 @@ export class AiBusinessSummarizer {
 			instructions: businessInstructions(),
 			prompt: businessPrompt(buildBusinessPromptPayload(input)),
 			outputSchema: BusinessSummarySchema,
-			maxOutputTokens: 1_400,
+			// Schema permite 12 fluxos/12 contratos: 1.400 truncava com thinking ligado.
+			maxOutputTokens: 2_000,
 		});
 		if (!result.ok) return null;
 		return parseBusinessSummary(

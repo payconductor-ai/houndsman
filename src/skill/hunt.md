@@ -136,6 +136,11 @@ staging dos subagentes em `<HOUNDSMAN_HOME>/work/<reviewId>/`:
 > símbolos adicionados/removidos/alterados, assinaturas e imports; o impacto reverso
 > (quem importa os arquivos alterados) aparece como mapa de leitura. É fail-open:
 > sem grammar/ABI, a revisão segue só com regex. Desative com `--no-ast`.
+>
+> **Trechos do diff:** cada brief recebe o patch `-U0` do seu domínio, com o teto
+> distribuído entre **todos** os arquivos (rateio igual + excedente por churn) — não há
+> arquivo "sem diff" só porque outro era maior. Trecho cortado vem com o marcador
+> `… [trecho truncado — abra o arquivo para o restante]`.
 
 **Excluídos automaticamente:** lock files, `dist/`, `build/`, `.env*`, imagens, source
 maps (padrões do projeto em `.houndsman/exclusions.ts`).
@@ -268,8 +273,9 @@ houndsman compare --list --branch <head>         # ver as runs e contagens
 Leia e execute o brief: <caminho absoluto impresso pelo prepare>/briefs/<watchdog-id>.md
 Você é o watchdog <watchdog-id> do {{projectName}}.
 Use como raiz de leitura o **Worktree:** indicado no brief (nunca o clone principal).
-O brief já traz os trechos alterados (`## Trechos alterados (diff)`): comece por eles e só
-abra arquivos para contexto adjacente/importadores. Não releia arquivos inteiros.
+O brief já traz os trechos alterados (`## Trechos alterados (diff)`): comece por eles.
+Respeite o **Orçamento de exploração** do brief (6 leituras/6 buscas; `general`: 10/10):
+se a prova não estiver no brief nem nesse orçamento, **não é achado**.
 ```
 
 Cada subagente grava o `outputPath` indicado no brief (schema `.houndsman/core/skill/OUTPUT-FORMAT.md`).

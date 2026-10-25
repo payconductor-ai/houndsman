@@ -66,14 +66,22 @@ export const DEFAULT_HUNT_TIMEOUT_MS = 900_000;
  * Trechos alterados injetados no brief (watchdog de domínio).
  *
  * Substituem a leitura do arquivo inteiro: o subagente começa pelo diff e só
- * abre o arquivo para contexto adjacente. Caps evitam briefs gigantes.
+ * abre o arquivo para contexto adjacente. O orçamento é distribuído entre os
+ * arquivos (metade em partes iguais, o resto por churn) — antes, os primeiros
+ * arquivos consumiam o teto e o subagente lia os demais à mão.
  */
-export const DEFAULT_BRIEF_SNIPPET_CHARS = 12_000;
-export const DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE = 1_500;
+export const DEFAULT_BRIEF_SNIPPET_CHARS = 24_000;
+export const DEFAULT_BRIEF_SNIPPET_CHARS_PER_FILE = 4_000;
 
-/** Mesmos caps para o revisor de fluxo (`general`), que vê todos os arquivos. */
-export const GENERAL_BRIEF_SNIPPET_CHARS = 24_000;
-export const GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE = 2_500;
+/** Mesmos limites para o revisor de fluxo (`general`), que vê todos os arquivos. */
+export const GENERAL_BRIEF_SNIPPET_CHARS = 32_000;
+export const GENERAL_BRIEF_SNIPPET_CHARS_PER_FILE = 5_000;
+
+/** Fração do teto dividida igualmente entre os arquivos (o resto vai por churn). */
+export const BRIEF_SNIPPET_FLOOR_RATIO = 0.5;
+
+/** Piso de chars por arquivo no rateio igual (evita trechos inúteis). */
+export const BRIEF_SNIPPET_MIN_PER_FILE = 120;
 
 /** Retentativas default quando a saída do watchdog é inválida. */
 export const DEFAULT_HUNT_RETRIES = 1;
