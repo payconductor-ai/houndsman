@@ -46,10 +46,58 @@ export type RuleCheck = {
 /** Cobertura declarada por um watchdog. */
 export type CheckCoverage = {
 	expected: number;
+	/**
+	 * Itens **com prova**: `ok`/`gap` com `at` resolvido para arquivo/linha
+	 * existentes. `n/a` não conta — é ausência de verificação, não cobertura.
+	 */
 	verified: number;
+	/** Itens sem veredito declarado. */
 	missing: number;
+	/** Itens declarados `n/a` (não se aplicam ao domínio). */
+	notApplicable: number;
+	/** Vereditos `gap` (violação declarada). */
 	gaps: number;
 };
+
+/**
+ * Resolve se um `at` aponta para código existente.
+ *
+ * O runner injeta a checagem real (arquivo existe + linha dentro do arquivo);
+ * testes e análises puras usam o default permissivo.
+ */
+export type AtResolver = (file: string, line?: number) => boolean;
+
+/** Localização declarada (`arquivo:linha`, `arquivo:12-20` ou `arquivo · símbolo`). */
+export type CheckLocation = { file: string; line?: number };
+
+/** Extrai arquivo/linha de um `at` declarado pelo modelo. */
+export function parseLocation(at: string | undefined): CheckLocation | null {
+	const value = at?.trim();
+	if (!value) return null;
+
+	// `arquivo · símbolo` — sem linha, mas com arquivo explícito.
+	const [head] = value.split("\u00b7");
+	const trimmed = head.trim();
+	const match = trimmed.match(/^(.+?):(\d+)(?:\s*-\s*\d+)?$/);
+	if (match) return { file: normalizePath(match[1]), line: Number(match[2]) };
+
+	// Sem `:linha`, aceita apenas o que parece caminho de arquivo.
+	if (/[\\/]/.test(trimmed) && /\.[A-Za-z0-9]{1,5}$/.test(trimmed)) {
+		return { file: normalizePath(trimmed) };
+	}
+	return null;
+}
+
+/** `true` quando a verificação tem prova (veredito com localização válida). */
+export function isCheckVerified(
+	check: { verdict: CheckVerdict; at?: string },
+	resolve: AtResolver,
+): boolean {
+	if (check.verdict === "n/a") return false;
+	const location = parseLocation(check.at);
+	if (!location) return false;
+	return resolve(location.file, location.line);
+}
 
 /** Normaliza caminho de arquivo (`.\a\b` → `a/b`). */
 export function normalizePath(value: string): string {
@@ -203,13 +251,16 @@ export function missingRuleChecks(
 export function summarizeRuleChecks(
 	rules: readonly ReviewRule[],
 	checks: readonly RuleCheck[],
+	resolve: AtResolver = TRUST_LOCATIONS,
 ): CheckCoverage {
-	const missing = missingRuleChecks(rules, checks).length;
+	const byRule = rules.map((rule) => checks.find((check) => check.id === rule.id));
+	const declared = byRule.filter((check): check is RuleCheck => check !== undefined);
 	return {
 		expected: rules.length,
-		verified: rules.length - missing,
-		missing,
-		gaps: checks.filter((check) => check.verdict === "gap").length,
+		verified: declared.filter((check) => isCheckVerified(check, resolve)).length,
+		missing: rules.length - declared.length,
+		notApplicable: declared.filter((check) => check.verdict === "n/a").length,
+		gaps: declared.filter((check) => check.verdict === "gap").length,
 	};
 }
 
@@ -278,15 +329,27 @@ export function missingReviewItems(
 	return expected.filter((item) => !checks.some((check) => matchesItem(check, item)));
 }
 
+/** Resolver default: aceita qualquer localização (análises puras/testes). */
+const TRUST_LOCATIONS: AtResolver = () => true;
+
 /** Resumo da cobertura do checklist. */
 export function summarizeChecks(
 	expected: readonly string[],
 	checks: readonly ReviewCheck[],
+	resolve: AtResolver = TRUST_LOCATIONS,
 ): CheckCoverage {
-	const missing = missingReviewItems(expected, checks).length;
-	const verified = expected.length - missing;
-	const gaps = checks.filter((check) => check.verdict === "gap").length;
-	return { expected: expected.length, verified, missing, gaps };
+	const byItem = expected.map((item) =>
+		checks.find((check) => matchesItem(check, item)),
+	);
+	const declared = byItem.filter((check): check is ReviewCheck => check !== undefined);
+	const notApplicable = declared.filter((check) => check.verdict === "n/a").length;
+	return {
+		expected: expected.length,
+		verified: declared.filter((check) => isCheckVerified(check, resolve)).length,
+		missing: expected.length - declared.length,
+		notApplicable,
+		gaps: declared.filter((check) => check.verdict === "gap").length,
+	};
 }
 
 /** Mescla dois checklists (o mais recente vence no mesmo item). */

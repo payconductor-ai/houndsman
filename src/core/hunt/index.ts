@@ -41,12 +41,19 @@ export {
 	requireMakiModel,
 	resolveMakiModel,
 } from "./maki-model";
+export type {
+	AdversarialCandidate,
+	AdversarialPromptInput,
+	BookkeepingPromptInput,
+} from "./maki-prompt";
 export {
+	ADVERSARIAL_CLASSES,
+	renderAdversarialPrompt,
+	renderBookkeepingPrompt,
 	renderChecklistSuffix,
 	renderHuntPrompt,
 	renderResumeSuffix,
 	renderRetrySuffix,
-	renderSecondOpinionSuffix,
 } from "./maki-prompt";
 export type {
 	MakiJsonOutput,

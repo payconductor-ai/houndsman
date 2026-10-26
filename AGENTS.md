@@ -39,6 +39,7 @@ projeto **autocontida**), carregada em runtime.
 | `bun run houndsman -- findings <sub>` | Triagem/correção dos findings (`list`/`set`/`done`/`sync`/`batch`/`verify`/...) |
 | `bun run houndsman -- compare --list` | Lista runs/variantes da branch (A/B) |
 | `bun run houndsman -- compare --a <x> --b <y>` | Compara duas variantes da mesma branch |
+| `bun run houndsman -- golden <arquivo>` | Avalia runs contra um golden set (recall/precisão) |
 | `bun run houndsman -- hunt [--pr <n>]` | Harness local: prepare → watchdogs via maki → finalize (opcional) |
 | `bun run houndsman -- hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `bun run houndsman -- status ping` | Renova o heartbeat da execução (timeout só vale com heartbeat) |
@@ -72,6 +73,7 @@ src/
 │   │                        # WorktreeManager, PrResolver
 │   ├── renderers/           # BriefRenderer, ResumeRenderer, ManifestWriter
 │   ├── compare.ts           # comparação A/B entre duas runs (funções puras), presenters
+│   ├── golden.ts            # avaliação recall/precisão contra defeitos congelados (puro)
 │   ├── config.ts            # contrato HoundsmanConfig + defineHoundsmanConfig
 │   ├── business-summary.ts  # intenção da PR (fluxos/invariantes/contratos)
 │   ├── builtins.ts          # watchdogs embutidos (general) + merge do consumidor
@@ -104,7 +106,7 @@ src/
 │   ├── doc-discoverer.ts    # descoberta de docs (DocDiscoverer)
 │   ├── registry-check.ts    # validações anti-drift (config-driven)
 │   ├── pr-context.ts        # contexto da PR via `gh`
-│   ├── commands/            # context · review · watchdog · findings · setup · update · test · scaffold
+│   ├── commands/            # context · review · watchdog · findings · compare · golden · setup · update · test · scaffold
 │   └── jev/                 # subsistema Jev (pré-análise opcional)
 ├── server/           # servidor local (Bun.serve) + UI Preact
 │   ├── index.ts             # HoundsmanServer (rotas + shell)
@@ -178,15 +180,21 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   continua canônica para agentes externos; `houndsman hunt` é o caminho CLI via maki. Ambos
   usam o mesmo `prepare`/`finalize` e o mesmo schema de findings. Nada em `setup`/`update`
   pode passar a exigir o maki.
-- **`hunt` revisa por checklist de intenção e regras.** Cada fluxo/invariante do brief precisa
-  de um item em `checks` e cada regra numerada de um item em `rules`; o runner retoma a
-  **mesma sessão** (`--resume`) para cobrir pendências e **une** os findings das passadas
-  (nunca perde achado da primeira). O `general` recebe ainda uma **segunda opinião**
-  adversarial (credencial/estado, capacidade, identificador, idempotência, contrato). O
-  `businessSummary` devolvido pelo `general` só substitui o vigente quando é mais rico — não
-  degrade o modelo da IA por um resumo sem fluxos. O `result` do maki concatena todos os
-  turnos: o parser extrai o **último** JSON válido. Cada passada extra registra custo marginal
-  (`checklist.costUsd`, `secondOpinion.costUsd`) no `hunt-report.json`.
+- **`hunt` revisa por checklist de intenção e regras.** O `general` roda em três sessões:
+  **fluxo** (só achados, sem `checks`/`rules`/`businessSummary`), **bookkeeping** (vereditos
+  com `at` comprovado) e **adversarial** (sessão nova, com os achados já cobertos). Cada
+  fluxo/invariante do brief precisa de um item em `checks` e cada regra numerada de um item em
+  `rules`; nos domínios, o runner retoma a **mesma sessão** (`--resume`) para cobrir pendências
+  e **une** os findings das passadas (nunca perde achado da primeira). O `at` de um veredito
+  só conta como prova se o arquivo existe na raiz e a linha cabe nele; `n/a` é veredito, não
+  cobertura. O `businessSummary` devolvido pelo `general` só substitui o vigente quando é mais
+  rico, e não é pedido quando o prepare já trouxe o modelo da IA. O `result` do maki concatena
+  todos os turnos: o parser extrai o **último** JSON válido. Cada passada extra registra custo
+  marginal (`checklist.costUsd`, `secondOpinion.costUsd`) no `hunt-report.json`.
+- **Golden set é o instrumento de comparação.** `houndsman golden <arquivo>` avalia runs
+  contra defeitos congelados (`id`/`file`/`line`/`tolerance`/`match`/`severity`) e devolve
+  recall/precisão. Contagem de findings não mede profundidade: sem golden, ajuste de prompt é
+  opinião. O arquivo é dados do consumidor; o motor só conhece o formato.
 - **IA do fluxo normal é opcional e falha-aberto.** Sem `HOUNDSMAN_DEEP_SEEK_API_KEY`
   (ou com `--no-ai`), briefs/contexto/classificação/verify seguem sem rede.
 - **`fallback: true` é último recurso.** Um watchdog fallback só assume arquivos que

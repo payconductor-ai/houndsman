@@ -8,6 +8,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { GENERAL_WATCHDOG_ID } from "../builtins";
 import { type BusinessSummary, parseBusinessSummary } from "../business-summary";
 import { parseWatchdogReport, type WatchdogReport } from "../report-builder";
@@ -15,11 +16,12 @@ import { systemClock } from "../services/clock";
 import type { ReviewWorkArea } from "../storage/work-area";
 import { renderHuntIntentPrompt, renderIntentRetrySuffix } from "./maki-intent-prompt";
 import {
+	renderAdversarialPrompt,
+	renderBookkeepingPrompt,
 	renderChecklistSuffix,
 	renderHuntPrompt,
 	renderResumeSuffix,
 	renderRetrySuffix,
-	renderSecondOpinionSuffix,
 } from "./maki-prompt";
 import {
 	extractJsonObject,
@@ -29,6 +31,7 @@ import {
 } from "./maki-runner";
 import { mapPool } from "./pool";
 import {
+	type AtResolver,
 	briefDomainFiles,
 	briefRules,
 	businessScore,
@@ -49,7 +52,6 @@ import {
 	summarizeRuleChecks,
 	withInferredRule,
 } from "./review-checks";
-
 /** Evento de progresso (CLI loga; core não escreve saída). */
 export type HuntEvent =
 	| {
@@ -338,15 +340,24 @@ export class HuntRunner {
 			return failedResult(watchdogId, error, 0, { durationMs: 0 });
 		}
 
+		// Revisor de fluxo: a passada base NÃO faz bookkeeping. Ele carrega 37
+		// arquivos e um brief de ~60 KB; competir com `checks`/`rules` no mesmo JSON
+		// é o que fazia o `general` devolver 2 achados e 10/10 checks sem lastro.
+		const isGeneral = watchdogId === GENERAL_WATCHDOG_ID;
+		const requestBusiness = isGeneral && business?.source !== "ai";
 		const basePrompt = renderHuntPrompt({
 			projectName: this.options.projectName,
 			watchdogId,
 			brief,
+			bookkeeping: !isGeneral,
+			requestBusiness,
 		});
 		// Checklist derivado do brief: cada fluxo/invariante do modelo de intenção
 		// e cada regra numerada precisa de uma verificação declarada.
 		const expected = expectedReviewItems(brief, business, watchdogId);
 		const expectedRules = briefRules(brief);
+		// `at` só conta como prova quando aponta para arquivo/linha existentes.
+		const resolveAt = makeAtResolver(this.options.root);
 
 		this.emit({ type: "start", watchdogId });
 		let attempts = 0;
@@ -372,9 +383,57 @@ export class HuntRunner {
 		let reviewerBusiness = first.reviewerBusiness;
 
 		let checklist: HuntWatchdogResult["checklist"];
+		if (isGeneral && this.options.checklist !== false) {
+			// Bookkeeping do revisor de fluxo: sessão nova, tarefa estreita e
+			// barata (só vereditos com `at` comprovado).
+			const costBefore = accumulated.costUsd ?? 0;
+			const turnsBefore = accumulated.numTurns ?? 0;
+			this.emit({
+				type: "checklist",
+				watchdogId,
+				missing: expected.length,
+				missingRules: expectedRules.length,
+				status: "start",
+			});
+			const verdicts = await this.executePass(
+				watchdogId,
+				renderBookkeepingPrompt({
+					projectName: this.options.projectName,
+					watchdogId,
+					brief,
+					items: expected,
+					ruleIds: expectedRules.map((rule) => rule.id),
+				}),
+			);
+			mergeMetrics(accumulated, verdicts.metrics);
+			attempts += verdicts.attempts;
+			if (verdicts.ok) {
+				// Só vereditos: achados desta passada seriam ruído de uma tarefa
+				// que não foi pedida (o prompt manda `findings: []`).
+				checks = mergeChecks(checks, verdicts.checks);
+				ruleChecks = mergeRuleChecks(ruleChecks, verdicts.ruleChecks);
+			}
+			checklist = {
+				status: verdicts.ok ? "done" : "failed",
+				missing: missingReviewItems(expected, checks).length,
+				missingRules: missingRuleChecks(expectedRules, ruleChecks).length,
+				costUsd: (accumulated.costUsd ?? 0) - costBefore,
+				numTurns: (accumulated.numTurns ?? 0) - turnsBefore,
+			};
+			this.emit({
+				type: "checklist",
+				watchdogId,
+				missing: checklist.missing,
+				missingRules: checklist.missingRules,
+				status: verdicts.ok ? "done" : "failed",
+				error: verdicts.ok ? undefined : verdicts.error,
+			});
+		}
+
 		const missing = missingReviewItems(expected, checks);
 		const missingRules = missingRuleChecks(expectedRules, ruleChecks);
 		if (
+			!isGeneral &&
 			this.options.checklist !== false &&
 			(missing.length > 0 || missingRules.length > 0)
 		) {
@@ -436,16 +495,27 @@ export class HuntRunner {
 		}
 
 		let secondOpinion: HuntWatchdogResult["secondOpinion"];
-		if (this.options.secondOpinion !== false && watchdogId === GENERAL_WATCHDOG_ID) {
+		if (this.options.secondOpinion !== false && isGeneral) {
 			const costBefore = accumulated.costUsd ?? 0;
 			const turnsBefore = accumulated.numTurns ?? 0;
 			this.emit({ type: "second-opinion", watchdogId, status: "start" });
-			const suffix = renderSecondOpinionSuffix();
-			const opinion = accumulated.sessionId
-				? await this.executePass(watchdogId, suffix, {
-						resume: accumulated.sessionId,
-					})
-				: await this.executePass(watchdogId, `${basePrompt}\n${suffix}`);
+			// Sessão NOVA de propósito: retomar a sessão depois do checklist
+			// ancorava o modelo nas próprias conclusões (devolvia zero achados).
+			const opinion = await this.executePass(
+				watchdogId,
+				renderAdversarialPrompt({
+					projectName: this.options.projectName,
+					watchdogId,
+					brief,
+					candidates: report.findings.map((finding) => ({
+						rule: finding.rule,
+						severity: finding.severity,
+						file: finding.file,
+						line: finding.line,
+						message: finding.message,
+					})),
+				}),
+			);
 			mergeMetrics(accumulated, opinion.metrics);
 			attempts += opinion.attempts;
 			const costUsd = (accumulated.costUsd ?? 0) - costBefore;
@@ -497,8 +567,8 @@ export class HuntRunner {
 			watchdogId,
 			`${JSON.stringify({ ...report, rules: ruleChecks, checks }, null, 2)}\n`,
 		);
-		const coverage = summarizeChecks(expected, checks);
-		const rulesCoverage = summarizeRuleChecks(expectedRules, ruleChecks);
+		const coverage = summarizeChecks(expected, checks, resolveAt);
+		const rulesCoverage = summarizeRuleChecks(expectedRules, ruleChecks, resolveAt);
 		const files = coverageOf(brief, report);
 		const done: HuntWatchdogResult = {
 			watchdogId,
@@ -729,6 +799,37 @@ function coverageOf(
 function declaredPath(entry: string): string | null {
 	const match = entry.match(/[\w./-]+\.[A-Za-z0-9]{1,5}/);
 	return match ? normalizePath(match[0]) : null;
+}
+
+/**
+ * Resolver de `at` contra o disco (cache por arquivo).
+ *
+ * O checklist é autoavaliado pelo modelo; sem checar o `at`, um `ok` inventado
+ * conta como cobertura. Aqui só vale se o arquivo existe na raiz da review e a
+ * linha cabe dentro dele. Caminho fora da raiz (`..`) nunca resolve.
+ */
+function makeAtResolver(root: string): AtResolver {
+	const cache = new Map<string, number | null>();
+	const lineCount = (file: string): number | null => {
+		const cached = cache.get(file);
+		if (cached !== undefined) return cached;
+		let total: number | null = null;
+		if (!file.split("/").includes("..")) {
+			try {
+				const content = readFileSync(join(root, file), "utf8");
+				total = content.split("\n").length;
+			} catch {
+				total = null;
+			}
+		}
+		cache.set(file, total);
+		return total;
+	};
+	return (file, line) => {
+		const total = lineCount(file);
+		if (total === null) return false;
+		return line === undefined || (line >= 1 && line <= total);
+	};
 }
 
 /** Modelo de intenção mais rico entre duas passadas. */

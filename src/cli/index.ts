@@ -39,6 +39,7 @@ import { CompareCommand } from "./commands/compare-command";
 import { ContextCommand } from "./commands/context-command";
 import { DoctorCommand } from "./commands/doctor-command";
 import { FindingsCommand } from "./commands/findings-command";
+import { GoldenCommand } from "./commands/golden-command";
 import { HelpCommand } from "./commands/help-command";
 import { HuntCommand } from "./commands/hunt-command";
 import { CommandRegistry } from "./commands/registry";
@@ -63,6 +64,7 @@ function buildRegistry(): CommandRegistry {
 		.register(new HuntCommand())
 		.register(new ContextCommand())
 		.register(new CompareCommand())
+		.register(new GoldenCommand())
 		.register(new FindingsCommand())
 		.register(new StatusCommand())
 		.register(new WatchdogCommand())

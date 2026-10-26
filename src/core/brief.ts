@@ -40,11 +40,24 @@ export const PROCEDURE: readonly string[] = [
  * O diff já cobre o essencial; o resto é para chamador/contexto de um símbolo
  * citado. Sem teto, o subagente entrava em loop de leitura e cada brief levava
  * minutos — o `general` era o pior caso (PR inteira).
+ *
+ * O teto mínimo é o piso, não o valor fixo: um domínio com 37 arquivos não se
+ * revisa com 10 leituras (o `general` pulava 12 de 37 e perdia o rastreio de
+ * contrato). O tamanho do domínio define quantas leituras o brief concede.
  */
 const EXPLORATION_BUDGET = {
-	general: { reads: 10, searches: 10 },
-	domain: { reads: 6, searches: 6 },
+	general: { reads: 10, searches: 12, maxReads: 24, filesPerRead: 2 },
+	domain: { reads: 6, searches: 6, maxReads: 14, filesPerRead: 2 },
 } as const;
+
+/** Teto de leituras para o domínio (cresce com o nº de arquivos, até o máximo). */
+function readsFor(
+	budget: (typeof EXPLORATION_BUDGET)[keyof typeof EXPLORATION_BUDGET],
+	files: number,
+): number {
+	const needed = Math.ceil(files / budget.filesPerRead);
+	return Math.min(budget.maxReads, Math.max(budget.reads, needed));
+}
 
 /** Seção com o teto de leituras/buscas do brief (visível para o modelo). */
 function explorationSection(args: WatchdogRenderArgs): string[] {
@@ -52,10 +65,11 @@ function explorationSection(args: WatchdogRenderArgs): string[] {
 		args.watchdogId === GENERAL_WATCHDOG_ID
 			? EXPLORATION_BUDGET.general
 			: EXPLORATION_BUDGET.domain;
+	const reads = readsFor(budget, args.files.length);
 	return [
 		"## Orçamento de exploração",
 		"",
-		`> O diff já está no brief. Limite **neste brief**: ${budget.reads} leitura(s) de arquivo`,
+		`> O diff já está no brief. Limite **neste brief**: ${reads} leitura(s) de arquivo`,
 		`> e ${budget.searches} busca(s) (grep).`,
 		"> Abra arquivo só para chamador/contexto de um símbolo citado nos trechos.",
 		"> Se a prova não estiver no brief nem nesse orçamento, **não é achado** —",

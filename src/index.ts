@@ -269,7 +269,6 @@ export {
 	renderHuntPrompt,
 	renderResumeSuffix,
 	renderRetrySuffix,
-	renderSecondOpinionSuffix,
 	requireMakiBinary,
 	requireMakiModel,
 	resolveMakiBinary,

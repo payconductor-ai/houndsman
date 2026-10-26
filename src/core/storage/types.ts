@@ -122,6 +122,7 @@ export type ArtifactKind =
 	| "hunt"
 	| "prepare"
 	| "compare"
+	| "golden"
 	| "other";
 
 /** Artefato persistido de uma review. */

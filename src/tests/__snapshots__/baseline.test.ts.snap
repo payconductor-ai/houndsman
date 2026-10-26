@@ -313,10 +313,12 @@ houndsman --pr 456 --finalize
   ".houndsman/.gitignore": 
 "# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`.
 # \`work/\` e \`worktrees/\` são runtime de revisão (staging e worktrees).
+# \`golden/\` é massa de avaliação local (defeitos congelados por commit).
 core/
 .runs/
 work/
 worktrees/
+golden/
 "
 ,
   ".houndsman/core/types.ts": 
@@ -635,7 +637,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/README.md",
-    "sha256": "4d200cf9e5c1d748",
+    "sha256": "b9d5725a87365c06",
   },
   {
     "file": ".houndsman/core/skill/SETUP.md",
@@ -651,7 +653,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "58644e1af099eb01",
+    "sha256": "10ecf846c3b6880e",
   },
   {
     "file": ".houndsman/core/skill/train.md",

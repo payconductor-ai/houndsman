@@ -6,6 +6,7 @@ Comandos:
   --finalize          Consolida os findings e grava o resumo final
   context             Coleta o contexto da PR via gh (Passo 0; --pr/--worktree)
   compare [a] [b]     Compara duas runs (A/B) por slug ou --branch/--a/--b
+  golden <arquivo>    Avalia as runs contra um golden set (recall/precisão)
   findings <sub>      Triagem/correção dos findings (list · show · set · done · reset · sync · summary · batch · verify · submit · path)
   hunt [flags]        Harness local (maki): prepare → watchdogs via maki → finalize
                       (a skill /houndsman hunt continua existindo p/ agentes externos)

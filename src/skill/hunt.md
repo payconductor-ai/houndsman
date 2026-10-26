@@ -27,25 +27,60 @@ Os dois modos produzem os mesmos artefatos, usam o mesmo staging e o mesmo ciclo
 `houndsman hunt` usa o mesmo `prepare`/`finalize`, mas cada watchdog roda headless. Para não
 trocar profundidade por velocidade:
 
-- o prompt exige **uma verificação por fluxo/invariante** (`checks`: `ok`/`gap`/`n/a` +
-  `arquivo:linha`) e **uma por regra numerada** (`rules`: `{ id, verdict }`);
+- o **`general` roda em três papéis separados** (sessões distintas): (1) **fluxo** — caça
+  achados sem devolver `checks`/`rules`; (2) **bookkeeping** — tarefa estreita, só vereditos
+  com `at` comprovado; (3) **adversarial** — sessão nova, com os achados já cobertos como
+  contexto, atacando as cinco classes (credencial/estado, capacidade, identificador,
+  idempotência, contrato). Antes, um único JSON de 60 KB misturava tudo e o revisor entregava
+  poucos achados com checklist “ok” sem lastro;
+- nos demais watchdogs, o prompt exige **uma verificação por fluxo/invariante** (`checks`:
+  `ok`/`gap`/`n/a` + `arquivo:linha`) e **uma por regra numerada** (`rules`);
+- **`n/a` não é cobertura**: só conta como verificado o `ok`/`gap` cujo `at` resolve para um
+  arquivo existente e uma linha dentro dele (e, quando o arquivo não está na raiz, não conta);
 - se a primeira resposta não cobrir o checklist, o harness **retoma a sessão** (`--resume`) e
   pede só os vereditos pendentes; os achados das passadas são **unidos** (dedupe por
   arquivo+linha+regra, maior severidade vence);
-- o `general` recebe uma **segunda opinião** adversarial (credencial/estado compartilhado,
-  capacidade anunciada, identificador persistido, idempotência/transição, contrato entre
-  lados). Custo marginal fica em `secondOpinion.costUsd` no `hunt-report.json`;
-- o `businessSummary` devolvido pelo `general` só substitui o modelo gravado se for **mais
-  rico** — um resumo sem fluxos não sobrescreve mais o modelo da IA;
+- o prompt do `general` só pede o `businessSummary` quando o prepare **não** trouxe um modelo
+  da IA (gerar um resumo que seria rejeitado custava atenção do revisor);
+- o orçamento de exploração cresce com o tamanho do domínio (piso 6/10, teto 14/24 leituras);
 - a saída do maki concatena **todas** as mensagens do agente; o parser procura o último JSON
   válido (bloco cercado ou objeto balanceado), não o primeiro `{`;
 - retry de saída inválida **retoma a mesma sessão** enviando só o schema — não refaz a
   exploração inteira; e o system prompt do harness prioriza profundidade sobre economia de
   tool calls;
-- `hunt-report.json` traz `rules`/`checks { expected, verified, missing, gaps }`, `coverage`
-  (`reviewed`/`skipped`/`undeclared`), o custo de cada passada extra (`checklist`,
+- `hunt-report.json` traz `rules`/`checks { expected, verified, missing, notApplicable, gaps }`,
+  `coverage` (`reviewed`/`skipped`/`undeclared`), o custo de cada passada extra (`checklist`,
   `secondOpinion`) e a decisão sobre o modelo de intenção por watchdog. Desligue com
   `--no-checklist`/`--no-second-opinion` (ou `hunt.checklist`/`hunt.secondOpinion: false`).
+
+### Golden set — medir em vez de contar
+
+Contagem de findings não mede profundidade: variantes diferentes amostram pontos diferentes do
+mesmo diff. O golden set **não gera** achados nem julga intenção — é uma lista de defeitos que
+você já confirmou no código (âncora), usada para dar nota a uma execução:
+
+- **recall** = quantos defeitos congelados a run encontrou;
+- **precisão** = quanto do que a run reportou cai num defeito congelado (o resto pode ser achado
+  legítimo ainda não triado — o relatório avisa);
+- **faltaram / fora do golden** = onde melhorar o brief/harness e o que ainda falta triar.
+
+```bash
+houndsman golden .houndsman/golden/<pr>.json              # todas as variantes da branch
+houndsman golden .houndsman/golden/<pr>.json --variant x  # uma variante
+```
+
+- formato: `{ "version": 1, "commit": "abc1234", "expected": [{ "id", "file", "line",
+  "tolerance", "match", "severity", "note" }] }`;
+- cada expectativa é uma **âncora** (arquivo + faixa de linha + trecho), nunca um fingerprint;
+  um finding comprova no máximo um defeito;
+- o `commit` é a referência do congelamento. Run que revisou **outro commit** é avaliada
+  normalmente, mas o relatório abre com **aviso** de commit divergente (não é erro): as linhas
+  podem ter se deslocado e a “falta” pode ser drift, não perda de profundidade — revalide o
+  golden antes de concluir;
+- `.houndsman/golden/` é massa local de avaliação (fica no `.gitignore` da camada), não
+  configuração do projeto;
+- saída gravada como `golden-<slug>.md|json` na run avaliada. Use para comparar
+  prompts/harness na **mesma** PR.
 
 ## Alvo da revisão
 

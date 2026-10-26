@@ -6,17 +6,25 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	chmodSync,
+	existsSync,
+	mkdirSync,
+	mkdtempSync,
+	rmSync,
+	writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defineHoundsmanConfig } from "../core/config";
 import { type HuntEvent, HuntRunner } from "../core/hunt/hunt-runner";
 import { requireMakiModel, resolveMakiModel } from "../core/hunt/maki-model";
 import {
+	renderAdversarialPrompt,
+	renderBookkeepingPrompt,
 	renderChecklistSuffix,
 	renderHuntPrompt,
 	renderResumeSuffix,
-	renderSecondOpinionSuffix,
 } from "../core/hunt/maki-prompt";
 import {
 	extractJsonObject,
@@ -96,6 +104,12 @@ function makeWork(ids: string[]): {
 	const root = mkdtempSync(join(tmpdir(), "houndsman-hunt-"));
 	const work = new ReviewWorkArea(fakeReview(root), root);
 	work.ensure();
+	// Arquivos reais: o checklist agora só aceita `at` que existe em disco.
+	const files = new Set(["src/alpha/a.ts", ...ids.map((id) => `src/${id}/a.ts`)]);
+	for (const file of files) {
+		mkdirSync(join(root, "src", file.split("/")[1]), { recursive: true });
+		writeFileSync(join(root, file), "linha 1\nlinha 2\nlinha 3\n", "utf8");
+	}
 	for (const id of ids) work.writeBrief(id, `brief de ${id}`);
 	return { root, work, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
@@ -629,16 +643,20 @@ describe("harness — checklist de intenção", () => {
 			{ id: 1, severity: "attention", text: "Evitar any." },
 			{ id: 2, severity: "attention", text: "Promover: validar a entrada." },
 		]);
-		const checks = parseRuleChecks({ rules: [{ id: 1, verdict: "ok" }, "2: gap"] });
+		const checks = parseRuleChecks({
+			rules: [{ id: 1, verdict: "ok", at: "src/alpha/a.ts:1" }, "2: gap"],
+		});
 		expect(checks).toMatchObject([
 			{ id: 1, verdict: "ok" },
 			{ id: 2, verdict: "gap" },
 		]);
 		expect(missingRuleChecks(rules, checks)).toEqual([]);
+		// Verdicto sem `at` não é prova: só a regra 1 comprova localização.
 		expect(summarizeRuleChecks(rules, checks)).toEqual({
 			expected: 2,
-			verified: 2,
+			verified: 1,
 			missing: 0,
+			notApplicable: 0,
 			gaps: 1,
 		});
 	});
@@ -725,6 +743,7 @@ describe("harness — checklist de intenção", () => {
 				expected: 2,
 				verified: 2,
 				missing: 0,
+				notApplicable: 0,
 				gaps: 0,
 			});
 			expect(report.watchdogs[0].checklist?.costUsd).toBeCloseTo(0.005);
@@ -734,7 +753,7 @@ describe("harness — checklist de intenção", () => {
 		}
 	});
 
-	test("segunda opinião do general adiciona achado e mede o custo marginal", async () => {
+	test("segunda opinião do general roda em sessão nova com os achados já cobertos", async () => {
 		const staging = makeWork(["general"]);
 		staging.work.writeBrief("general", briefWithFiles("general", ["src/alpha/a.ts"]));
 		const requests: { prompt: string; resume?: string }[] = [];
@@ -754,12 +773,24 @@ describe("harness — checklist de intenção", () => {
 					run: async (request) => {
 						requests.push({ prompt: request.prompt, resume: request.resume });
 						calls++;
+						// 1 = fluxo, 2 = bookkeeping (só vereditos), 3 = adversarial.
+						const text =
+							calls === 2
+								? JSON.stringify({
+										watchdogId: "general",
+										reviewedFiles: ["src/general/a.ts"],
+										skipped: [],
+										rules: [],
+										checks: [],
+										findings: [],
+									})
+								: reportJson("general", calls === 1 ? 1 : 2);
 						return {
 							ok: true,
-							text: reportJson("general", calls),
+							text,
 							metrics: {
 								durationMs: 5,
-								sessionId: "sess-general",
+								sessionId: `sess-${calls}`,
 								costUsd: 0.02,
 								numTurns: 3,
 							},
@@ -771,8 +802,17 @@ describe("harness — checklist de intenção", () => {
 			});
 
 			const report = await runner.run(["general"]);
-			expect(requests[1].resume).toBe("sess-general");
-			expect(requests[1].prompt).toContain("Segunda opinião (revisão adversarial)");
+			expect(requests).toHaveLength(3);
+			// Passada base: fluxo puro, sem bookkeeping no schema.
+			expect(requests[0].prompt).toContain("Seu produto é **achado**");
+			expect(requests[0].prompt).not.toContain('"checks"');
+			// Bookkeeping: sessão nova, tarefa estreita.
+			expect(requests[1].prompt).toContain("verificador de checklist");
+			expect(requests[1].resume).toBeUndefined();
+			// Adversarial: sessão nova, com os achados já cobertos.
+			expect(requests[2].prompt).toContain("Classes a atacar");
+			expect(requests[2].prompt).toContain("Já cobertos");
+			expect(requests[2].resume).toBeUndefined();
 			expect(report.watchdogs[0].findings).toBe(2);
 			expect(report.watchdogs[0].secondOpinion).toMatchObject({
 				status: "done",
@@ -785,8 +825,21 @@ describe("harness — checklist de intenção", () => {
 		}
 	});
 
-	test("sufixo adversarial cita as cinco classes", () => {
-		const suffix = renderSecondOpinionSuffix();
+	test("prompt adversarial em sessão nova cita as cinco classes e não pede bookkeeping", () => {
+		const prompt = renderAdversarialPrompt({
+			projectName: "Proj",
+			watchdogId: "general",
+			brief: "# Brief general",
+			candidates: [
+				{
+					rule: "Evitar any",
+					severity: "attention",
+					file: "a.ts",
+					line: 1,
+					message: "m",
+				},
+			],
+		});
 		for (const term of [
 			"Credencial e contexto compartilhado",
 			"Capacidade anunciada",
@@ -794,8 +847,26 @@ describe("harness — checklist de intenção", () => {
 			"Idempotência e transição de estado",
 			"Contrato entre lados",
 		]) {
-			expect(suffix).toContain(term);
+			expect(prompt).toContain(term);
 		}
+		expect(prompt).toContain("sessão nova");
+		expect(prompt).toContain("Já cobertos");
+		expect(prompt).not.toContain('"checks"');
+		// Não pode herdar o pedido de "relatório completo" da passada em sessão.
+		expect(prompt).not.toContain("findings anteriores + novos");
+	});
+
+	test("prompt de bookkeeping pede só vereditos com `at`", () => {
+		const prompt = renderBookkeepingPrompt({
+			projectName: "Proj",
+			watchdogId: "general",
+			brief: "# Brief general",
+			items: ["Criação de subconta"],
+			ruleIds: [1],
+		});
+		expect(prompt).toContain("- Criação de subconta");
+		expect(prompt).toContain('"findings"');
+		expect(prompt).toContain("`findings` deve ser sempre `[]`");
 	});
 
 	test("rule vazio é inferido com o prefixo do basis", () => {
@@ -927,8 +998,16 @@ describe("harness — checklist de intenção", () => {
 								reviewedFiles: ["src/alpha/a.ts"],
 								skipped: [],
 								checks: [
-									{ item: "Criação de subconta", verdict: "ok" },
-									{ item: "Split sempre presente", verdict: "gap" },
+									{
+										item: "Criação de subconta",
+										verdict: "ok",
+										at: "src/alpha/a.ts:1",
+									},
+									{
+										item: "Split sempre presente",
+										verdict: "gap",
+										at: "src/alpha/a.ts:2",
+									},
 								],
 								findings: [
 									{
@@ -958,6 +1037,7 @@ describe("harness — checklist de intenção", () => {
 				expected: 2,
 				verified: 2,
 				missing: 0,
+				notApplicable: 0,
 				gaps: 1,
 			});
 		} finally {
@@ -988,9 +1068,17 @@ describe("harness — checklist de intenção", () => {
 							reviewedFiles: ["src/alpha/a.ts"],
 							skipped: [],
 							checks: [
-								{ item: "Criação de subconta", verdict: "ok" },
+								{
+									item: "Criação de subconta",
+									verdict: "ok",
+									at: "src/alpha/a.ts:1",
+								},
 								{ item: "Fluxo beta", verdict: "n/a" },
-								{ item: "Split sempre presente", verdict: "ok" },
+								{
+									item: "Split sempre presente",
+									verdict: "ok",
+									at: "src/alpha/a.ts:3",
+								},
 							],
 							findings: [],
 							businessSummary: {
@@ -1016,10 +1104,12 @@ describe("harness — checklist de intenção", () => {
 			const summary = staging.work.readBusinessSummary();
 			expect(summary?.source).toBe("ai");
 			expect(summary?.flows).toHaveLength(2);
+			// `n/a` é veredito, não prova: 2 itens comprovados + 1 não aplicável.
 			expect(report.watchdogs[0].checks).toEqual({
 				expected: 3,
-				verified: 3,
+				verified: 2,
 				missing: 0,
+				notApplicable: 1,
 				gaps: 0,
 			});
 		} finally {

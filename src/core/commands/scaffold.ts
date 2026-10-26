@@ -426,10 +426,12 @@ export const DOC_MAPPINGS: readonly (readonly [RegExp, readonly string[]])[] = [
 
 const PROJECT_GITIGNORE = `# Diretórios gerados pelo houndsman — \`core/\` é regenerado por \`houndsman update\`.
 # \`work/\` e \`worktrees/\` são runtime de revisão (staging e worktrees).
+# \`golden/\` é massa de avaliação local (defeitos congelados por commit).
 core/
 .runs/
 work/
 worktrees/
+golden/
 `;
 
 // ---------------------------------------------------------------------------

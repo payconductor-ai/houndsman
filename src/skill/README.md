@@ -67,6 +67,7 @@ O CLI só substitui o despacho manual dos subagentes por processos maki headless
 | `houndsman --finalize` | Passo 3 — gravar a triagem e o resumo final (`--pr <n>` reusa o worktree) |
 | `houndsman hunt [--pr <n>]` | Harness local opcional (maki): prepare → watchdogs → finalize |
 | `houndsman compare` | Compara duas runs/variantes (`--list`, `--a`, `--b` ou dois slugs) |
+| `houndsman golden` | Avalia runs contra um golden set de defeitos (`recall`/`precisão`) |
 | `houndsman hunt install` | Baixa o maki fixado para `<HOUNDSMAN_HOME>/tools/maki` |
 | `houndsman worktree <ação>` | `list`/`add`/`remove`/`prune`/`path` dos worktrees |
 | `houndsman watchdog <id>` | Contexto de um watchdog (`--json`, `--rules`) |
