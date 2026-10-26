@@ -27,6 +27,22 @@ export type ReviewCheck = {
 	at?: string;
 };
 
+/** Regra declarada no brief (numerada para o checklist). */
+export type ReviewRule = {
+	/** Número exibido no brief (identidade compacta no JSON). */
+	id: number;
+	severity: string;
+	text: string;
+};
+
+/** Veredito de uma regra declarada. */
+export type RuleCheck = {
+	id: number;
+	verdict: CheckVerdict;
+	/** Onde a regra foi (ou não) honrada. */
+	at?: string;
+};
+
 /** Cobertura declarada por um watchdog. */
 export type CheckCoverage = {
 	expected: number;
@@ -111,6 +127,100 @@ function verdictOf(value: unknown): CheckVerdict {
 		return "gap";
 	}
 	return "n/a";
+}
+
+/**
+ * Regras declaradas no brief (`## Regras (por severidade)`), já numeradas.
+ *
+ * O número é a identidade compacta usada no checklist: o watchdog devolve
+ * `{ id, verdict }` por regra, sem repetir o texto (que pode ter 200 chars).
+ */
+export function briefRules(brief: string): ReviewRule[] {
+	const lines = brief.split(/\r?\n/);
+	const rules: ReviewRule[] = [];
+	let inside = false;
+	for (const line of lines) {
+		if (/^##\s+Regras\b/i.test(line)) {
+			inside = true;
+			continue;
+		}
+		if (inside) {
+			if (/^##\s+/.test(line)) break;
+			const match = line.match(
+				/^-\s+(\d+)\.\s+.*?\*\*(blocking|attention|suggestion|nit)\*\*\s*[—–-]\s*(.+)$/,
+			);
+			if (!match) continue;
+			rules.push({
+				id: Number.parseInt(match[1], 10),
+				severity: match[2],
+				text: match[3].trim(),
+			});
+		}
+	}
+	return rules;
+}
+
+/** Normaliza os vereditos das regras devolvidos pelo JSON do watchdog. */
+export function parseRuleChecks(raw: unknown): RuleCheck[] {
+	if (typeof raw !== "object" || raw === null) return [];
+	const entries = (raw as Record<string, unknown>).rules;
+	if (!Array.isArray(entries)) return [];
+	const checks: RuleCheck[] = [];
+	for (const entry of entries) {
+		if (typeof entry === "string") {
+			const match = entry.match(/^\s*(\d+)\s*[:=-]?\s*(ok|gap|n\/a|pass|fail)?/i);
+			if (!match) continue;
+			checks.push({
+				id: Number.parseInt(match[1], 10),
+				verdict: verdictOf(match[2]),
+			});
+			continue;
+		}
+		if (typeof entry !== "object" || entry === null) continue;
+		const record = entry as Record<string, unknown>;
+		const rawId = record.id ?? record.rule ?? record.number;
+		const id =
+			typeof rawId === "number"
+				? rawId
+				: Number.parseInt(String(rawId ?? "").replace(/\D/g, ""), 10);
+		if (!Number.isFinite(id) || id <= 0) continue;
+		const at = typeof record.at === "string" ? record.at.trim() : undefined;
+		checks.push({ id, verdict: verdictOf(record.verdict), at });
+	}
+	return checks;
+}
+
+/** Regras declaradas sem verificação. */
+export function missingRuleChecks(
+	rules: readonly ReviewRule[],
+	checks: readonly RuleCheck[],
+): number[] {
+	const seen = new Set(checks.map((check) => check.id));
+	return rules.filter((rule) => !seen.has(rule.id)).map((rule) => rule.id);
+}
+
+/** Resumo da cobertura das regras declaradas. */
+export function summarizeRuleChecks(
+	rules: readonly ReviewRule[],
+	checks: readonly RuleCheck[],
+): CheckCoverage {
+	const missing = missingRuleChecks(rules, checks).length;
+	return {
+		expected: rules.length,
+		verified: rules.length - missing,
+		missing,
+		gaps: checks.filter((check) => check.verdict === "gap").length,
+	};
+}
+
+/** Mescla dois checklists de regras (o mais recente vence no mesmo id). */
+export function mergeRuleChecks(
+	first: readonly RuleCheck[],
+	second: readonly RuleCheck[],
+): RuleCheck[] {
+	const merged = new Map(first.map((check) => [check.id, check]));
+	for (const check of second) merged.set(check.id, check);
+	return [...merged.values()].sort((a, b) => a.id - b.id);
 }
 
 /**

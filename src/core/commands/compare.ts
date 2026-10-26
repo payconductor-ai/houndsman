@@ -56,6 +56,8 @@ type HuntShape = {
 			gaps?: number;
 		};
 		coverage?: { reviewed?: number; skipped?: number; undeclared?: number };
+		checklist?: { costUsd?: number };
+		secondOpinion?: { costUsd?: number; findings?: number };
 	}[];
 };
 type AiUsageShape = { total?: { totalTokens?: number } };
@@ -73,6 +75,10 @@ function harnessOf(hunt: HuntShape): NonNullable<ReviewSnapshot["harness"]> {
 		skippedFiles: sum((item) => item.coverage?.skipped),
 		undeclaredFiles: sum((item) => item.coverage?.undeclared),
 		businessScore: hunt.businessScore,
+		extraCostUsd:
+			sum((item) => item.checklist?.costUsd) +
+			sum((item) => item.secondOpinion?.costUsd),
+		secondOpinionFindings: sum((item) => item.secondOpinion?.findings),
 	};
 }
 

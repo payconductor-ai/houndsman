@@ -19,6 +19,7 @@ import {
 	renderHuntPrompt,
 	renderResumeSuffix,
 	renderRetrySuffix,
+	renderSecondOpinionSuffix,
 } from "./maki-prompt";
 import {
 	extractJsonObject,
@@ -29,17 +30,23 @@ import {
 import { mapPool } from "./pool";
 import {
 	briefDomainFiles,
+	briefRules,
 	businessScore,
 	type CheckCoverage,
 	chooseBusinessSummary,
 	expectedReviewItems,
 	mergeChecks,
 	mergeFindings,
+	mergeRuleChecks,
 	missingReviewItems,
+	missingRuleChecks,
 	normalizePath,
 	parseReviewChecks,
+	parseRuleChecks,
 	type ReviewCheck,
+	type RuleCheck,
 	summarizeChecks,
+	summarizeRuleChecks,
 	withInferredRule,
 } from "./review-checks";
 
@@ -55,7 +62,15 @@ export type HuntEvent =
 			type: "checklist";
 			watchdogId: string;
 			missing: number;
+			missingRules: number;
 			status: "start" | "done" | "failed";
+			error?: string;
+	  }
+	| {
+			type: "second-opinion";
+			watchdogId: string;
+			status: "start" | "done" | "failed";
+			findings?: number;
 			error?: string;
 	  }
 	| { type: "start"; watchdogId: string }
@@ -97,6 +112,24 @@ export type HuntWatchdogResult = {
 	error?: string;
 	/** Cobertura do checklist de intenção (fluxos + invariantes). */
 	checks?: CheckCoverage;
+	/** Cobertura das regras declaradas no brief (numeradas). */
+	rules?: CheckCoverage;
+	/** Passada de checklist (custo marginal explícito). */
+	checklist?: {
+		status: "done" | "failed";
+		missing: number;
+		missingRules: number;
+		costUsd: number;
+		numTurns: number;
+	};
+	/** Resultado da passada adversarial do `general` (com custo marginal). */
+	secondOpinion?: {
+		status: "done" | "failed";
+		findings: number;
+		costUsd: number;
+		numTurns: number;
+		error?: string;
+	};
 	/** Cobertura declarada dos arquivos do domínio (`reviewedFiles` ∪ `skipped`). */
 	coverage?: {
 		total: number;
@@ -159,6 +192,11 @@ export type HuntRunnerOptions = {
 	 * (default: ligada). Desligue com `hunt.checklist: false`.
 	 */
 	checklist?: boolean;
+	/**
+	 * Passada adversarial do `general` (5 classes: credencial/estado, capacidade,
+	 * identificador, idempotência, contrato). Default: ligada.
+	 */
+	secondOpinion?: boolean;
 	runner: MakiProcessRunner;
 	onEvent?: (event: HuntEvent) => void;
 };
@@ -305,9 +343,10 @@ export class HuntRunner {
 			watchdogId,
 			brief,
 		});
-		// Checklist derivado do modelo de intenção: cada fluxo/invariante do brief
-		// precisa de uma verificação declarada, não só de um diff lido.
+		// Checklist derivado do brief: cada fluxo/invariante do modelo de intenção
+		// e cada regra numerada precisa de uma verificação declarada.
 		const expected = expectedReviewItems(brief, business, watchdogId);
+		const expectedRules = briefRules(brief);
 
 		this.emit({ type: "start", watchdogId });
 		let attempts = 0;
@@ -329,26 +368,39 @@ export class HuntRunner {
 
 		let report = first.report;
 		let checks = first.checks;
+		let ruleChecks = first.ruleChecks;
 		let reviewerBusiness = first.reviewerBusiness;
 
+		let checklist: HuntWatchdogResult["checklist"];
 		const missing = missingReviewItems(expected, checks);
-		if (this.options.checklist !== false && missing.length > 0) {
+		const missingRules = missingRuleChecks(expectedRules, ruleChecks);
+		if (
+			this.options.checklist !== false &&
+			(missing.length > 0 || missingRules.length > 0)
+		) {
+			const costBefore = accumulated.costUsd ?? 0;
+			const turnsBefore = accumulated.numTurns ?? 0;
 			this.emit({
 				type: "checklist",
 				watchdogId,
 				missing: missing.length,
+				missingRules: missingRules.length,
 				status: "start",
 			});
-			const second = await this.executePass(
-				watchdogId,
-				`${basePrompt}\n${renderChecklistSuffix(missing)}`,
-			);
+			const suffix = renderChecklistSuffix(missing, missingRules);
+			// Sessão já tem o brief e as evidências: só pedimos os vereditos.
+			const second = accumulated.sessionId
+				? await this.executePass(watchdogId, suffix, {
+						resume: accumulated.sessionId,
+					})
+				: await this.executePass(watchdogId, `${basePrompt}\n${suffix}`);
 			mergeMetrics(accumulated, second.metrics);
 			attempts += second.attempts;
 			if (second.ok) {
 				// A segunda passada não pode *perder* achados: une as duas.
 				report = mergeReport(report, second.report);
 				checks = mergeChecks(checks, second.checks);
+				ruleChecks = mergeRuleChecks(ruleChecks, second.ruleChecks);
 				reviewerBusiness = richerBusiness(
 					reviewerBusiness,
 					second.reviewerBusiness,
@@ -357,6 +409,7 @@ export class HuntRunner {
 					type: "checklist",
 					watchdogId,
 					missing: missingReviewItems(expected, checks).length,
+					missingRules: missingRuleChecks(expectedRules, ruleChecks).length,
 					status: "done",
 				});
 			} else {
@@ -364,8 +417,73 @@ export class HuntRunner {
 					type: "checklist",
 					watchdogId,
 					missing: missing.length,
+					missingRules: missingRules.length,
 					status: "failed",
 					error: second.error,
+				});
+			}
+			checklist = {
+				status: second.ok ? "done" : "failed",
+				missing: second.ok
+					? missingReviewItems(expected, checks).length
+					: missing.length,
+				missingRules: second.ok
+					? missingRuleChecks(expectedRules, ruleChecks).length
+					: missingRules.length,
+				costUsd: (accumulated.costUsd ?? 0) - costBefore,
+				numTurns: (accumulated.numTurns ?? 0) - turnsBefore,
+			};
+		}
+
+		let secondOpinion: HuntWatchdogResult["secondOpinion"];
+		if (this.options.secondOpinion !== false && watchdogId === GENERAL_WATCHDOG_ID) {
+			const costBefore = accumulated.costUsd ?? 0;
+			const turnsBefore = accumulated.numTurns ?? 0;
+			this.emit({ type: "second-opinion", watchdogId, status: "start" });
+			const suffix = renderSecondOpinionSuffix();
+			const opinion = accumulated.sessionId
+				? await this.executePass(watchdogId, suffix, {
+						resume: accumulated.sessionId,
+					})
+				: await this.executePass(watchdogId, `${basePrompt}\n${suffix}`);
+			mergeMetrics(accumulated, opinion.metrics);
+			attempts += opinion.attempts;
+			const costUsd = (accumulated.costUsd ?? 0) - costBefore;
+			const numTurns = (accumulated.numTurns ?? 0) - turnsBefore;
+			if (opinion.ok) {
+				const before = report.findings.length;
+				report = mergeReport(report, opinion.report);
+				checks = mergeChecks(checks, opinion.checks);
+				ruleChecks = mergeRuleChecks(ruleChecks, opinion.ruleChecks);
+				reviewerBusiness = richerBusiness(
+					reviewerBusiness,
+					opinion.reviewerBusiness,
+				);
+				secondOpinion = {
+					status: "done",
+					findings: report.findings.length - before,
+					costUsd,
+					numTurns,
+				};
+				this.emit({
+					type: "second-opinion",
+					watchdogId,
+					status: "done",
+					findings: secondOpinion.findings,
+				});
+			} else {
+				secondOpinion = {
+					status: "failed",
+					findings: 0,
+					costUsd,
+					numTurns,
+					error: opinion.error,
+				};
+				this.emit({
+					type: "second-opinion",
+					watchdogId,
+					status: "failed",
+					error: opinion.error,
 				});
 			}
 		}
@@ -377,9 +495,10 @@ export class HuntRunner {
 		report = withInferredRule(report);
 		this.options.work.writeFinding(
 			watchdogId,
-			`${JSON.stringify({ ...report, checks }, null, 2)}\n`,
+			`${JSON.stringify({ ...report, rules: ruleChecks, checks }, null, 2)}\n`,
 		);
 		const coverage = summarizeChecks(expected, checks);
+		const rulesCoverage = summarizeRuleChecks(expectedRules, ruleChecks);
 		const files = coverageOf(brief, report);
 		const done: HuntWatchdogResult = {
 			watchdogId,
@@ -393,6 +512,9 @@ export class HuntRunner {
 			costUsd: accumulated.costUsd,
 			usage: accumulated.usage,
 			checks: coverage.expected > 0 ? coverage : undefined,
+			rules: rulesCoverage.expected > 0 ? rulesCoverage : undefined,
+			checklist,
+			secondOpinion,
 			coverage: files.total > 0 ? files : undefined,
 			business: businessDecision,
 		};
@@ -411,6 +533,7 @@ export class HuntRunner {
 	private async executePass(
 		watchdogId: string,
 		basePrompt: string,
+		options: { resume?: string } = {},
 	): Promise<PassOutcome> {
 		let attempts = 0;
 		let lastError = "";
@@ -420,7 +543,12 @@ export class HuntRunner {
 
 		while (attempts <= this.options.retries) {
 			attempts++;
-			const resume = attempts > 1 && canResume ? metrics.sessionId : undefined;
+			const resume =
+				attempts === 1
+					? options.resume
+					: canResume
+						? metrics.sessionId
+						: undefined;
 			const prompt =
 				attempts === 1
 					? basePrompt
@@ -474,6 +602,7 @@ export class HuntRunner {
 				ok: true,
 				report,
 				checks: parseReviewChecks(raw),
+				ruleChecks: parseRuleChecks(raw),
 				// O revisor de fluxo devolve o modelo de intenção no JSON.
 				reviewerBusiness:
 					watchdogId === GENERAL_WATCHDOG_ID
@@ -543,6 +672,7 @@ type PassOutcome =
 			ok: true;
 			report: WatchdogReport;
 			checks: ReviewCheck[];
+			ruleChecks: RuleCheck[];
 			reviewerBusiness?: BusinessSummary;
 			attempts: number;
 			metrics: MakiRunMetrics;

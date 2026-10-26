@@ -212,6 +212,11 @@ export class ProjectConfig<TId extends string = string> {
 	get huntChecklist(): boolean {
 		return this.hunt.checklist !== false;
 	}
+
+	/** Passada adversarial do `general` (default: ligada). */
+	get huntSecondOpinion(): boolean {
+		return this.hunt.secondOpinion !== false;
+	}
 }
 
 /** Inteiro positivo ou o default. */

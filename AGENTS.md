@@ -178,12 +178,15 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   continua canônica para agentes externos; `houndsman hunt` é o caminho CLI via maki. Ambos
   usam o mesmo `prepare`/`finalize` e o mesmo schema de findings. Nada em `setup`/`update`
   pode passar a exigir o maki.
-- **`hunt` revisa por checklist de intenção.** Cada fluxo/invariante do brief precisa de um
-  item em `checks`; o runner repete o brief **uma vez** para cobrir pendências e **une** os
-  findings das duas passadas (nunca perde achado da primeira). O `businessSummary` devolvido
-  pelo `general` só substitui o vigente quando é mais rico — não degrade o modelo da IA por
-  um resumo sem fluxos. O `result` do maki concatena todos os turnos: o parser extrai o
-  **último** JSON válido e o retry de saída inválida **retoma a sessão** (`--resume`).
+- **`hunt` revisa por checklist de intenção e regras.** Cada fluxo/invariante do brief precisa
+  de um item em `checks` e cada regra numerada de um item em `rules`; o runner retoma a
+  **mesma sessão** (`--resume`) para cobrir pendências e **une** os findings das passadas
+  (nunca perde achado da primeira). O `general` recebe ainda uma **segunda opinião**
+  adversarial (credencial/estado, capacidade, identificador, idempotência, contrato). O
+  `businessSummary` devolvido pelo `general` só substitui o vigente quando é mais rico — não
+  degrade o modelo da IA por um resumo sem fluxos. O `result` do maki concatena todos os
+  turnos: o parser extrai o **último** JSON válido. Cada passada extra registra custo marginal
+  (`checklist.costUsd`, `secondOpinion.costUsd`) no `hunt-report.json`.
 - **IA do fluxo normal é opcional e falha-aberto.** Sem `HOUNDSMAN_DEEP_SEEK_API_KEY`
   (ou com `--no-ai`), briefs/contexto/classificação/verify seguem sem rede.
 - **`fallback: true` é último recurso.** Um watchdog fallback só assume arquivos que

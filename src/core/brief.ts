@@ -171,9 +171,9 @@ function codeItem(value: string): string {
 	return `- \`${value}\``;
 }
 
-/** Linha de regra com emoji de severidade. */
-function ruleItem(rule: Rule): string {
-	return `- ${SEVERITY_EMOJI[rule.severity]} **${rule.severity}** — ${rule.text}`;
+/** Linha de regra com número e emoji de severidade (o número é a identidade no checklist). */
+function ruleItem(rule: Rule, index: number): string {
+	return `- ${index}. ${SEVERITY_EMOJI[rule.severity]} **${rule.severity}** — ${rule.text}`;
 }
 
 /**
@@ -600,7 +600,7 @@ export function defaultRenderBrief(
 		"",
 		...[...def.rules]
 			.sort((a, b) => severityRank(a.severity) - severityRank(b.severity))
-			.map(ruleItem),
+			.map((rule, index) => ruleItem(rule, index + 1)),
 		"",
 	);
 	lines.push("## Como declarar a severidade", "", ...SEVERITY_GUIDE, "");

@@ -58,6 +58,7 @@ Flags:
   --hunt-timeout      Timeout por watchdog (ms)
   --no-retry          Não repete saída inválida
   --no-checklist      Sem a passada extra de fluxos/invariantes não verificados
+  --no-second-opinion Sem a passada adversarial do revisor de fluxo
   --fail-on-blocking  Exit 1 se houver bloqueantes
 
 Instalação:
@@ -239,6 +240,9 @@ export class HuntCommand implements Command {
 				timeoutMs,
 				retries,
 				checklist: parser.has("--no-checklist") ? false : project.huntChecklist,
+				secondOpinion: parser.has("--no-second-opinion")
+					? false
+					: project.huntSecondOpinion,
 				runner: new SpawnMakiRunner(binary.path),
 				onEvent: (event) => this.logEvent(board, event, context.logger),
 			});
@@ -269,16 +273,31 @@ export class HuntCommand implements Command {
 					`${report.totals.findings} finding(s), $${report.totals.costUsd.toFixed(4)}, ` +
 					`${Math.round(report.durationMs / 1000)}s.`,
 			);
+			const checklistCost = report.watchdogs.reduce(
+				(sum, watchdog) => sum + (watchdog.checklist?.costUsd ?? 0),
+				0,
+			);
+			const opinionCost = report.watchdogs.reduce(
+				(sum, watchdog) => sum + (watchdog.secondOpinion?.costUsd ?? 0),
+				0,
+			);
+			if (checklistCost + opinionCost > 0) {
+				context.logger.info(
+					`Passadas extras: checklist $${checklistCost.toFixed(4)} · ` +
+						`segunda opinião $${opinionCost.toFixed(4)}.`,
+				);
+			}
 			const unchecked = report.watchdogs.filter(
-				(watchdog) => (watchdog.checks?.missing ?? 0) > 0,
+				(watchdog) =>
+					(watchdog.checks?.missing ?? 0) + (watchdog.rules?.missing ?? 0) > 0,
 			);
 			if (unchecked.length > 0) {
 				context.logger.warn(
-					`Checklist de intenção incompleto em ${unchecked.length} watchdog(s): ` +
+					`Checklist de intenção/regras incompleto em ${unchecked.length} watchdog(s): ` +
 						unchecked
 							.map(
 								(watchdog) =>
-									`${watchdog.watchdogId} (${watchdog.checks?.missing ?? 0})`,
+									`${watchdog.watchdogId} (itens ${watchdog.checks?.missing ?? 0}, regras ${watchdog.rules?.missing ?? 0})`,
 							)
 							.join(", "),
 				);
@@ -442,7 +461,9 @@ export class HuntCommand implements Command {
 			`harness: ${project.huntEnabled ? "ligado" : "desligado"} · ` +
 				`concorrência ${project.huntConcurrency} · ` +
 				`timeout ${Math.round(project.huntTimeoutMs / 1000)}s · ` +
-				`retries ${project.huntRetries}.`,
+				`retries ${project.huntRetries} · ` +
+				`checklist ${project.huntChecklist ? "on" : "off"} · ` +
+				`segunda opinião ${project.huntSecondOpinion ? "on" : "off"}.`,
 		);
 		return 0;
 	}
@@ -471,11 +492,26 @@ export class HuntCommand implements Command {
 			case "checklist":
 				if (event.status === "start") {
 					logger.step(
-						`${event.watchdogId}: ${event.missing} fluxo(s)/invariante(s) sem verificação — passada de checklist…`,
+						`${event.watchdogId}: ${event.missing} item(s) e ${event.missingRules} regra(s) sem verificação — passada de checklist…`,
 					);
 				} else if (event.status === "failed") {
 					logger.warn(
 						`${event.watchdogId}: checklist falhou (${event.error ?? "erro"}); relatório da primeira passada mantido.`,
+					);
+				}
+				return;
+			case "second-opinion":
+				if (event.status === "start") {
+					logger.step(
+						`${event.watchdogId}: passada adversarial (credencial/estado, capacidade, identificador, idempotência, contrato)…`,
+					);
+				} else if (event.status === "done") {
+					logger.info(
+						`${event.watchdogId}: segunda opinião adicionou ${event.findings ?? 0} finding(s).`,
+					);
+				} else {
+					logger.warn(
+						`${event.watchdogId}: segunda opinião falhou (${event.error ?? "erro"}); relatório anterior mantido.`,
 					);
 				}
 				return;

@@ -46,6 +46,7 @@ export {
 	renderHuntPrompt,
 	renderResumeSuffix,
 	renderRetrySuffix,
+	renderSecondOpinionSuffix,
 } from "./maki-prompt";
 export type {
 	MakiJsonOutput,
@@ -70,14 +71,21 @@ export type {
 	CheckCoverage,
 	CheckVerdict,
 	ReviewCheck,
+	ReviewRule,
+	RuleCheck,
 } from "./review-checks";
 export {
+	briefRules,
 	businessScore,
 	chooseBusinessSummary,
 	expectedReviewItems,
 	mergeFindings,
+	mergeRuleChecks,
 	missingReviewItems,
+	missingRuleChecks,
 	parseReviewChecks,
+	parseRuleChecks,
 	summarizeChecks,
+	summarizeRuleChecks,
 	withInferredRule,
 } from "./review-checks";

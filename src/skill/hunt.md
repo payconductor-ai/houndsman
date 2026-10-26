@@ -28,20 +28,24 @@ Os dois modos produzem os mesmos artefatos, usam o mesmo staging e o mesmo ciclo
 trocar profundidade por velocidade:
 
 - o prompt exige **uma verificação por fluxo/invariante** (`checks`: `ok`/`gap`/`n/a` +
-  `arquivo:linha`);
-- se a primeira resposta não cobrir o checklist, o harness repete o brief **uma vez** só com
-  os itens pendentes e **une** os achados das duas passadas (dedupe por arquivo+linha+regra,
-  maior severidade vence);
+  `arquivo:linha`) e **uma por regra numerada** (`rules`: `{ id, verdict }`);
+- se a primeira resposta não cobrir o checklist, o harness **retoma a sessão** (`--resume`) e
+  pede só os vereditos pendentes; os achados das passadas são **unidos** (dedupe por
+  arquivo+linha+regra, maior severidade vence);
+- o `general` recebe uma **segunda opinião** adversarial (credencial/estado compartilhado,
+  capacidade anunciada, identificador persistido, idempotência/transição, contrato entre
+  lados). Custo marginal fica em `secondOpinion.costUsd` no `hunt-report.json`;
 - o `businessSummary` devolvido pelo `general` só substitui o modelo gravado se for **mais
   rico** — um resumo sem fluxos não sobrescreve mais o modelo da IA;
 - a saída do maki concatena **todas** as mensagens do agente; o parser procura o último JSON
   válido (bloco cercado ou objeto balanceado), não o primeiro `{`;
-- retry de saída inválida **retoma a mesma sessão** (`--resume`) enviando só o schema — não
-  refaz a exploração inteira; e o system prompt do harness prioriza profundidade sobre
-  economia de tool calls;
-- `hunt-report.json` traz `checks { expected, verified, missing, gaps }`, `coverage`
-  (`reviewed`/`skipped`/`undeclared`) e a decisão sobre o modelo de intenção por watchdog.
-  `--no-checklist` (ou `hunt.checklist: false`) desliga a passada extra.
+- retry de saída inválida **retoma a mesma sessão** enviando só o schema — não refaz a
+  exploração inteira; e o system prompt do harness prioriza profundidade sobre economia de
+  tool calls;
+- `hunt-report.json` traz `rules`/`checks { expected, verified, missing, gaps }`, `coverage`
+  (`reviewed`/`skipped`/`undeclared`), o custo de cada passada extra (`checklist`,
+  `secondOpinion`) e a decisão sobre o modelo de intenção por watchdog. Desligue com
+  `--no-checklist`/`--no-second-opinion` (ou `hunt.checklist`/`hunt.secondOpinion: false`).
 
 ## Alvo da revisão
 

@@ -147,11 +147,15 @@ export type HoundsmanHunt = {
 	/** Tentativas extras quando a saída do watchdog é inválida (default: 1). */
 	retries?: number;
 	/**
-	 * Passada extra por watchdog para cobrir fluxos/invariantes que a primeira
-	 * resposta não verificou (default: ligada). Desligar reduz custo e volta a
-	 * aceitar relatórios sem `checks`.
+	 * Passada extra por watchdog para cobrir fluxos/invariantes/regras que a
+	 * primeira resposta não verificou (default: ligada).
 	 */
 	checklist?: boolean;
+	/**
+	 * Passada adversarial do `general` nas 5 classes (credencial/estado,
+	 * capacidade, identificador, idempotência, contrato). Default: ligada.
+	 */
+	secondOpinion?: boolean;
 	/** Caminho explícito do binário (`HOUNDSMAN_MAKI_PATH` tem precedência). */
 	binaryPath?: string;
 };

@@ -122,7 +122,7 @@ describe("buildComparison", () => {
 		expect(markdown).toContain("## Só em B");
 	});
 
-	test("expõe checklist e cobertura declarada do harness", () => {
+	test("expõe checklist, cobertura e custo das passadas extras do harness", () => {
 		const withHarness: ReviewSnapshot = {
 			...snapshot("B", []),
 			harness: {
@@ -133,12 +133,16 @@ describe("buildComparison", () => {
 				skippedFiles: 3,
 				undeclaredFiles: 4,
 				businessScore: 20,
+				extraCostUsd: 0.035,
+				secondOpinionFindings: 2,
 			},
 		};
 		const markdown = renderComparison(buildComparison(a, withHarness));
 		expect(markdown).toContain("| Checklist verificado | — | 6/8 | — |");
 		expect(markdown).toContain("| Arquivos sem declaração | — | 4 | — |");
 		expect(markdown).toContain("| Modelo de intenção (score) | — | 20 | — |");
+		expect(markdown).toContain("| Passadas extras (custo) | — | $0.0350 | — |");
+		expect(markdown).toContain("| Segunda opinião (findings) | — | 2 | — |");
 	});
 });
 

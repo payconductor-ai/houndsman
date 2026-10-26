@@ -50,6 +50,10 @@ export type ReviewSnapshot = {
 		skippedFiles?: number;
 		undeclaredFiles?: number;
 		businessScore?: number;
+		/** Custo somado das passadas extras (checklist + segunda opinião). */
+		extraCostUsd?: number;
+		/** Findings adicionados pela segunda opinião. */
+		secondOpinionFindings?: number;
 	};
 	tokens?: number;
 	costUsd?: number;
@@ -145,6 +149,11 @@ function formatCount(value: number | undefined): string {
 function formatRatio(verified: number | undefined, expected: number | undefined): string {
 	if (verified === undefined || expected === undefined) return "—";
 	return `${verified}/${expected}`;
+}
+
+/** Custo em dólar (`$0.1234`). */
+function formatCost(value: number | undefined): string {
+	return value === undefined || !Number.isFinite(value) ? "—" : `$${value.toFixed(4)}`;
 }
 
 function formatDelta(
@@ -251,6 +260,16 @@ export function renderComparison(comparison: ReviewComparison): string {
 						"Modelo de intenção (score)",
 						formatCount(a.harness?.businessScore),
 						formatCount(b.harness?.businessScore),
+					),
+					metricRow(
+						"Passadas extras (custo)",
+						formatCost(a.harness?.extraCostUsd),
+						formatCost(b.harness?.extraCostUsd),
+					),
+					metricRow(
+						"Segunda opinião (findings)",
+						formatCount(a.harness?.secondOpinionFindings),
+						formatCount(b.harness?.secondOpinionFindings),
 					),
 				]
 			: []),

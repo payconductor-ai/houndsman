@@ -27,8 +27,8 @@ src/alpha/**
 
 ## Regras (por severidade)
 
-- ❌ **blocking** — Nunca usar \`any\`.
-- ⚠️ **attention** — Promover: validar a entrada.
+- 1. ❌ **blocking** — Nunca usar \`any\`.
+- 2. ⚠️ **attention** — Promover: validar a entrada.
 
 ## Como declarar a severidade
 
@@ -651,7 +651,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "bb6a8b1afed28b25",
+    "sha256": "58644e1af099eb01",
   },
   {
     "file": ".houndsman/core/skill/train.md",
@@ -899,8 +899,8 @@ index 0000000..f4082f0
 
 ## Regras (por severidade)
 
-- ❌ **blocking** — Nunca usar \`any\`.
-- ⚠️ **attention** — Promover: validar a entrada.
+- 1. ❌ **blocking** — Nunca usar \`any\`.
+- 2. ⚠️ **attention** — Promover: validar a entrada.
 
 ## Como declarar a severidade
 

@@ -16,6 +16,7 @@ import {
 	renderChecklistSuffix,
 	renderHuntPrompt,
 	renderResumeSuffix,
+	renderSecondOpinionSuffix,
 } from "../core/hunt/maki-prompt";
 import {
 	extractJsonObject,
@@ -26,12 +27,16 @@ import {
 	SpawnMakiRunner,
 } from "../core/hunt/maki-runner";
 import {
+	briefRules,
 	businessScore,
 	chooseBusinessSummary,
 	expectedReviewItems,
 	mergeFindings,
 	missingReviewItems,
+	missingRuleChecks,
 	parseReviewChecks,
+	parseRuleChecks,
+	summarizeRuleChecks,
 	withInferredRule,
 } from "../core/hunt/review-checks";
 import { ProjectConfig } from "../core/project-config";
@@ -512,7 +517,7 @@ describe("HuntRunner", () => {
 });
 
 /** Brief mínimo com a seção de arquivos do domínio (usada pelo checklist). */
-function briefWithFiles(id: string, files: string[]): string {
+function briefWithFiles(id: string, files: string[], rules: string[] = []): string {
 	return [
 		`# Brief — ${id}`,
 		"",
@@ -520,6 +525,16 @@ function briefWithFiles(id: string, files: string[]): string {
 		"",
 		...files.map((file) => `- \`${file}\` (modified, +10/−0)`),
 		"",
+		...(rules.length > 0
+			? [
+					"## Regras (por severidade)",
+					"",
+					...rules.map(
+						(rule, index) => `- ${index + 1}. ⚠️ **attention** — ${rule}`,
+					),
+					"",
+				]
+			: []),
 		"## Procedimento",
 		"",
 	].join("\n");
@@ -601,6 +616,186 @@ describe("harness — checklist de intenção", () => {
 		expect(mergeFindings([suggestion], [blocking])).toHaveLength(1);
 		expect(mergeFindings([suggestion], [blocking])[0].severity).toBe("blocking");
 		expect(mergeFindings([suggestion], [suggestion])).toHaveLength(1);
+	});
+
+	test("lê as regras numeradas do brief e valida a cobertura", () => {
+		const brief = briefWithFiles(
+			"alpha",
+			["src/alpha/a.ts"],
+			["Evitar any.", "Promover: validar a entrada."],
+		);
+		const rules = briefRules(brief);
+		expect(rules).toEqual([
+			{ id: 1, severity: "attention", text: "Evitar any." },
+			{ id: 2, severity: "attention", text: "Promover: validar a entrada." },
+		]);
+		const checks = parseRuleChecks({ rules: [{ id: 1, verdict: "ok" }, "2: gap"] });
+		expect(checks).toMatchObject([
+			{ id: 1, verdict: "ok" },
+			{ id: 2, verdict: "gap" },
+		]);
+		expect(missingRuleChecks(rules, checks)).toEqual([]);
+		expect(summarizeRuleChecks(rules, checks)).toEqual({
+			expected: 2,
+			verified: 2,
+			missing: 0,
+			gaps: 1,
+		});
+	});
+
+	test("checklist dispara por regra não verificada e retoma a sessão", async () => {
+		const staging = makeWork(["alpha"]);
+		staging.work.writeBrief(
+			"alpha",
+			briefWithFiles(
+				"alpha",
+				["src/alpha/a.ts"],
+				["Evitar any.", "Evitar console.log."],
+			),
+		);
+		const requests: { prompt: string; resume?: string }[] = [];
+		try {
+			let calls = 0;
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 0,
+				runner: {
+					run: async (request) => {
+						requests.push({ prompt: request.prompt, resume: request.resume });
+						calls++;
+						return calls === 1
+							? {
+									ok: true,
+									text: reportJson("alpha"),
+									metrics: {
+										durationMs: 5,
+										sessionId: "sess-1",
+										costUsd: 0.01,
+									},
+									stderr: "",
+									exitCode: 0,
+								}
+							: {
+									ok: true,
+									text: JSON.stringify({
+										watchdogId: "alpha",
+										reviewedFiles: ["src/alpha/a.ts"],
+										skipped: [],
+										rules: [
+											{
+												id: 1,
+												verdict: "ok",
+												at: "src/alpha/a.ts:1",
+											},
+											{
+												id: 2,
+												verdict: "ok",
+												at: "src/alpha/a.ts:2",
+											},
+										],
+										checks: [],
+										findings: [],
+									}),
+									metrics: {
+										durationMs: 5,
+										sessionId: "sess-1",
+										costUsd: 0.005,
+									},
+									stderr: "",
+									exitCode: 0,
+								};
+					},
+				},
+			});
+
+			const report = await runner.run(["alpha"]);
+			expect(requests).toHaveLength(2);
+			expect(requests[1].resume).toBe("sess-1");
+			expect(requests[1].prompt).toContain("Regras não verificadas");
+			expect(requests[1].prompt).toContain("1, 2");
+			expect(report.watchdogs[0].findings).toBe(1);
+			expect(report.watchdogs[0].rules).toEqual({
+				expected: 2,
+				verified: 2,
+				missing: 0,
+				gaps: 0,
+			});
+			expect(report.watchdogs[0].checklist?.costUsd).toBeCloseTo(0.005);
+			expect(report.watchdogs[0].checklist?.numTurns).toBe(0);
+		} finally {
+			staging.cleanup();
+		}
+	});
+
+	test("segunda opinião do general adiciona achado e mede o custo marginal", async () => {
+		const staging = makeWork(["general"]);
+		staging.work.writeBrief("general", briefWithFiles("general", ["src/alpha/a.ts"]));
+		const requests: { prompt: string; resume?: string }[] = [];
+		try {
+			let calls = 0;
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 0,
+				runner: {
+					run: async (request) => {
+						requests.push({ prompt: request.prompt, resume: request.resume });
+						calls++;
+						return {
+							ok: true,
+							text: reportJson("general", calls),
+							metrics: {
+								durationMs: 5,
+								sessionId: "sess-general",
+								costUsd: 0.02,
+								numTurns: 3,
+							},
+							stderr: "",
+							exitCode: 0,
+						};
+					},
+				},
+			});
+
+			const report = await runner.run(["general"]);
+			expect(requests[1].resume).toBe("sess-general");
+			expect(requests[1].prompt).toContain("Segunda opinião (revisão adversarial)");
+			expect(report.watchdogs[0].findings).toBe(2);
+			expect(report.watchdogs[0].secondOpinion).toMatchObject({
+				status: "done",
+				findings: 1,
+			});
+			expect(report.watchdogs[0].secondOpinion?.costUsd).toBeCloseTo(0.02);
+			expect(report.watchdogs[0].secondOpinion?.numTurns).toBe(3);
+		} finally {
+			staging.cleanup();
+		}
+	});
+
+	test("sufixo adversarial cita as cinco classes", () => {
+		const suffix = renderSecondOpinionSuffix();
+		for (const term of [
+			"Credencial e contexto compartilhado",
+			"Capacidade anunciada",
+			"Identificador persistido",
+			"Idempotência e transição de estado",
+			"Contrato entre lados",
+		]) {
+			expect(suffix).toContain(term);
+		}
 	});
 
 	test("rule vazio é inferido com o prefixo do basis", () => {
