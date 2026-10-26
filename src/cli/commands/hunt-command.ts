@@ -292,6 +292,18 @@ export class HuntCommand implements Command {
 						`(inferior ao já gravado: ${report.business ?? "n/d"}).`,
 				);
 			}
+			const incomplete = report.watchdogs
+				.filter((watchdog) => (watchdog.coverage?.undeclared ?? 0) > 0)
+				.map(
+					(watchdog) =>
+						`${watchdog.watchdogId} ${watchdog.coverage?.reviewed ?? 0}/${watchdog.coverage?.total ?? 0}`,
+				);
+			if (incomplete.length > 0) {
+				context.logger.info(
+					`Cobertura declarada incompleta: ${incomplete.join(", ")} ` +
+						"(detalhe em `hunt-report.json`).",
+				);
+			}
 
 			const failed = report.watchdogs.filter(
 				(watchdog) => watchdog.status === "failed",

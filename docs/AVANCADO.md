@@ -146,6 +146,17 @@ O tempo de uma revisão é dominado por **turns dos subagentes** (ler arquivo/c�
   do `general` ∥ resumo técnico ∥ planos de brief. `ai.concurrency` default **4**.
 - **Harness em uma onda.** `hunt.concurrency` default **8** — domínios + `general` rodam
   juntos; `--hunt-concurrency` ajusta se o provider limitar a taxa.
+- **Checklist de intenção no harness.** Cada fluxo/invariante do brief vira item de `checks`;
+  se faltar verificação, o watchdog roda **uma** segunda passada só com os pendentes e os
+  findings são unidos (dedupe por arquivo+linha+regra, maior severidade vence). O
+  `businessSummary` que o `general` devolve só substitui o modelo vigente quando tem
+  pontuação maior — sem isso ele já trocou um modelo da IA (5 fluxos) por um resumo de 4
+  invariantes. `--no-checklist`/`hunt.checklist: false` desliga a passada extra.
+- **Saída do maki e retries.** O `result` do maki concatena o texto de **todos** os turnos;
+  o parser extrai o **último** JSON válido (fence ou objeto balanceado). Se a saída ainda
+  não for parseável, o retry retoma a sessão (`--resume`) com o schema e não repete a
+  exploração. O system prompt do harness inverte a preferência nativa do maki por
+  “minimizar tool calls”: profundidade vence brevidade.
 - **Despacho da skill.** Despache todos os briefs da onda no **mesmo bloco** de tool calls;
   serializar N subagentes custa N × o tempo de um.
 

@@ -17,6 +17,7 @@ import { renderHuntIntentPrompt, renderIntentRetrySuffix } from "./maki-intent-p
 import {
 	renderChecklistSuffix,
 	renderHuntPrompt,
+	renderResumeSuffix,
 	renderRetrySuffix,
 } from "./maki-prompt";
 import {
@@ -27,6 +28,7 @@ import {
 } from "./maki-runner";
 import { mapPool } from "./pool";
 import {
+	briefDomainFiles,
 	businessScore,
 	type CheckCoverage,
 	chooseBusinessSummary,
@@ -34,9 +36,11 @@ import {
 	mergeChecks,
 	mergeFindings,
 	missingReviewItems,
+	normalizePath,
 	parseReviewChecks,
 	type ReviewCheck,
 	summarizeChecks,
+	withInferredRule,
 } from "./review-checks";
 
 /** Evento de progresso (CLI loga; core não escreve saída). */
@@ -93,8 +97,13 @@ export type HuntWatchdogResult = {
 	error?: string;
 	/** Cobertura do checklist de intenção (fluxos + invariantes). */
 	checks?: CheckCoverage;
-	/** Arquivos declarados como não lidos (declaração de cobertura). */
-	skipped?: number;
+	/** Cobertura declarada dos arquivos do domínio (`reviewedFiles` ∪ `skipped`). */
+	coverage?: {
+		total: number;
+		reviewed: number;
+		skipped: number;
+		undeclared: number;
+	};
 	/** Decisão sobre o modelo de intenção devolvido pelo `general`. */
 	business?: {
 		accepted: boolean;
@@ -363,11 +372,15 @@ export class HuntRunner {
 
 		const businessDecision = this.applyReviewerBusiness(watchdogId, reviewerBusiness);
 
+		// `rule` vazio quebra a identidade do finding na triagem; infere pelo
+		// prefixo do `basis` + primeira frase da mensagem.
+		report = withInferredRule(report);
 		this.options.work.writeFinding(
 			watchdogId,
-			`${JSON.stringify(report, null, 2)}\n`,
+			`${JSON.stringify({ ...report, checks }, null, 2)}\n`,
 		);
 		const coverage = summarizeChecks(expected, checks);
+		const files = coverageOf(brief, report);
 		const done: HuntWatchdogResult = {
 			watchdogId,
 			status: "done",
@@ -380,7 +393,7 @@ export class HuntRunner {
 			costUsd: accumulated.costUsd,
 			usage: accumulated.usage,
 			checks: coverage.expected > 0 ? coverage : undefined,
-			skipped: report.skipped.length,
+			coverage: files.total > 0 ? files : undefined,
 			business: businessDecision,
 		};
 		this.emit({
@@ -401,26 +414,33 @@ export class HuntRunner {
 	): Promise<PassOutcome> {
 		let attempts = 0;
 		let lastError = "";
+		/** A última tentativa chegou a produzir resposta? (permite retomar a sessão) */
+		let canResume = false;
 		const metrics: MakiRunMetrics = { durationMs: 0 };
 
 		while (attempts <= this.options.retries) {
 			attempts++;
+			const resume = attempts > 1 && canResume ? metrics.sessionId : undefined;
 			const prompt =
 				attempts === 1
 					? basePrompt
-					: `${basePrompt}\n${renderRetrySuffix(lastError)}`;
+					: resume
+						? renderResumeSuffix(lastError, watchdogId)
+						: `${basePrompt}\n${renderRetrySuffix(lastError)}`;
 			const result = await this.options.runner.run({
 				prompt,
 				cwd: this.options.root,
 				model: this.options.model,
 				apiKeyEnv: this.options.apiKeyEnv,
 				apiKey: this.options.apiKey,
+				resume,
 				timeoutMs: this.options.timeoutMs,
 			});
 			mergeMetrics(metrics, result.metrics);
 
 			if (!result.ok) {
 				lastError = result.error;
+				canResume = false;
 				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
@@ -428,6 +448,7 @@ export class HuntRunner {
 			const raw = extractJsonObject(result.text);
 			if (raw === null) {
 				lastError = "a resposta final não contém um objeto JSON.";
+				canResume = true;
 				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
@@ -438,11 +459,13 @@ export class HuntRunner {
 			);
 			if (!report) {
 				lastError = warnings[0] ?? "JSON fora do schema do watchdog.";
+				canResume = true;
 				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
 			if (report.watchdogId !== watchdogId) {
 				lastError = `watchdogId '${report.watchdogId}' não corresponde a '${watchdogId}'.`;
+				canResume = true;
 				this.emitRetry(watchdogId, attempts, lastError);
 				continue;
 			}
@@ -547,6 +570,35 @@ function mergeReport(first: WatchdogReport, second: WatchdogReport): WatchdogRep
 		skipped: [...new Set([...first.skipped, ...second.skipped])],
 		findings: mergeFindings(first.findings, second.findings),
 	};
+}
+
+/** Cobertura declarada dos arquivos do domínio do brief. */
+function coverageOf(
+	brief: string,
+	report: WatchdogReport,
+): { total: number; reviewed: number; skipped: number; undeclared: number } {
+	const domain = new Set(briefDomainFiles(brief));
+	if (domain.size === 0) return { total: 0, reviewed: 0, skipped: 0, undeclared: 0 };
+	const reviewed = new Set(
+		report.reviewedFiles.map(normalizePath).filter((file) => domain.has(file)),
+	).size;
+	const skipped = new Set(
+		report.skipped
+			.map(declaredPath)
+			.filter((file): file is string => file !== null && domain.has(file)),
+	).size;
+	return {
+		total: domain.size,
+		reviewed,
+		skipped,
+		undeclared: Math.max(0, domain.size - reviewed - skipped),
+	};
+}
+
+/** Primeiro caminho de arquivo citado numa entrada de `skipped` (ou null). */
+function declaredPath(entry: string): string | null {
+	const match = entry.match(/[\w./-]+\.[A-Za-z0-9]{1,5}/);
+	return match ? normalizePath(match[0]) : null;
 }
 
 /** Modelo de intenção mais rico entre duas passadas. */

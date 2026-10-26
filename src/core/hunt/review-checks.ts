@@ -12,7 +12,7 @@
 
 import { GENERAL_WATCHDOG_ID } from "../builtins";
 import type { BusinessSummary } from "../business-summary";
-import type { Finding } from "../report-builder";
+import type { Finding, WatchdogReport } from "../report-builder";
 import { severityRank } from "../types";
 
 /** Resultado declarado de uma verificação. */
@@ -191,6 +191,31 @@ export function mergeChecks(
 		else merged.push(check);
 	}
 	return merged;
+}
+
+/** Primeira frase do texto (para inferir a identidade de um finding emergente). */
+function firstSentence(message: string, max = 160): string {
+	const text = message.trim().replace(/\s+/g, " ");
+	if (text.length === 0) return "achado sem descrição";
+	const cut = text.search(/[.!?](\s|$)/);
+	const sentence = cut > 0 ? text.slice(0, cut) : text;
+	return sentence.length > max ? `${sentence.slice(0, max - 1)}…` : sentence;
+}
+
+/**
+ * Garante `rule` não vazio (identidade de exibição/triagem do finding).
+ *
+ * O modelo às vezes descreve o achado só em `message` e deixa `rule: ""`.
+ * Para emergente, o prefixo `Lógica:`/`Domínio:` preserva a semântica do
+ * `basis` e permite a derivação de severidade por `impactClass`.
+ */
+export function withInferredRule(report: WatchdogReport): WatchdogReport {
+	const findings = report.findings.map((finding) => {
+		if (finding.rule.trim().length > 0) return finding;
+		const prefix = (finding.basis ?? "logic") === "domain" ? "Domínio: " : "Lógica: ";
+		return { ...finding, rule: `${prefix}${firstSentence(finding.message)}` };
+	});
+	return { ...report, findings };
 }
 
 /** Chave de dedupe de findings entre passadas do mesmo watchdog. */

@@ -12,10 +12,15 @@ import { join } from "node:path";
 import { defineHoundsmanConfig } from "../core/config";
 import { type HuntEvent, HuntRunner } from "../core/hunt/hunt-runner";
 import { requireMakiModel, resolveMakiModel } from "../core/hunt/maki-model";
-import { renderChecklistSuffix, renderHuntPrompt } from "../core/hunt/maki-prompt";
+import {
+	renderChecklistSuffix,
+	renderHuntPrompt,
+	renderResumeSuffix,
+} from "../core/hunt/maki-prompt";
 import {
 	extractJsonObject,
 	MAKI_DISALLOWED_TOOLS,
+	MAKI_REVIEW_SYSTEM_PROMPT,
 	makiArgs,
 	parseMakiOutput,
 	SpawnMakiRunner,
@@ -27,6 +32,7 @@ import {
 	mergeFindings,
 	missingReviewItems,
 	parseReviewChecks,
+	withInferredRule,
 } from "../core/hunt/review-checks";
 import { ProjectConfig } from "../core/project-config";
 import type { ReviewRecord } from "../core/storage/types";
@@ -116,9 +122,12 @@ describe("maki — contrato de execução", () => {
 			"deepseek/deepseek-v4-pro",
 			"--disallowed-tools",
 			MAKI_DISALLOWED_TOOLS,
+			"--append-system-prompt",
+			MAKI_REVIEW_SYSTEM_PROMPT,
 		]);
 		expect(args).not.toContain("--yolo");
 		expect(args).not.toContain("--trust");
+		expect(MAKI_REVIEW_SYSTEM_PROMPT).toContain("Profundidade vence brevidade");
 		for (const tool of ["bash", "write", "edit", "task", "webfetch"]) {
 			expect(MAKI_DISALLOWED_TOOLS.split(",")).toContain(tool);
 		}
@@ -135,6 +144,16 @@ describe("maki — contrato de execução", () => {
 		expect(prompt).toContain('"watchdogId": "alpha"');
 	});
 
+	test("resume entra nos args do maki e o sufixo é compacto", () => {
+		expect(makiArgs("deepseek/deepseek-v4-pro", "sess-1")).toContain("--resume");
+		expect(makiArgs("deepseek/deepseek-v4-pro", "sess-1")).toContain("sess-1");
+		expect(makiArgs("deepseek/deepseek-v4-pro")).not.toContain("--resume");
+		const suffix = renderResumeSuffix("sem JSON", "alpha");
+		expect(suffix).toContain("sessão retomada");
+		expect(suffix).toContain('"watchdogId": "alpha"');
+		expect(suffix).not.toContain("## Brief");
+	});
+
 	test("extrai JSON puro, cercado por markdown ou texto", () => {
 		const payload = { watchdogId: "alpha", findings: [] };
 		expect(extractJsonObject(JSON.stringify(payload))).toEqual(payload);
@@ -145,6 +164,21 @@ describe("maki — contrato de execução", () => {
 			payload,
 		);
 		expect(extractJsonObject("sem json")).toBeNull();
+	});
+
+	test("extrai o último objeto quando o result concatena a narração do agente", () => {
+		const first = { businessSummary: { flows: [] }, note: "rascunho" };
+		const last = { watchdogId: "general", findings: [] };
+		const transcript = [
+			"Vou revisar o diff. {isso não é JSON}",
+			JSON.stringify(first),
+			"Agora tenho evidências. Segue o relatório:",
+			`\`\`\`json\n${JSON.stringify(last, null, 2)}\n\`\`\``,
+		].join("\n");
+		expect(extractJsonObject(transcript)).toEqual(last);
+
+		const withoutFence = `narração com { e } no meio\n${JSON.stringify(first)}\nfinal:\n${JSON.stringify(last)}`;
+		expect(extractJsonObject(withoutFence)).toEqual(last);
 	});
 
 	test("parseia o JSON do maki (linha única e multi-linha)", () => {
@@ -158,6 +192,7 @@ describe("maki — contrato de execução", () => {
 		);
 		expect(parseMakiOutput(pretty)?.total_cost_usd).toBe(0.5);
 		expect(parseMakiOutput(`log\n${single}`)?.session_id).toBe("s1");
+		expect(parseMakiOutput(`log antes\n${pretty}\nlog depois`)?.result).toBe("ok");
 		expect(parseMakiOutput("nada")).toBeNull();
 	});
 });
@@ -566,6 +601,83 @@ describe("harness — checklist de intenção", () => {
 		expect(mergeFindings([suggestion], [blocking])).toHaveLength(1);
 		expect(mergeFindings([suggestion], [blocking])[0].severity).toBe("blocking");
 		expect(mergeFindings([suggestion], [suggestion])).toHaveLength(1);
+	});
+
+	test("rule vazio é inferido com o prefixo do basis", () => {
+		const report = withInferredRule({
+			watchdogId: "alpha",
+			reviewedFiles: [],
+			skipped: [],
+			findings: [
+				{
+					rule: "",
+					severity: "attention",
+					file: "src/alpha/a.ts",
+					line: 1,
+					message: "Split ausente na criação. Detalhe adicional.",
+					action: "enviar split",
+					basis: "domain",
+				},
+				{
+					rule: "  ",
+					severity: "attention",
+					file: "src/alpha/a.ts",
+					line: 2,
+					message: "Outro problema",
+					action: "corrigir",
+				},
+			],
+		});
+		expect(report.findings[0].rule).toBe("Domínio: Split ausente na criação");
+		expect(report.findings[1].rule).toBe("Lógica: Outro problema");
+	});
+
+	test("retry de conteúdo retoma a sessão e envia só o sufixo", async () => {
+		const staging = makeWork(["alpha"]);
+		try {
+			const requests: { prompt: string; resume?: string }[] = [];
+			let calls = 0;
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 1,
+				runner: {
+					run: async (request) => {
+						requests.push({ prompt: request.prompt, resume: request.resume });
+						calls++;
+						return calls === 1
+							? {
+									ok: true,
+									text: "narração sem JSON",
+									metrics: { durationMs: 5, sessionId: "sess-1" },
+									stderr: "",
+									exitCode: 0,
+								}
+							: {
+									ok: true,
+									text: reportJson("alpha"),
+									metrics: { durationMs: 5, sessionId: "sess-1" },
+									stderr: "",
+									exitCode: 0,
+								};
+					},
+				},
+			});
+
+			const report = await runner.run(["alpha"]);
+			expect(report.watchdogs[0].status).toBe("done");
+			expect(requests[1].resume).toBe("sess-1");
+			expect(requests[1].prompt).toContain("sessão retomada");
+			expect(requests[1].prompt).not.toContain("brief de alpha");
+		} finally {
+			staging.cleanup();
+		}
 	});
 
 	test("modelo de intenção mais fraco não substitui o da IA", () => {

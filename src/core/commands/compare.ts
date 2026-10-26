@@ -46,9 +46,35 @@ type ReportShape = { durationMs?: number };
 type HuntShape = {
 	model?: string;
 	durationMs?: number;
+	businessScore?: number;
 	totals?: { totalTokens?: number; costUsd?: number };
+	watchdogs?: {
+		checks?: {
+			expected?: number;
+			verified?: number;
+			missing?: number;
+			gaps?: number;
+		};
+		coverage?: { reviewed?: number; skipped?: number; undeclared?: number };
+	}[];
 };
 type AiUsageShape = { total?: { totalTokens?: number } };
+
+/** Agrega o diagnóstico do `hunt-report.json` (checklist + cobertura declarada). */
+function harnessOf(hunt: HuntShape): NonNullable<ReviewSnapshot["harness"]> {
+	const watchdogs = hunt.watchdogs ?? [];
+	const sum = (pick: (item: (typeof watchdogs)[number]) => number | undefined) =>
+		watchdogs.reduce((total, item) => total + (pick(item) ?? 0), 0);
+	return {
+		checksExpected: sum((item) => item.checks?.expected),
+		checksVerified: sum((item) => item.checks?.verified),
+		checksGaps: sum((item) => item.checks?.gaps),
+		reviewedFiles: sum((item) => item.coverage?.reviewed),
+		skippedFiles: sum((item) => item.coverage?.skipped),
+		undeclaredFiles: sum((item) => item.coverage?.undeclared),
+		businessScore: hunt.businessScore,
+	};
+}
 
 /** Resolve a run pelo slug dentro do repositório. */
 function bySlug(
@@ -149,6 +175,7 @@ function snapshotOf(
 		model: hunt?.model ?? manifest?.ai?.model,
 		findings,
 		bySeverity: countBySeverity(findings),
+		harness: hunt ? harnessOf(hunt) : undefined,
 		coverage: {
 			watchdogs: watchdogs.length,
 			files: files.size,

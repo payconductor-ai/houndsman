@@ -11,6 +11,20 @@
 export const MAKI_DISALLOWED_TOOLS =
 	"bash,webfetch,websearch,write,edit,multiedit,edit_lines,insert_lines,task";
 
+/**
+ * Complemento ao system prompt do maki.
+ *
+ * O prompt nativo pede para "minimizar tokens e tool calls"; numa revisão isso
+ * produz leitura rasa. Aqui a prioridade é invertida: profundidade e prova
+ * vencem brevidade.
+ */
+export const MAKI_REVIEW_SYSTEM_PROMPT = [
+	"Esta sessão é uma revisão de código de um watchdog do houndsman.",
+	"Profundidade vence brevidade: leia os arquivos necessários, siga chamadores",
+	"e confirme cada achado com evidência; não economize chamadas de ferramenta.",
+	"A resposta final é sempre o objeto JSON do contrato, sem texto fora dele.",
+].join(" ");
+
 /** Pedido de execução de um watchdog. */
 export type MakiRunRequest = {
 	/** Prompt completo (brief + contrato). */
@@ -23,6 +37,8 @@ export type MakiRunRequest = {
 	apiKeyEnv: string;
 	/** Valor da chave (injetado só no processo filho). */
 	apiKey: string;
+	/** Sessão a retomar (retry compacto depois de saída inválida). */
+	resume?: string;
 	/** Timeout do processo (ms). */
 	timeoutMs: number;
 };
@@ -87,7 +103,7 @@ export type MakiJsonOutput = {
 };
 
 /** Argumentos do processo (o prompt vai por stdin). */
-export function makiArgs(model: string): string[] {
+export function makiArgs(model: string, resume?: string): string[] {
 	return [
 		"-p",
 		"--output-format",
@@ -96,6 +112,9 @@ export function makiArgs(model: string): string[] {
 		model,
 		"--disallowed-tools",
 		MAKI_DISALLOWED_TOOLS,
+		"--append-system-prompt",
+		MAKI_REVIEW_SYSTEM_PROMPT,
+		...(resume ? ["--resume", resume] : []),
 	];
 }
 
@@ -111,13 +130,16 @@ export class SpawnMakiRunner implements MakiProcessRunner {
 		const started = Date.now();
 		let timedOut = false;
 		try {
-			const proc = Bun.spawn([this.binary, ...makiArgs(request.model)], {
-				cwd: request.cwd,
-				env: { ...process.env, [request.apiKeyEnv]: request.apiKey },
-				stdin: "pipe",
-				stdout: "pipe",
-				stderr: "pipe",
-			});
+			const proc = Bun.spawn(
+				[this.binary, ...makiArgs(request.model, request.resume)],
+				{
+					cwd: request.cwd,
+					env: { ...process.env, [request.apiKeyEnv]: request.apiKey },
+					stdin: "pipe",
+					stdout: "pipe",
+					stderr: "pipe",
+				},
+			);
 
 			try {
 				proc.stdin.write(request.prompt);
@@ -201,6 +223,18 @@ export function parseMakiOutput(stdout: string): MakiJsonOutput | null {
 	const whole = tryParseJson(stdout.trim());
 	if (whole.ok && isObject(whole.value)) return whole.value as MakiJsonOutput;
 
+	// Objeto indentado precedido por log: o scan por linha não enxerga o
+	// objeto inteiro, então usamos os objetos balanceados do texto.
+	const objects = balancedObjects(stdout);
+	for (let index = objects.length - 1; index >= 0; index--) {
+		const parsed = tryParseJson(objects[index]);
+		if (!parsed.ok || !isObject(parsed.value)) continue;
+		const value = parsed.value as Record<string, unknown>;
+		if (typeof value.type === "string" || typeof value.result === "string") {
+			return value as MakiJsonOutput;
+		}
+	}
+
 	const lines = stdout.split(/\r?\n/);
 	for (let index = lines.length - 1; index >= 0; index--) {
 		const line = lines[index].trim();
@@ -213,7 +247,11 @@ export function parseMakiOutput(stdout: string): MakiJsonOutput | null {
 
 /**
  * Extrai o JSON dos findings da resposta final do agente.
- * Aceita JSON puro, bloco markdown ou objeto cercado por texto.
+ *
+ * No `--output-format json` o maki devolve em `result` **todo** o texto do
+ * agente (narração + blocos intermediários + resposta final), não só a última
+ * mensagem. Por isso a busca é do fim para o começo: o relatório válido é o
+ * último objeto, não o primeiro `{` do texto.
  */
 export function extractJsonObject(text: string): unknown | null {
 	const trimmed = text.trim();
@@ -222,19 +260,58 @@ export function extractJsonObject(text: string): unknown | null {
 	const direct = tryParseJson(trimmed);
 	if (direct.ok) return direct.value;
 
-	const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-	if (fenced) {
-		const parsed = tryParseJson(fenced[1].trim());
+	const fences = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+	for (let index = fences.length - 1; index >= 0; index--) {
+		const parsed = tryParseJson(fences[index][1].trim());
 		if (parsed.ok) return parsed.value;
 	}
 
-	const start = trimmed.indexOf("{");
-	const end = trimmed.lastIndexOf("}");
-	if (start >= 0 && end > start) {
-		const parsed = tryParseJson(trimmed.slice(start, end + 1));
+	const objects = balancedObjects(trimmed);
+	for (let index = objects.length - 1; index >= 0; index--) {
+		const parsed = tryParseJson(objects[index]);
 		if (parsed.ok) return parsed.value;
 	}
 	return null;
+}
+
+/**
+ * Objetos `{…}` de nível superior no texto (ignora chaves dentro de strings).
+ *
+ * Sem isso, o fallback "primeiro `{` até último `}`" atravessava várias
+ * mensagens concatenadas e produzia um JSON inválido.
+ */
+function balancedObjects(text: string): string[] {
+	const objects: string[] = [];
+	let depth = 0;
+	let start = -1;
+	let inString = false;
+	let escaped = false;
+	for (let index = 0; index < text.length; index++) {
+		const char = text[index];
+		if (inString) {
+			if (escaped) escaped = false;
+			else if (char === "\\") escaped = true;
+			else if (char === '"') inString = false;
+			continue;
+		}
+		if (char === '"') {
+			inString = true;
+			continue;
+		}
+		if (char === "{") {
+			if (depth === 0) start = index;
+			depth++;
+			continue;
+		}
+		if (char === "}" && depth > 0) {
+			depth--;
+			if (depth === 0 && start >= 0) {
+				objects.push(text.slice(start, index + 1));
+				start = -1;
+			}
+		}
+	}
+	return objects;
 }
 
 /** Normaliza as métricas do JSON do maki. */

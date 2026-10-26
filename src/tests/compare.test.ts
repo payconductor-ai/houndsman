@@ -121,6 +121,25 @@ describe("buildComparison", () => {
 		expect(markdown).toContain("## Severidade mudou (1)");
 		expect(markdown).toContain("## Só em B");
 	});
+
+	test("expõe checklist e cobertura declarada do harness", () => {
+		const withHarness: ReviewSnapshot = {
+			...snapshot("B", []),
+			harness: {
+				checksExpected: 8,
+				checksVerified: 6,
+				checksGaps: 2,
+				reviewedFiles: 11,
+				skippedFiles: 3,
+				undeclaredFiles: 4,
+				businessScore: 20,
+			},
+		};
+		const markdown = renderComparison(buildComparison(a, withHarness));
+		expect(markdown).toContain("| Checklist verificado | — | 6/8 | — |");
+		expect(markdown).toContain("| Arquivos sem declaração | — | 4 | — |");
+		expect(markdown).toContain("| Modelo de intenção (score) | — | 20 | — |");
+	});
 });
 
 describe("--variant", () => {

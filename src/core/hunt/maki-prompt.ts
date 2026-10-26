@@ -62,7 +62,10 @@ const PROTOCOL: readonly string[] = [
 /** Calibração que o harness precisa declarar (o agente da skill já a segue). */
 const CALIBRATION: readonly string[] = [
 	"Cada fluxo ou invariante do brief deve aparecer em `checks` com o texto copiado do brief e um veredito: `ok` (implementado), `gap` (ausente/divergente) ou `n/a` (não se aplica ao domínio).",
+	"`ok` exige `at` com `arquivo:linha` real (onde o item é implementado); sem localização comprovada, use `n/a`.",
 	"`gap` sem finding correspondente é inconsistência: ou inclua o finding, ou corrija o veredito.",
+	"O checklist cobre a **intenção**; ele não substitui as regras do brief — percorra cada regra nas linhas do escopo e reporte a violação.",
+	"`rule` nunca fica vazio: finding de regra copia o texto do brief; emergente usa `Lógica: <descrição>` ou `Domínio: <descrição>` (com `impactClass`).",
 	"Calibre pelo impacto comprovado: dinheiro/credencial roteada para outra conta, cobrança perdida ou corrupção de estado, com `scenario` + `evidence` e linha no escopo, é `blocking`. Não rebaixe para `attention` só por incerteza — nesse caso reduza `confidence`.",
 	"Não pare no primeiro achado de um arquivo: fluxos de pagamento têm vários lados (criação, renovação, cancelamento, webhook, erro).",
 ];
@@ -114,6 +117,26 @@ export function renderRetrySuffix(error: string): string {
 		"",
 		`A resposta anterior foi rejeitada: ${error}`,
 		"Responda APENAS com o objeto JSON completo, no schema acima, sem markdown.",
+	].join("\n");
+}
+
+/**
+ * Correção em sessão retomada: o agente já leu o brief e explorou o código.
+ *
+ * Repetir o brief inteiro num processo novo custava uma nova exploração
+ * completa (~30 turnos) só porque a resposta final não era JSON parseável.
+ * Aqui só pedimos a saída, com o schema compacto.
+ */
+export function renderResumeSuffix(error: string, watchdogId: string): string {
+	return [
+		"",
+		"## Correção obrigatória (sessão retomada)",
+		"",
+		`A resposta anterior não pôde ser lida: ${error}`,
+		"Não leia mais arquivos nem rode buscas. Responda apenas com o objeto JSON",
+		"completo no schema abaixo — sem markdown, sem texto antes ou depois.",
+		"",
+		outputSchema(watchdogId),
 	].join("\n");
 }
 

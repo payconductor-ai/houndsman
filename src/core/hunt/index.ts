@@ -41,7 +41,12 @@ export {
 	requireMakiModel,
 	resolveMakiModel,
 } from "./maki-model";
-export { renderHuntPrompt, renderRetrySuffix } from "./maki-prompt";
+export {
+	renderChecklistSuffix,
+	renderHuntPrompt,
+	renderResumeSuffix,
+	renderRetrySuffix,
+} from "./maki-prompt";
 export type {
 	MakiJsonOutput,
 	MakiProcessRunner,
@@ -53,9 +58,26 @@ export type {
 export {
 	extractJsonObject,
 	MAKI_DISALLOWED_TOOLS,
+	MAKI_REVIEW_SYSTEM_PROMPT,
 	makiArgs,
 	metricsFrom,
 	parseMakiOutput,
 	SpawnMakiRunner,
 } from "./maki-runner";
 export { mapPool } from "./pool";
+export type {
+	BusinessDecision,
+	CheckCoverage,
+	CheckVerdict,
+	ReviewCheck,
+} from "./review-checks";
+export {
+	businessScore,
+	chooseBusinessSummary,
+	expectedReviewItems,
+	mergeFindings,
+	missingReviewItems,
+	parseReviewChecks,
+	summarizeChecks,
+	withInferredRule,
+} from "./review-checks";

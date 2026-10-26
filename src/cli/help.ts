@@ -43,6 +43,7 @@ Flags de hunt (harness local):
   --hunt-concurrency  Processos maki simultâneos
   --hunt-timeout      Timeout por watchdog (ms)
   --no-retry          Não repete saída inválida
+  --no-checklist      Sem a passada extra de fluxos/invariantes não verificados
 
 Flags de findings:
   --decision <d>      pending | execute | ignore

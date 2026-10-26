@@ -651,7 +651,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/hunt.md",
-    "sha256": "0a81003a5b39b84a",
+    "sha256": "bb6a8b1afed28b25",
   },
   {
     "file": ".houndsman/core/skill/train.md",

@@ -38,6 +38,19 @@ export type ReviewSnapshot = {
 	prepareMs?: number;
 	/** Duração do harness maki (`hunt-report.json`). */
 	huntMs?: number;
+	/**
+	 * Diagnóstico do harness local: checklist de intenção e cobertura declarada.
+	 * Ausente no modo skill (não há `hunt-report.json`).
+	 */
+	harness?: {
+		checksExpected?: number;
+		checksVerified?: number;
+		checksGaps?: number;
+		reviewedFiles?: number;
+		skippedFiles?: number;
+		undeclaredFiles?: number;
+		businessScore?: number;
+	};
 	tokens?: number;
 	costUsd?: number;
 };
@@ -123,6 +136,17 @@ function formatMs(ms: number | undefined): string {
 	return `${minutes}m${String(Math.round(seconds % 60)).padStart(2, "0")}s`;
 }
 
+/** Contagem simples (`—` quando não medida). */
+function formatCount(value: number | undefined): string {
+	return value === undefined || !Number.isFinite(value) ? "—" : String(value);
+}
+
+/** Razão verificada/esperada (`4/6`). */
+function formatRatio(verified: number | undefined, expected: number | undefined): string {
+	if (verified === undefined || expected === undefined) return "—";
+	return `${verified}/${expected}`;
+}
+
 function formatDelta(
 	a: number | undefined,
 	b: number | undefined,
@@ -206,6 +230,30 @@ export function renderComparison(comparison: ReviewComparison): string {
 		metricRow("Duração total", formatMs(a.durationMs), formatMs(b.durationMs)),
 		metricRow("Prepare", formatMs(a.prepareMs), formatMs(b.prepareMs)),
 		metricRow("Harness", formatMs(a.huntMs), formatMs(b.huntMs)),
+		...(a.harness || b.harness
+			? [
+					metricRow(
+						"Checklist verificado",
+						formatRatio(a.harness?.checksVerified, a.harness?.checksExpected),
+						formatRatio(b.harness?.checksVerified, b.harness?.checksExpected),
+					),
+					metricRow(
+						"Arquivos revisados (declarado)",
+						formatCount(a.harness?.reviewedFiles),
+						formatCount(b.harness?.reviewedFiles),
+					),
+					metricRow(
+						"Arquivos sem declaração",
+						formatCount(a.harness?.undeclaredFiles),
+						formatCount(b.harness?.undeclaredFiles),
+					),
+					metricRow(
+						"Modelo de intenção (score)",
+						formatCount(a.harness?.businessScore),
+						formatCount(b.harness?.businessScore),
+					),
+				]
+			: []),
 		metricRow(
 			"Tokens",
 			a.tokens !== undefined ? String(a.tokens) : "—",

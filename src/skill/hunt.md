@@ -22,6 +22,27 @@ Os dois modos produzem os mesmos artefatos, usam o mesmo staging e o mesmo ciclo
 > maki e despacha outro harness. Siga os passos 0–3 normalmente; o comando CLI é para quem
 > quer rodar tudo no terminal.
 
+### Harness local (CLI) — profundidade por checklist
+
+`houndsman hunt` usa o mesmo `prepare`/`finalize`, mas cada watchdog roda headless. Para não
+trocar profundidade por velocidade:
+
+- o prompt exige **uma verificação por fluxo/invariante** (`checks`: `ok`/`gap`/`n/a` +
+  `arquivo:linha`);
+- se a primeira resposta não cobrir o checklist, o harness repete o brief **uma vez** só com
+  os itens pendentes e **une** os achados das duas passadas (dedupe por arquivo+linha+regra,
+  maior severidade vence);
+- o `businessSummary` devolvido pelo `general` só substitui o modelo gravado se for **mais
+  rico** — um resumo sem fluxos não sobrescreve mais o modelo da IA;
+- a saída do maki concatena **todas** as mensagens do agente; o parser procura o último JSON
+  válido (bloco cercado ou objeto balanceado), não o primeiro `{`;
+- retry de saída inválida **retoma a mesma sessão** (`--resume`) enviando só o schema — não
+  refaz a exploração inteira; e o system prompt do harness prioriza profundidade sobre
+  economia de tool calls;
+- `hunt-report.json` traz `checks { expected, verified, missing, gaps }`, `coverage`
+  (`reviewed`/`skipped`/`undeclared`) e a decisão sobre o modelo de intenção por watchdog.
+  `--no-checklist` (ou `hunt.checklist: false`) desliga a passada extra.
+
 ## Alvo da revisão
 
 Traduza o pedido do usuário para flags **antes** de começar:
