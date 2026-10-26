@@ -207,6 +207,11 @@ export class ProjectConfig<TId extends string = string> {
 		const value = this.hunt.model?.trim();
 		return value && value.length > 0 ? value : this.aiModel;
 	}
+
+	/** Passada de checklist do harness (default: ligada). */
+	get huntChecklist(): boolean {
+		return this.hunt.checklist !== false;
+	}
 }
 
 /** Inteiro positivo ou o default. */

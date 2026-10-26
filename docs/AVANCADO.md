@@ -203,6 +203,9 @@ flowchart LR
   no relatório final.
 - **Opcional:** sem chave, erro ou timeout → `available:false` e a revisão roda idêntica. É
   **pré-análise, nunca gate**. Para desligar: `houndsman --no-jev`.
+- **O que não faz:** o Jev **não decide severidade**. Cada pergunta é `noul`/`choice`/`score`
+  e a severidade do candidato já vem da regra. A severidade dos achados é ancorada de forma
+  determinística (`Rule.severity` para finding de regra, `impactClass` para emergente).
 
 Resumindo o papel de cada um: **o Jev sugere, os watchdogs decidem, o CLI consolida.**
 

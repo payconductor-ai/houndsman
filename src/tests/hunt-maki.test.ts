@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { defineHoundsmanConfig } from "../core/config";
 import { type HuntEvent, HuntRunner } from "../core/hunt/hunt-runner";
 import { requireMakiModel, resolveMakiModel } from "../core/hunt/maki-model";
-import { renderHuntPrompt } from "../core/hunt/maki-prompt";
+import { renderChecklistSuffix, renderHuntPrompt } from "../core/hunt/maki-prompt";
 import {
 	extractJsonObject,
 	MAKI_DISALLOWED_TOOLS,
@@ -20,6 +20,14 @@ import {
 	parseMakiOutput,
 	SpawnMakiRunner,
 } from "../core/hunt/maki-runner";
+import {
+	businessScore,
+	chooseBusinessSummary,
+	expectedReviewItems,
+	mergeFindings,
+	missingReviewItems,
+	parseReviewChecks,
+} from "../core/hunt/review-checks";
 import { ProjectConfig } from "../core/project-config";
 import type { ReviewRecord } from "../core/storage/types";
 import { ReviewWorkArea } from "../core/storage/work-area";
@@ -462,6 +470,251 @@ describe("HuntRunner", () => {
 			const report = await runner.run(["alpha"]);
 			expect(report.watchdogs[0].status).toBe("failed");
 			expect(report.watchdogs[0].error).toContain("não corresponde");
+		} finally {
+			staging.cleanup();
+		}
+	});
+});
+
+/** Brief mínimo com a seção de arquivos do domínio (usada pelo checklist). */
+function briefWithFiles(id: string, files: string[]): string {
+	return [
+		`# Brief — ${id}`,
+		"",
+		`## Arquivos do seu domínio (${files.length})`,
+		"",
+		...files.map((file) => `- \`${file}\` (modified, +10/−0)`),
+		"",
+		"## Procedimento",
+		"",
+	].join("\n");
+}
+
+describe("harness — checklist de intenção", () => {
+	const business = {
+		source: "ai" as const,
+		intent: "Entregar split",
+		flows: [
+			{ name: "Criação de subconta", files: ["src/alpha/a.ts"] },
+			{ name: "Fluxo beta", files: ["src/beta/b.ts"] },
+		],
+		invariants: ["Split sempre presente"],
+		contracts: [],
+		states: [],
+	};
+
+	test("prompt declara protocolo, calibração e o campo checks", () => {
+		const prompt = renderHuntPrompt({
+			projectName: "Proj",
+			watchdogId: "alpha",
+			brief: "# Brief alpha",
+		});
+		expect(prompt).toContain("## Protocolo de revisão");
+		expect(prompt).toContain("AUTOVERIFICAÇÃO");
+		expect(prompt).toContain('"checks"');
+		expect(prompt).toContain("blocking`");
+	});
+
+	test("sufixo de checklist lista os itens pendentes", () => {
+		const suffix = renderChecklistSuffix(["Split sempre presente"]);
+		expect(suffix).toContain("Verificação obrigatória (checklist)");
+		expect(suffix).toContain("- Split sempre presente");
+		expect(suffix).toContain("relatório **completo**");
+	});
+
+	test("itens esperados recortam fluxos por domínio e mantêm invariantes", () => {
+		const brief = briefWithFiles("alpha", ["src/alpha/a.ts"]);
+		expect(expectedReviewItems(brief, business, "alpha")).toEqual([
+			"Criação de subconta",
+			"Split sempre presente",
+		]);
+		expect(expectedReviewItems(brief, business, "general")).toEqual([
+			"Criação de subconta",
+			"Fluxo beta",
+			"Split sempre presente",
+		]);
+		expect(expectedReviewItems(brief, null, "alpha")).toEqual([]);
+	});
+
+	test("checklist ignora acento/caixa e lê variações de veredito", () => {
+		const checks = parseReviewChecks({
+			checks: [
+				{ item: "split SEMPRE presente", verdict: "OK", at: "a.ts:1" },
+				{ item: "Outro item", verdict: "gap" },
+				"Item sem objeto",
+			],
+		});
+		expect(checks[0]).toMatchObject({ verdict: "ok", at: "a.ts:1" });
+		expect(checks[1].verdict).toBe("gap");
+		expect(checks[2].verdict).toBe("n/a");
+		expect(missingReviewItems(["Split sempre presente"], checks)).toEqual([]);
+		expect(missingReviewItems(["Invariante ausente"], checks)).toEqual([
+			"Invariante ausente",
+		]);
+	});
+
+	test("merge de findings preserva a maior severidade e deduplica", () => {
+		const suggestion = {
+			rule: "Evitar any",
+			severity: "suggestion" as const,
+			file: "src/alpha/a.ts",
+			line: 4,
+			message: "any",
+			action: "tipar",
+		};
+		const blocking = { ...suggestion, severity: "blocking" as const };
+		expect(mergeFindings([suggestion], [blocking])).toHaveLength(1);
+		expect(mergeFindings([suggestion], [blocking])[0].severity).toBe("blocking");
+		expect(mergeFindings([suggestion], [suggestion])).toHaveLength(1);
+	});
+
+	test("modelo de intenção mais fraco não substitui o da IA", () => {
+		const weak = {
+			...business,
+			source: "reviewer" as const,
+			flows: [],
+			invariants: ["Split sempre presente"],
+		};
+		expect(businessScore(weak)).toBeLessThan(businessScore(business));
+		const kept = chooseBusinessSummary(business, weak);
+		expect(kept.accepted).toBe(false);
+		expect(kept.summary).toBe(business);
+
+		const deterministic = { ...business, source: "deterministic" as const };
+		expect(chooseBusinessSummary(deterministic, weak).accepted).toBe(true);
+		expect(chooseBusinessSummary(null, weak).accepted).toBe(true);
+	});
+
+	test("runner repete o brief para cobrir itens não verificados e une achados", async () => {
+		const staging = makeWork(["alpha"]);
+		staging.work.writeBrief("alpha", briefWithFiles("alpha", ["src/alpha/a.ts"]));
+		staging.work.writeBusinessSummary(business);
+		const prompts: string[] = [];
+		try {
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 0,
+				runner: {
+					run: async (request) => {
+						prompts.push(request.prompt);
+						if (prompts.length === 1) {
+							return {
+								ok: true,
+								text: reportJson("alpha"),
+								metrics: { durationMs: 5 },
+								stderr: "",
+								exitCode: 0,
+							};
+						}
+						return {
+							ok: true,
+							text: JSON.stringify({
+								watchdogId: "alpha",
+								reviewedFiles: ["src/alpha/a.ts"],
+								skipped: [],
+								checks: [
+									{ item: "Criação de subconta", verdict: "ok" },
+									{ item: "Split sempre presente", verdict: "gap" },
+								],
+								findings: [
+									{
+										rule: "Evitar any",
+										severity: "attention",
+										file: "src/alpha/a.ts",
+										line: 2,
+										message: "split ausente",
+										action: "enviar split",
+									},
+								],
+							}),
+							metrics: { durationMs: 5 },
+							stderr: "",
+							exitCode: 0,
+						};
+					},
+				},
+			});
+
+			const report = await runner.run(["alpha"]);
+			expect(prompts).toHaveLength(2);
+			expect(prompts[1]).toContain("Verificação obrigatória (checklist)");
+			expect(prompts[1]).toContain("Criação de subconta");
+			expect(report.watchdogs[0].findings).toBe(2);
+			expect(report.watchdogs[0].checks).toEqual({
+				expected: 2,
+				verified: 2,
+				missing: 0,
+				gaps: 1,
+			});
+		} finally {
+			staging.cleanup();
+		}
+	});
+
+	test("businessSummary do general só substitui um modelo mais fraco", async () => {
+		const staging = makeWork(["general"]);
+		staging.work.writeBrief("general", briefWithFiles("general", ["src/alpha/a.ts"]));
+		staging.work.writeBusinessSummary(business);
+		try {
+			const runner = new HuntRunner({
+				work: staging.work,
+				root: staging.root,
+				projectName: "Proj",
+				model: "deepseek/deepseek-v4-pro",
+				apiKeyEnv: "DEEPSEEK_API_KEY",
+				apiKey: "sk",
+				concurrency: 1,
+				timeoutMs: 10_000,
+				retries: 0,
+				runner: {
+					run: async () => ({
+						ok: true,
+						text: JSON.stringify({
+							watchdogId: "general",
+							reviewedFiles: ["src/alpha/a.ts"],
+							skipped: [],
+							checks: [
+								{ item: "Criação de subconta", verdict: "ok" },
+								{ item: "Fluxo beta", verdict: "n/a" },
+								{ item: "Split sempre presente", verdict: "ok" },
+							],
+							findings: [],
+							businessSummary: {
+								invariants: ["Split sempre presente"],
+								flows: [],
+								contracts: [],
+								states: [],
+							},
+						}),
+						metrics: { durationMs: 5 },
+						stderr: "",
+						exitCode: 0,
+					}),
+				},
+			});
+
+			const report = await runner.run(["general"]);
+			expect(report.watchdogs[0].business).toMatchObject({
+				accepted: false,
+				source: "ai",
+			});
+			expect(report.business).toBe("ai");
+			const summary = staging.work.readBusinessSummary();
+			expect(summary?.source).toBe("ai");
+			expect(summary?.flows).toHaveLength(2);
+			expect(report.watchdogs[0].checks).toEqual({
+				expected: 3,
+				verified: 3,
+				missing: 0,
+				gaps: 0,
+			});
 		} finally {
 			staging.cleanup();
 		}

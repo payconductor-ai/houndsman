@@ -57,6 +57,7 @@ Flags:
   --hunt-concurrency  Processos maki simultâneos
   --hunt-timeout      Timeout por watchdog (ms)
   --no-retry          Não repete saída inválida
+  --no-checklist      Sem a passada extra de fluxos/invariantes não verificados
   --fail-on-blocking  Exit 1 se houver bloqueantes
 
 Instalação:
@@ -237,6 +238,7 @@ export class HuntCommand implements Command {
 				concurrency,
 				timeoutMs,
 				retries,
+				checklist: parser.has("--no-checklist") ? false : project.huntChecklist,
 				runner: new SpawnMakiRunner(binary.path),
 				onEvent: (event) => this.logEvent(board, event, context.logger),
 			});
@@ -267,6 +269,29 @@ export class HuntCommand implements Command {
 					`${report.totals.findings} finding(s), $${report.totals.costUsd.toFixed(4)}, ` +
 					`${Math.round(report.durationMs / 1000)}s.`,
 			);
+			const unchecked = report.watchdogs.filter(
+				(watchdog) => (watchdog.checks?.missing ?? 0) > 0,
+			);
+			if (unchecked.length > 0) {
+				context.logger.warn(
+					`Checklist de intenção incompleto em ${unchecked.length} watchdog(s): ` +
+						unchecked
+							.map(
+								(watchdog) =>
+									`${watchdog.watchdogId} (${watchdog.checks?.missing ?? 0})`,
+							)
+							.join(", "),
+				);
+			}
+			const businessReview = report.watchdogs.find(
+				(watchdog) => watchdog.business !== undefined,
+			)?.business;
+			if (businessReview && !businessReview.accepted) {
+				context.logger.info(
+					"Modelo de intenção devolvido pelo revisor foi descartado " +
+						`(inferior ao já gravado: ${report.business ?? "n/d"}).`,
+				);
+			}
 
 			const failed = report.watchdogs.filter(
 				(watchdog) => watchdog.status === "failed",
@@ -430,6 +455,17 @@ export class HuntCommand implements Command {
 				return;
 			case "start":
 				board.add(event.watchdogId, "revisando");
+				return;
+			case "checklist":
+				if (event.status === "start") {
+					logger.step(
+						`${event.watchdogId}: ${event.missing} fluxo(s)/invariante(s) sem verificação — passada de checklist…`,
+					);
+				} else if (event.status === "failed") {
+					logger.warn(
+						`${event.watchdogId}: checklist falhou (${event.error ?? "erro"}); relatório da primeira passada mantido.`,
+					);
+				}
 				return;
 			case "retry":
 				board.retry(

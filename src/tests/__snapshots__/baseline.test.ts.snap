@@ -30,6 +30,12 @@ src/alpha/**
 - ❌ **blocking** — Nunca usar \`any\`.
 - ⚠️ **attention** — Promover: validar a entrada.
 
+## Como declarar a severidade
+
+- **Finding de regra:** copie \`rule\` exatamente como no brief. A severidade é a **declarada na regra** — outro valor é ignorado e corrigido pelo motor.
+- **Finding emergente** (\`Lógica:\`/\`Domínio:\`): preencha \`impactClass\` — \`flow-break\` (fluxo/capacidade não honrada), \`contract-drift\` (contrato/estado divergente), \`degradation\` (borda/erro frágil) ou \`cosmetic\`.
+- \`blocking\` fora de regra continua exigindo \`scenario\` + \`evidence\`; sem os dois, o motor rebaixa para \`attention\`.
+
 ## Docs de contexto (carregar sob demanda)
 
 - \`AGENTS.md\`
@@ -625,7 +631,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "49d36854d10f795c",
+    "sha256": "8754e8faaf66c4f9",
   },
   {
     "file": ".houndsman/core/skill/README.md",
@@ -649,7 +655,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/train.md",
-    "sha256": "d774215c68d15159",
+    "sha256": "e2742937c6f943a5",
   },
   {
     "file": ".houndsman/core/skill/verify.md",
@@ -896,6 +902,12 @@ index 0000000..f4082f0
 - ❌ **blocking** — Nunca usar \`any\`.
 - ⚠️ **attention** — Promover: validar a entrada.
 
+## Como declarar a severidade
+
+- **Finding de regra:** copie \`rule\` exatamente como no brief. A severidade é a **declarada na regra** — outro valor é ignorado e corrigido pelo motor.
+- **Finding emergente** (\`Lógica:\`/\`Domínio:\`): preencha \`impactClass\` — \`flow-break\` (fluxo/capacidade não honrada), \`contract-drift\` (contrato/estado divergente), \`degradation\` (borda/erro frágil) ou \`cosmetic\`.
+- \`blocking\` fora de regra continua exigindo \`scenario\` + \`evidence\`; sem os dois, o motor rebaixa para \`attention\`.
+
 ## Docs de contexto (carregar sob demanda)
 
 - \`README.md\`
@@ -929,7 +941,8 @@ index 0000000..f4082f0
 `;
 
 exports[`baseline — artefatos de prepare/finalize gera classification, brief, manifest, resumo e state 2`] = `
-"Triagem: sqlite:<cwd>\\houndsman.db#<uuid> — 1 finding(s).
+"Severidade: 1 pela regra.
+Triagem: sqlite:<cwd>\\houndsman.db#<uuid> — 1 finding(s).
 Resumo: sqlite:<cwd>\\houndsman.db#<uuid> (review-resume.md) — 1 bloqueante(s), 0 atenção."
 `;
 

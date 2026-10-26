@@ -10,11 +10,15 @@
 import { readFileSync } from "node:fs";
 import { GENERAL_WATCHDOG_ID } from "../builtins";
 import { type BusinessSummary, parseBusinessSummary } from "../business-summary";
-import { parseWatchdogReport } from "../report-builder";
+import { parseWatchdogReport, type WatchdogReport } from "../report-builder";
 import { systemClock } from "../services/clock";
 import type { ReviewWorkArea } from "../storage/work-area";
 import { renderHuntIntentPrompt, renderIntentRetrySuffix } from "./maki-intent-prompt";
-import { renderHuntPrompt, renderRetrySuffix } from "./maki-prompt";
+import {
+	renderChecklistSuffix,
+	renderHuntPrompt,
+	renderRetrySuffix,
+} from "./maki-prompt";
 import {
 	extractJsonObject,
 	type MakiProcessRunner,
@@ -22,6 +26,18 @@ import {
 	type MakiUsage,
 } from "./maki-runner";
 import { mapPool } from "./pool";
+import {
+	businessScore,
+	type CheckCoverage,
+	chooseBusinessSummary,
+	expectedReviewItems,
+	mergeChecks,
+	mergeFindings,
+	missingReviewItems,
+	parseReviewChecks,
+	type ReviewCheck,
+	summarizeChecks,
+} from "./review-checks";
 
 /** Evento de progresso (CLI loga; core não escreve saída). */
 export type HuntEvent =
@@ -29,6 +45,13 @@ export type HuntEvent =
 			type: "intent";
 			status: "start" | "done" | "skipped" | "failed";
 			source?: BusinessSummary["source"];
+			error?: string;
+	  }
+	| {
+			type: "checklist";
+			watchdogId: string;
+			missing: number;
+			status: "start" | "done" | "failed";
 			error?: string;
 	  }
 	| { type: "start"; watchdogId: string }
@@ -68,6 +91,16 @@ export type HuntWatchdogResult = {
 	costUsd?: number;
 	usage?: MakiUsage;
 	error?: string;
+	/** Cobertura do checklist de intenção (fluxos + invariantes). */
+	checks?: CheckCoverage;
+	/** Arquivos declarados como não lidos (declaração de cobertura). */
+	skipped?: number;
+	/** Decisão sobre o modelo de intenção devolvido pelo `general`. */
+	business?: {
+		accepted: boolean;
+		source: BusinessSummary["source"];
+		score: number;
+	};
 };
 
 /** Agregados do relatório. */
@@ -89,6 +122,8 @@ export type HuntReport = {
 	model: string;
 	/** Fonte do modelo de intenção usado na revisão. */
 	business?: BusinessSummary["source"];
+	/** Pontuação do modelo de intenção efetivo (fluxos/invariantes/contratos). */
+	businessScore?: number;
 	startedAt: string;
 	finishedAt: string;
 	durationMs: number;
@@ -110,6 +145,11 @@ export type HuntRunnerOptions = {
 	concurrency: number;
 	timeoutMs: number;
 	retries: number;
+	/**
+	 * Passada extra por watchdog quando o checklist de intenção não foi coberto
+	 * (default: ligada). Desligue com `hunt.checklist: false`.
+	 */
+	checklist?: boolean;
 	runner: MakiProcessRunner;
 	onEvent?: (event: HuntEvent) => void;
 };
@@ -127,16 +167,21 @@ export class HuntRunner {
 		const startedMs = Date.now();
 		// Intenção primeiro: o revisor `general` e os demais watchdogs leem o
 		// mesmo `business-summary.json` do staging.
-		const business = await this.runIntent();
+		const businessSource = await this.runIntent();
+		// Snapshot único: o `general` pode devolver outro modelo no meio da onda;
+		// os demais watchdogs precisam do mesmo contrato do brief que receberam.
+		const businessModel = this.options.work.readBusinessSummary();
 		const watchdogs = await mapPool(activeIds, this.options.concurrency, (id) =>
-			this.runOne(id),
+			this.runOne(id, businessModel),
 		);
 		const finishedAt = systemClock();
+		const effective = this.options.work.readBusinessSummary();
 		return {
 			version: 1,
 			engine: "maki",
 			model: this.options.model,
-			business,
+			business: effective?.source ?? businessSource,
+			businessScore: effective ? businessScore(effective) : undefined,
 			startedAt,
 			finishedAt,
 			durationMs: Date.now() - startedMs,
@@ -199,7 +244,25 @@ export class HuntRunner {
 				lastError = "JSON fora do schema do modelo de intenção.";
 				continue;
 			}
-			this.options.work.writeBusinessSummary(summary);
+			// Modelo sem fluxo nem invariante não sustenta a revisão por
+			// invariantes: repete em vez de degradar os briefs.
+			if (
+				summary.flows.length === 0 &&
+				summary.invariants.length + summary.contracts.length < 2
+			) {
+				lastError =
+					"modelo de intenção sem fluxos e com menos de 2 invariantes/contratos.";
+				continue;
+			}
+			const decision = chooseBusinessSummary(
+				this.options.work.readBusinessSummary(),
+				summary,
+			);
+			if (!decision.accepted || !decision.summary) {
+				lastError = "modelo de intenção inferior ao já disponível.";
+				continue;
+			}
+			this.options.work.writeBusinessSummary(decision.summary);
 			this.emit({ type: "intent", status: "done", source: "reviewer" });
 			return "reviewer";
 		}
@@ -208,7 +271,10 @@ export class HuntRunner {
 		return existing?.source ?? "deterministic";
 	}
 
-	private async runOne(watchdogId: string): Promise<HuntWatchdogResult> {
+	private async runOne(
+		watchdogId: string,
+		business: BusinessSummary | null,
+	): Promise<HuntWatchdogResult> {
 		const briefPath = this.options.work.briefFile(watchdogId);
 		let brief: string;
 		try {
@@ -230,11 +296,112 @@ export class HuntRunner {
 			watchdogId,
 			brief,
 		});
+		// Checklist derivado do modelo de intenção: cada fluxo/invariante do brief
+		// precisa de uma verificação declarada, não só de um diff lido.
+		const expected = expectedReviewItems(brief, business, watchdogId);
 
 		this.emit({ type: "start", watchdogId });
 		let attempts = 0;
-		let lastError = "";
 		const accumulated: MakiRunMetrics = { durationMs: 0 };
+
+		const first = await this.executePass(watchdogId, basePrompt);
+		mergeMetrics(accumulated, first.metrics);
+		attempts += first.attempts;
+		if (!first.ok) {
+			this.emit({
+				type: "failed",
+				watchdogId,
+				error: first.error,
+				attempts,
+				metrics: accumulated,
+			});
+			return failedResult(watchdogId, first.error, attempts, accumulated);
+		}
+
+		let report = first.report;
+		let checks = first.checks;
+		let reviewerBusiness = first.reviewerBusiness;
+
+		const missing = missingReviewItems(expected, checks);
+		if (this.options.checklist !== false && missing.length > 0) {
+			this.emit({
+				type: "checklist",
+				watchdogId,
+				missing: missing.length,
+				status: "start",
+			});
+			const second = await this.executePass(
+				watchdogId,
+				`${basePrompt}\n${renderChecklistSuffix(missing)}`,
+			);
+			mergeMetrics(accumulated, second.metrics);
+			attempts += second.attempts;
+			if (second.ok) {
+				// A segunda passada não pode *perder* achados: une as duas.
+				report = mergeReport(report, second.report);
+				checks = mergeChecks(checks, second.checks);
+				reviewerBusiness = richerBusiness(
+					reviewerBusiness,
+					second.reviewerBusiness,
+				);
+				this.emit({
+					type: "checklist",
+					watchdogId,
+					missing: missingReviewItems(expected, checks).length,
+					status: "done",
+				});
+			} else {
+				this.emit({
+					type: "checklist",
+					watchdogId,
+					missing: missing.length,
+					status: "failed",
+					error: second.error,
+				});
+			}
+		}
+
+		const businessDecision = this.applyReviewerBusiness(watchdogId, reviewerBusiness);
+
+		this.options.work.writeFinding(
+			watchdogId,
+			`${JSON.stringify(report, null, 2)}\n`,
+		);
+		const coverage = summarizeChecks(expected, checks);
+		const done: HuntWatchdogResult = {
+			watchdogId,
+			status: "done",
+			findings: report.findings.length,
+			reviewedFiles: report.reviewedFiles.length,
+			attempts,
+			durationMs: accumulated.durationMs,
+			sessionId: accumulated.sessionId,
+			numTurns: accumulated.numTurns,
+			costUsd: accumulated.costUsd,
+			usage: accumulated.usage,
+			checks: coverage.expected > 0 ? coverage : undefined,
+			skipped: report.skipped.length,
+			business: businessDecision,
+		};
+		this.emit({
+			type: "done",
+			watchdogId,
+			findings: done.findings,
+			reviewedFiles: done.reviewedFiles,
+			attempts,
+			metrics: accumulated,
+		});
+		return done;
+	}
+
+	/** Uma passada do brief, com as retentativas de saída inválida. */
+	private async executePass(
+		watchdogId: string,
+		basePrompt: string,
+	): Promise<PassOutcome> {
+		let attempts = 0;
+		let lastError = "";
+		const metrics: MakiRunMetrics = { durationMs: 0 };
 
 		while (attempts <= this.options.retries) {
 			attempts++;
@@ -250,7 +417,7 @@ export class HuntRunner {
 				apiKey: this.options.apiKey,
 				timeoutMs: this.options.timeoutMs,
 			});
-			mergeMetrics(accumulated, result.metrics);
+			mergeMetrics(metrics, result.metrics);
 
 			if (!result.ok) {
 				lastError = result.error;
@@ -280,48 +447,50 @@ export class HuntRunner {
 				continue;
 			}
 
-			// O revisor de fluxo devolve o modelo de intenção no JSON (maki não escreve).
-			if (watchdogId === GENERAL_WATCHDOG_ID) {
-				const summary = (raw as Record<string, unknown>).businessSummary;
-				if (typeof summary === "object" && summary !== null) {
-					const parsed = parseBusinessSummary(
-						{ ...(summary as Record<string, unknown>), source: "reviewer" },
-						"reviewer",
-					);
-					if (parsed) this.options.work.writeBusinessSummary(parsed);
-				}
-			}
-
-			this.options.work.writeFinding(
-				watchdogId,
-				`${JSON.stringify(report, null, 2)}\n`,
-			);
-			const done: HuntWatchdogResult = {
-				watchdogId,
-				status: "done",
-				findings: report.findings.length,
-				reviewedFiles: report.reviewedFiles.length,
+			return {
+				ok: true,
+				report,
+				checks: parseReviewChecks(raw),
+				// O revisor de fluxo devolve o modelo de intenção no JSON.
+				reviewerBusiness:
+					watchdogId === GENERAL_WATCHDOG_ID
+						? reviewerBusinessOf(raw)
+						: undefined,
 				attempts,
-				durationMs: accumulated.durationMs,
-				sessionId: accumulated.sessionId,
-				numTurns: accumulated.numTurns,
-				costUsd: accumulated.costUsd,
-				usage: accumulated.usage,
+				metrics,
 			};
-			this.emit({
-				type: "done",
-				watchdogId,
-				findings: done.findings,
-				reviewedFiles: done.reviewedFiles,
-				attempts,
-				metrics: accumulated,
-			});
-			return done;
 		}
 
-		const error = lastError || "falha desconhecida.";
-		this.emit({ type: "failed", watchdogId, error, attempts, metrics: accumulated });
-		return failedResult(watchdogId, error, attempts, accumulated);
+		return {
+			ok: false,
+			error: lastError || "falha desconhecida.",
+			attempts,
+			metrics,
+		};
+	}
+
+	/**
+	 * Aplica o modelo devolvido pelo `general` somente se ele for mais rico que
+	 * o já gravado — o revisor reconstrói a intenção sem ver o JSON inteiro e já
+	 * substituiu um modelo da IA (5 fluxos) por um resumo sem fluxos.
+	 */
+	private applyReviewerBusiness(
+		watchdogId: string,
+		incoming: BusinessSummary | undefined,
+	): HuntWatchdogResult["business"] {
+		if (watchdogId !== GENERAL_WATCHDOG_ID || !incoming) return undefined;
+		const decision = chooseBusinessSummary(
+			this.options.work.readBusinessSummary(),
+			incoming,
+		);
+		if (decision.accepted && decision.summary) {
+			this.options.work.writeBusinessSummary(decision.summary);
+		}
+		return {
+			accepted: decision.accepted,
+			source: decision.summary?.source ?? incoming.source,
+			score: businessScore(incoming),
+		};
 	}
 
 	private emit(event: HuntEvent): void {
@@ -343,6 +512,51 @@ export class HuntRunner {
 			error,
 		});
 	}
+}
+
+/** Resultado de uma passada do brief (com retries internos). */
+type PassOutcome =
+	| {
+			ok: true;
+			report: WatchdogReport;
+			checks: ReviewCheck[];
+			reviewerBusiness?: BusinessSummary;
+			attempts: number;
+			metrics: MakiRunMetrics;
+	  }
+	| { ok: false; error: string; attempts: number; metrics: MakiRunMetrics };
+
+/** Modelo de intenção que o `general` devolve no JSON (se válido). */
+function reviewerBusinessOf(raw: unknown): BusinessSummary | undefined {
+	if (typeof raw !== "object" || raw === null) return undefined;
+	const summary = (raw as Record<string, unknown>).businessSummary;
+	if (typeof summary !== "object" || summary === null) return undefined;
+	return (
+		parseBusinessSummary(
+			{ ...(summary as Record<string, unknown>), source: "reviewer" },
+			"reviewer",
+		) ?? undefined
+	);
+}
+
+/** Une as duas passadas: achados por chave, cobertura declarada por união. */
+function mergeReport(first: WatchdogReport, second: WatchdogReport): WatchdogReport {
+	return {
+		watchdogId: first.watchdogId,
+		reviewedFiles: [...new Set([...first.reviewedFiles, ...second.reviewedFiles])],
+		skipped: [...new Set([...first.skipped, ...second.skipped])],
+		findings: mergeFindings(first.findings, second.findings),
+	};
+}
+
+/** Modelo de intenção mais rico entre duas passadas. */
+function richerBusiness(
+	first: BusinessSummary | undefined,
+	second: BusinessSummary | undefined,
+): BusinessSummary | undefined {
+	if (!second) return first;
+	if (!first) return second;
+	return businessScore(second) > businessScore(first) ? second : first;
 }
 
 /** Soma métricas de várias tentativas no acumulado. */

@@ -37,6 +37,7 @@ staging global da review:
       "evidence": "import { db } from '../db'",
       "scenario": "request autenticada em /orders executa a query na rota",
       "impact": "acoplamento e bypass das regras do service",
+      "impactClass": "flow-break",
       "confidence": 0.9,
       "basis": "logic"
     }
@@ -61,10 +62,25 @@ staging global da review:
 | `findings[].evidence` | string | — | Trecho que comprova o achado |
 | `findings[].scenario` | string | — | Gatilho concreto que expõe o gap (ex.: "renovação de assinatura Pix sem split") |
 | `findings[].impact` | string | — | Consequência observável (ex.: "cobrança recriada sem o split configurado") |
+| `findings[].impactClass` | `"flow-break" \| "contract-drift" \| "degradation" \| "cosmetic"` | emergente | Classe de impacto que define a severidade fora de regra |
 | `findings[].confidence` | number | — | Confiança do revisor (0–1) |
 | `findings[].basis` | `"rule" \| "logic" \| "domain"` | — | Origem do achado; inferida pelo prefixo `Lógica:`/`Domínio:` |
 
 ## Severidade
+
+A severidade é **derivada**, não escolhida pelo watchdog:
+
+| Origem do finding | Fonte da severidade |
+|---|---|
+| Regra do brief (`rule` copiada) | `severity` **declarada na regra** — outro valor é ignorado e corrigido pelo motor |
+| Emergente (`Lógica:`/`Domínio:`) | `impactClass`, pela tabela abaixo |
+
+| `impactClass` | Quando usar | Severidade |
+|---|---|---|
+| `flow-break` | o caminho não completa (criação/renovação/cancelamento) ou a capacidade declarada não é honrada | `blocking` (exige `scenario` + `evidence`) |
+| `contract-drift` | contrato, identificador ou estado divergente — mas o fluxo completa | `attention` |
+| `degradation` | funciona, mas com borda, erro, retry ou idempotência frágil | `suggestion` |
+| `cosmetic` | clareza, nome, detalhe cosmético | `nit` |
 
 | Severidade | Emoji | Bloqueia merge? |
 |---|---|---|
@@ -72,6 +88,9 @@ staging global da review:
 | `attention` | ⚠️ | Não (requer atenção) |
 | `suggestion` | 💡 | Não |
 | `nit` | 🔎 | Não (detalhe/observação) |
+
+> Sem `impactClass` (relatório antigo), o motor mantém o valor emitido em `severity`.
+> Conflito de severidade numa mesma regra entre reviews deixa de existir: a regra é a fonte.
 
 ## Regras
 
@@ -109,7 +128,7 @@ Demonstre o gap em três partes:
 
 **Severidade:** fora de regra, `blocking` só é aceito com `scenario` **e** `evidence`. Sem os
 dois, o motor rebaixa para `attention` (e registra um aviso). Regras explícitas mantêm a
-severidade declarada pelo watchdog.
+severidade declarada **na regra**.
 
 Os demais watchdogs podem usar os mesmos prefixos apenas quando declararem
 `allowEmergentFindings: true`.

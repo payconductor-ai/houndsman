@@ -184,8 +184,10 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   nenhum outro casou; `classify` é ignorado e múltiplos fallbacks geram warning.
 - **Findings emergentes:** o `general` sempre pode emitir. Nos demais watchdogs continuam
   opt-in (`allowEmergentFindings: true`). Fora de regra, `blocking` só é aceito com
-  `scenario` + `evidence`; sem os dois o motor rebaixa para `attention`.
-- **Env é fonte única e prefixado.** Chaves de integração usam `HOUNDSMAN_`
+  `scenario` + `evidence`; sem os dois o motor rebaixa para `attention`.- **Severidade é derivada, não escolhida.** Finding de regra usa a severidade declarada em
+  `Rule.severity` (o motor sobrescreve o valor emitido e avisa a divergência); emergente usa
+  `impactClass` (`flow-break`/`contract-drift`/`degradation`/`cosmetic`) mapeado em
+  `core/severity.ts`. Nunca volte a aceitar severidade livre para finding de regra.- **Env é fonte única e prefixado.** Chaves de integração usam `HOUNDSMAN_`
   (`HOUNDSMAN_DEEP_SEEK_API_KEY`, `HOUNDSMAN_OPENAI_API_KEY`,
   `HOUNDSMAN_ANTHROPIC_API_KEY`, `HOUNDSMAN_TYPE_SAFE_API_KEY`, `HOUNDSMAN_HOME`).
   Só variáveis nativas do SO/CI (`LOCALAPPDATA`, `XDG_DATA_HOME`, `NO_COLOR`, `TERM`, `CI`)

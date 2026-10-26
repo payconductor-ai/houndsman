@@ -31,6 +31,12 @@ export type Finding = {
 	/** Origem do achado; inferida pelo prefixo `Lógica:`/`Domínio:` quando ausente. */
 	basis?: FindingBasis;
 	/**
+	 * Classe de impacto de um finding emergente (`flow-break`/`contract-drift`/
+	 * `degradation`/`cosmetic`). Define a severidade fora de regra — ver
+	 * `core/severity.ts`; o valor emitido em `severity` é ignorado quando presente.
+	 */
+	impactClass?: string;
+	/**
 	 * Commit em que o achado foi observado (interno). Preenchido nos carry-over
 	 * do review incremental — preserva a referência para a verificação (verify).
 	 */
@@ -146,7 +152,8 @@ function isFinding(value: unknown): value is Finding {
 		(f.basis === undefined ||
 			f.basis === "rule" ||
 			f.basis === "logic" ||
-			f.basis === "domain")
+			f.basis === "domain") &&
+		(f.impactClass === undefined || typeof f.impactClass === "string")
 	);
 }
 
@@ -290,6 +297,7 @@ export function dedupeFindings(reports: WatchdogReport[]): MergedFinding[] {
 					);
 				}
 				existing.basis = existing.basis ?? finding.basis;
+				existing.impactClass = existing.impactClass ?? finding.impactClass;
 				continue;
 			}
 			map.set(key, { ...finding, watchdogs: [report.watchdogId] });

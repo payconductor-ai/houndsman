@@ -124,6 +124,8 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **`Rule`** | Uma regra: `severity` + `text` (+ `jev` opcional). Vive **só** em `rules` — não duplicar em `reviewFocus`/`contextFiles`/`scope`/`description`. |
 | **polaridade** | O texto **deve** começar com `Promover:` (deve acontecer) ou `Evitar:` / `Não` / `Nunca` (não deve acontecer). Sem prefixo → **aviso** no `doctor`. |
 | **`Severity`** | `blocking` ❌ (bloqueia merge) > `attention` ⚠️ > `suggestion` 💡 > `nit` 🔎. |
+| **severidade ancorada** | Finding de regra usa `Rule.severity`; o valor emitido é corrigido no `finalize` (`core/severity.ts`) e cada divergência vira aviso. |
+| **`impactClass`** | Classe de impacto de um finding emergente (`flow-break`/`contract-drift`/`degradation`/`cosmetic`) — define a severidade fora de regra. |
 | **`PROCEDURE`** | Os 6 passos do watchdog: RECONSTRUCT → SCOPE → TRACE → GREP → PROVE → CONCLUDE. |
 | **escopo do diff** | Faixas revisáveis de cada arquivo alterado: menor símbolo folha (AST) que contém cada âncora do diff + âncoras soltas (imports/topo). Sem AST, caem para os hunks. Só findings com `line` nessas faixas são válidos. |
 | **dedupe** | Achados iguais por `(file, line, rule)` são unidos, somando os watchdogs que os apontaram. |

@@ -33,6 +33,7 @@ function merged(
 	partial: Partial<MergedFinding> & { file: string; rule: string },
 ): MergedFinding {
 	return {
+		...partial,
 		rule: partial.rule,
 		severity: (partial.severity ?? "attention") as Severity,
 		file: partial.file,
@@ -205,6 +206,87 @@ describe("buildStateFromFindings", () => {
 			const only = Object.values(state.findings)[0];
 			expect(only.count).toBe(2);
 			expect(findings[0].id).toBe(findings[1].id);
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("emergente sem impactClass mantém a severidade já triada", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const base = {
+				file: "src/f.ts",
+				rule: "Lógica: gap",
+				line: 2,
+				message: "gap",
+				basis: "logic" as const,
+			};
+			const first = buildStateFromFindings(
+				[merged({ ...base, severity: "blocking", scenario: "s", evidence: "x" })],
+				{ branch: "main", readFile: reader },
+			);
+			const second = buildStateFromFindings(
+				[merged({ ...base, severity: "suggestion" })],
+				{ branch: "main", readFile: reader, previous: first },
+			);
+			expect(Object.values(second.findings)[0].severity).toBe("blocking");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("emergente com impactClass acompanha o valor derivado", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const base = {
+				file: "src/f.ts",
+				rule: "Domínio: gap",
+				line: 2,
+				message: "gap",
+				basis: "domain" as const,
+			};
+			const first = buildStateFromFindings(
+				[merged({ ...base, severity: "suggestion", impactClass: "degradation" })],
+				{ branch: "main", readFile: reader },
+			);
+			const second = buildStateFromFindings(
+				[
+					merged({
+						...base,
+						severity: "attention",
+						impactClass: "contract-drift",
+					}),
+				],
+				{ branch: "main", readFile: reader, previous: first },
+			);
+			expect(Object.values(second.findings)[0].severity).toBe("attention");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("finding de regra sempre acompanha a severidade nova (config manda)", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const base = {
+				file: "src/f.ts",
+				rule: "Nunca usar any",
+				line: 2,
+				message: "any",
+				basis: "rule" as const,
+			};
+			const first = buildStateFromFindings(
+				[merged({ ...base, severity: "blocking" })],
+				{ branch: "main", readFile: reader },
+			);
+			const second = buildStateFromFindings(
+				[merged({ ...base, severity: "attention" })],
+				{ branch: "main", readFile: reader, previous: first },
+			);
+			expect(Object.values(second.findings)[0].severity).toBe("attention");
 		} finally {
 			project.cleanup();
 		}

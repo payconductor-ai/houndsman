@@ -147,6 +147,9 @@ Cada informação tem o seu campo — não espelhe a regra em vários lugares:
 
 > Severidade não é aspiração: se o projeto só aplica o padrão em 15/72 lugares, é `suggestion`.
 
+> A severidade é **derivada**, não escolhida na revisão: finding de regra usa a severidade
+> declarada aqui; emergente usa `impactClass`. O motor corrige divergências no `--finalize`.
+
 ---
 
 ## Pré-análise Jev (opcional)

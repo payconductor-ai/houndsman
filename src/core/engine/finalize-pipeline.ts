@@ -5,6 +5,7 @@
  * O contexto da run entra no construtor; sem estado ambiente.
  */
 
+import { GENERAL_WATCHDOG_ID } from "../builtins";
 import { summarizeBusiness } from "../business-summary";
 import type { HoundsmanConfig } from "../config";
 import { buildStateFromFindings } from "../findings-state";
@@ -22,6 +23,8 @@ import { type ResumeDomain, renderReviewResume } from "../renderers/resume-rende
 import { dedupeFindings, type WatchdogReport } from "../report-builder";
 import { writeRunStatus } from "../run-status";
 import { systemClock } from "../services/clock";
+import { anchorReports, severityAnchoringMessages } from "../severity";
+import type { Rule } from "../types";
 import { findWatchdog } from "../watchdog-registry";
 import { mergeCarryover } from "./carryover";
 import type { ReviewContext } from "./review-context";
@@ -160,8 +163,15 @@ export class FinalizePipeline {
 		const activeIds = Object.keys(classification.watchdogs);
 
 		const messages: string[] = [];
-		const { reports, pending, warnings } = ctx.work.readFindings(activeIds);
+		const ingested = ctx.work.readFindings(activeIds);
+		const { pending, warnings } = ingested;
 		messages.push(...warnings);
+		// Severidade é derivada (regra declarada ou classe de impacto), nunca a escolhida
+		// pelo watchdog: o mesmo código não pode sair `blocking` numa run e `attention`
+		// na seguinte. Divergências são corrigidas aqui e reportadas abaixo.
+		const anchored = anchorReports(ingested.reports, this.declaredRules());
+		messages.push(...severityAnchoringMessages(anchored));
+		const reports = anchored.reports;
 		const jev = this.artifacts.candidates(config);
 		const extras = this.artifacts.manifestExtras();
 		const business = this.artifacts.persistBusiness();
@@ -324,6 +334,20 @@ export class FinalizePipeline {
 		ctx.work.clean();
 
 		return { reportPath: location, blockers, attention, messages };
+	}
+
+	/**
+	 * União das regras declaradas (todos os watchdogs ativos + o piso embutido do
+	 * `general`). É a fonte da severidade dos findings de regra.
+	 */
+	private declaredRules(): Rule[] {
+		const ids = new Set<string>([...this.config.watchdogIds, GENERAL_WATCHDOG_ID]);
+		const rules: Rule[] = [];
+		for (const id of ids) {
+			const definition = findWatchdog(this.config, id);
+			if (definition) rules.push(...definition.rules);
+		}
+		return rules;
 	}
 
 	/** Grava o manifesto da run (delegado ao `ManifestWriter`). */

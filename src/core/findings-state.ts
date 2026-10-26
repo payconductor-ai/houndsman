@@ -21,6 +21,7 @@ import {
 import { type FindingBasis, type MergedFinding, sanitizeBranch } from "./report-builder";
 import { systemClock } from "./services/clock";
 import { type FileReader, ProjectFiles } from "./services/project-files";
+import { isImpactClass } from "./severity";
 import { SEVERITY_ORDER, type Severity, severityRank } from "./types";
 
 export type { FileReader };
@@ -367,12 +368,19 @@ export function buildStateFromFindings(
 		const prev = previous
 			? Object.values(previous.findings).find((f) => f.fingerprint === fingerprint)
 			: undefined;
+		// Emergente sem `impactClass` (relatório legado) mantém a severidade já triada
+		// para o mesmo fingerprint: o código é o mesmo, então o valor não pode oscilar
+		// entre reviews. Regra e `impactClass` produzem valor determinístico e vencem.
+		const sticky =
+			(finding.basis ?? "rule") !== "rule" &&
+			!isImpactClass(finding.impactClass) &&
+			prev !== undefined;
 		const created: FindingState = {
 			id: prev?.id ?? newFindingId(),
 			fingerprint,
 			watchdogIds: [...finding.watchdogs],
 			rule: finding.rule,
-			severity: finding.severity,
+			severity: sticky && prev ? prev.severity : finding.severity,
 			file: finding.file,
 			line: anchor ? anchor.line : null,
 			message: finding.message,

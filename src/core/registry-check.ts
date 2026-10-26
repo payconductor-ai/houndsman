@@ -12,7 +12,8 @@ import { JevQuestionFactory } from "./jev";
 import { renderReviewResume } from "./renderers/resume-renderer";
 import { sanitizeBranch } from "./report-builder";
 import { hasExplicitPolarity } from "./rule-text";
-import type { WatchdogMeta } from "./types";
+import { normalizeRuleText } from "./severity";
+import type { Severity, WatchdogMeta } from "./types";
 
 /** `id` da definição bate com a chave; `description` não vazio. */
 function checkDefinitions(config: HoundsmanConfig, problems: string[]): void {
@@ -202,11 +203,6 @@ function checkRulePolarity(config: HoundsmanConfig, warnings: string[]): void {
 	}
 }
 
-/** Normaliza o texto da regra para detectar duplicatas (case/espaços). */
-function normalizeRuleText(text: string): string {
-	return text.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /**
  * Aviso para regra repetida (texto normalizado) no mesmo watchdog — a regra deve
  * existir uma única vez em `rules` (§ Convenções de escrita, item 10).
@@ -225,6 +221,33 @@ function checkRuleDuplication(config: HoundsmanConfig, warnings: string[]): void
 			}
 			seen.add(key);
 		});
+	}
+}
+
+/**
+ * Aviso quando o mesmo texto de regra aparece em watchdogs diferentes com
+ * severidades diferentes: a ancoragem usaria a mais grave e o resultado
+ * dependeria de qual watchdog reportou.
+ */
+function checkRuleSeverityConflicts(config: HoundsmanConfig, warnings: string[]): void {
+	const byText = new Map<string, { id: string; severity: Severity }[]>();
+	for (const id of config.watchdogIds) {
+		const def = config.watchdogs[id];
+		if (!def) continue;
+		for (const rule of def.rules) {
+			const key = normalizeRuleText(rule.text);
+			if (!key) continue;
+			const entries = byText.get(key) ?? [];
+			entries.push({ id, severity: rule.severity });
+			byText.set(key, entries);
+		}
+	}
+	for (const entries of byText.values()) {
+		if (entries.length < 2) continue;
+		const severities = new Set(entries.map((entry) => entry.severity));
+		if (severities.size < 2) continue;
+		const detail = entries.map((entry) => `${entry.id}=${entry.severity}`).join(", ");
+		warnings.push(`Regra com severidades divergentes entre watchdogs: ${detail}.`);
 	}
 }
 
@@ -373,6 +396,7 @@ export function checkRegistry(config: HoundsmanConfig): {
 	checkRendering(problems);
 	checkRulePolarity(config, warnings);
 	checkRuleDuplication(config, warnings);
+	checkRuleSeverityConflicts(config, warnings);
 	checkMetadataPrecision(config, warnings);
 	checkBudgets(config, warnings);
 	checkPriorities(config, problems);

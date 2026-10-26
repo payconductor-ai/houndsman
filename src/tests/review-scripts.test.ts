@@ -49,6 +49,7 @@ import { findWatchdog, getWatchdogContext } from "../core/watchdog-registry";
 
 import {
 	alphaWatchdog,
+	betaWatchdog,
 	FAKE_WATCHDOG_DEFINITIONS,
 	fakeHoundsmanConfig,
 } from "./fixtures/fake-project";
@@ -157,6 +158,24 @@ describe("registry-check", () => {
 		};
 		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
 		expect(warnings.some((w) => w.includes("duplicada"))).toBe(true);
+	});
+
+	test("mesma regra com severidades diferentes entre watchdogs gera aviso", () => {
+		const config = {
+			...fakeHoundsmanConfig,
+			watchdogs: {
+				...fakeHoundsmanConfig.watchdogs,
+				beta: {
+					...betaWatchdog,
+					rules: [
+						...betaWatchdog.rules,
+						{ severity: "suggestion" as const, text: "Nunca usar `any`." },
+					],
+				},
+			},
+		};
+		const { warnings } = checkRegistry(config as typeof fakeHoundsmanConfig);
+		expect(warnings.some((w) => w.includes("severidades divergentes"))).toBe(true);
 	});
 
 	test("texto de regra em reviewFocus/contextFiles gera aviso", () => {

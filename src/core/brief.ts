@@ -176,6 +176,19 @@ function ruleItem(rule: Rule): string {
 	return `- ${SEVERITY_EMOJI[rule.severity]} **${rule.severity}** — ${rule.text}`;
 }
 
+/**
+ * Contrato de severidade do output — a severidade é derivada, não escolhida.
+ *
+ * Finding de regra carrega a severidade declarada em `Rule.severity`; emergente
+ * carrega `impactClass`, mapeado em `core/severity.ts`. Isso impede o mesmo
+ * código de sair `blocking` numa review e `attention` na seguinte.
+ */
+export const SEVERITY_GUIDE: readonly string[] = [
+	"- **Finding de regra:** copie `rule` exatamente como no brief. A severidade é a **declarada na regra** — outro valor é ignorado e corrigido pelo motor.",
+	"- **Finding emergente** (`Lógica:`/`Domínio:`): preencha `impactClass` — `flow-break` (fluxo/capacidade não honrada), `contract-drift` (contrato/estado divergente), `degradation` (borda/erro frágil) ou `cosmetic`.",
+	"- `blocking` fora de regra continua exigindo `scenario` + `evidence`; sem os dois, o motor rebaixa para `attention`.",
+];
+
 /** Seção opcional (`## <título>` + itens) — vazia se não houver itens. */
 function optionalList(title: string, items: readonly string[] | undefined): string[] {
 	if (!items || items.length === 0) return [];
@@ -590,6 +603,7 @@ export function defaultRenderBrief(
 			.map(ruleItem),
 		"",
 	);
+	lines.push("## Como declarar a severidade", "", ...SEVERITY_GUIDE, "");
 	lines.push(
 		"## Docs de contexto (carregar sob demanda)",
 		"",
