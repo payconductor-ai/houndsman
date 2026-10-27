@@ -36,7 +36,7 @@ export const DEFAULT_AST_MAX_IMPACT_FILES = 200;
 export const DEFAULT_AI_PROVIDER = "deepseek" as const;
 
 /** Modelo default da camada de IA. */
-export const DEFAULT_AI_MODEL = "deepseek-v4-pro";
+export const DEFAULT_AI_MODEL = "deepseek-flash";
 
 /**
  * Concorrência default das chamadas de IA do prepare.
