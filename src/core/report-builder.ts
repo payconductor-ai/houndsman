@@ -7,6 +7,15 @@
  * Schema dos watchdogs: asset `OUTPUT-FORMAT.md` (embarcado em `src/skill/`).
  */
 
+import { anchorContentKey, buildAnchor } from "./finding-anchor";
+import {
+	isDeclaredRule,
+	isDistinctAnchor,
+	isNearDuplicate,
+	normalizeFindingPath,
+	occurrenceKey,
+	outweighs,
+} from "./finding-identity";
 import { SEVERITY_ORDER, type Severity, severityRank } from "./types";
 
 /** Origem do finding: regra explícita, consistência lógica ou domínio. */
@@ -53,6 +62,11 @@ export type WatchdogReport = {
 /** Achado deduplicado, com todos os watchdogs que o apontaram. */
 export type MergedFinding = Finding & {
 	watchdogs: string[];
+	/**
+	 * Ocorrências do mesmo achado colapsadas neste item (>1 = repetição).
+	 * Vira `count` na triagem; a `line` guarda só a primeira ocorrência.
+	 */
+	occurrences?: number;
 };
 
 /** Resumo do contexto da PR (objetivo/motivação/resumo das alterações), gravado pelo subagente. */
@@ -179,7 +193,14 @@ export function normalizeFinding(
 		finding.confidence === undefined
 			? undefined
 			: Math.min(1, Math.max(0, finding.confidence));
-	const normalized: Finding = { ...finding, basis, confidence };
+	// Caminho canônico na ingestão: `./src/x.ts` e `src/x.ts` são o mesmo arquivo
+	// (dedupe, escopo do diff e âncora dependem disso).
+	const normalized: Finding = {
+		...finding,
+		file: normalizeFindingPath(finding.file),
+		basis,
+		confidence,
+	};
 	if (basis !== "rule" && normalized.severity === "blocking") {
 		const proven = Boolean(
 			normalized.scenario?.trim() && normalized.evidence?.trim(),
@@ -223,12 +244,17 @@ export function parseWatchdogReport(
 		findings.push(normalizeFinding(item, onError));
 	}
 
+	const paths = (value: unknown): string[] =>
+		Array.isArray(value)
+			? value
+					.filter((item): item is string => typeof item === "string")
+					.map(normalizeFindingPath)
+			: [];
+
 	return {
 		watchdogId: obj.watchdogId,
-		reviewedFiles: Array.isArray(obj.reviewedFiles)
-			? (obj.reviewedFiles as string[])
-			: [],
-		skipped: Array.isArray(obj.skipped) ? (obj.skipped as string[]) : [],
+		reviewedFiles: paths(obj.reviewedFiles),
+		skipped: paths(obj.skipped),
 		findings,
 	};
 }
@@ -269,44 +295,174 @@ export function parseContextSummary(raw: unknown): ContextSummary | null {
 	return { available: true, source, objective, motivation, changeSummary };
 }
 
-/** Deduplica achados por (file, line, rule), mesclando atribuição de watchdogs. */
-export function dedupeFindings(reports: WatchdogReport[]): MergedFinding[] {
-	const map = new Map<string, MergedFinding>();
-	for (const report of reports) {
-		for (const finding of report.findings) {
-			const key = `${finding.file}|${finding.line ?? ""}|${finding.rule}`;
-			const existing = map.get(key);
-			if (existing) {
-				if (!existing.watchdogs.includes(report.watchdogId)) {
-					existing.watchdogs.push(report.watchdogId);
-				}
-				// Mantém a versão de maior severidade (severidade + detalhes)
-				if (severityRank(finding.severity) < severityRank(existing.severity)) {
-					existing.severity = finding.severity;
-					existing.message = finding.message;
-					existing.action = finding.action;
-					existing.evidence = finding.evidence ?? existing.evidence;
-				}
-				// Cenário/impacto/confiança nunca se perdem no merge.
-				existing.scenario = existing.scenario ?? finding.scenario;
-				existing.impact = existing.impact ?? finding.impact;
-				if (finding.confidence !== undefined) {
-					existing.confidence = Math.max(
-						existing.confidence ?? 0,
-						finding.confidence,
-					);
-				}
-				existing.basis = existing.basis ?? finding.basis;
-				existing.impactClass = existing.impactClass ?? finding.impactClass;
-				continue;
-			}
-			map.set(key, { ...finding, watchdogs: [report.watchdogId] });
-		}
+/** Duplicatas colapsadas por camada (diagnóstico do `--finalize`). */
+export type DedupeStats = {
+	/** Mesmo arquivo + mesma regra (a linha é cache, não identidade). */
+	collapsedByRule: number;
+	/** Mesmo trecho ancorado descrito por dois achados emergentes. */
+	collapsedByAnchor: number;
+};
+
+/** Opções do dedupe. */
+export type DedupeOptions = {
+	/**
+	 * Leitor do arquivo alterado. Sem ele roda só a camada (arquivo, regra) —
+	 * a camada por âncora precisa do conteúdo para localizar o trecho.
+	 */
+	readFile?: (file: string) => string | null;
+};
+
+/** Resultado do dedupe, com as contagens de colapso. */
+export type DedupeResult = {
+	findings: MergedFinding[];
+	stats: DedupeStats;
+};
+
+/**
+ * Une dois achados do MESMO problema.
+ *
+ * O representante é o mais forte (`outweighs`: regra declarada > domínio >
+ * lógica, depois severidade). A regra declarada define texto, ação e severidade
+ * — ela é a fonte da política do projeto. Watchdogs e ocorrências sempre se
+ * somam; campos complementares nunca se perdem.
+ */
+function mergeDuplicate(existing: MergedFinding, incoming: MergedFinding): MergedFinding {
+	const watchdogs = [...existing.watchdogs];
+	for (const watchdog of incoming.watchdogs) {
+		if (!watchdogs.includes(watchdog)) watchdogs.push(watchdog);
 	}
-	return [...map.values()].sort((a, b) => {
+	const preferred = outweighs(incoming, existing) ? incoming : existing;
+	const other = preferred === incoming ? existing : incoming;
+	const confidence = Math.max(preferred.confidence ?? 0, other.confidence ?? 0);
+	return {
+		...other,
+		...preferred,
+		watchdogs,
+		occurrences: (existing.occurrences ?? 1) + (incoming.occurrences ?? 1),
+		line: preferred.line ?? other.line,
+		evidence: preferred.evidence ?? other.evidence,
+		scenario: preferred.scenario ?? other.scenario,
+		impact: preferred.impact ?? other.impact,
+		impactClass: preferred.impactClass ?? other.impactClass,
+		foundAtSha: preferred.foundAtSha ?? other.foundAtSha,
+		confidence: confidence > 0 ? confidence : undefined,
+	};
+}
+
+/** Chave do trecho ancorado (`arquivo|âncora`), ou null sem âncora distinta. */
+function anchoredKey(
+	finding: MergedFinding,
+	readFile: (file: string) => string | null,
+): string | null {
+	const file = normalizeFindingPath(finding.file);
+	const content = readFile(file);
+	if (!content) return null;
+	const anchor = buildAnchor(content, finding.line, finding.evidence);
+	if (!anchor || !isDistinctAnchor(anchor.snippet)) return null;
+	return `${file}|${anchorContentKey(anchor)}`;
+}
+
+/** Ordena por severidade, arquivo e linha (a ordem de exibição). */
+function sortFindings(findings: MergedFinding[]): MergedFinding[] {
+	return findings.sort((a, b) => {
 		const bySeverity = severityRank(a.severity) - severityRank(b.severity);
 		if (bySeverity !== 0) return bySeverity;
 		if (a.file !== b.file) return a.file.localeCompare(b.file);
 		return (a.line ?? 0) - (b.line ?? 0);
 	});
+}
+
+/**
+ * Camada 3 do relatório — grupos de achados que descrevem o mesmo defeito com
+ * texto diferente.
+ *
+ * **Não mescla**: o mesmo trecho pode abrigar assuntos distintos (um achado de
+ * testabilidade e um bug concreto ancorados na mesma linha colapsam sob
+ * qualquer limiar de similaridade textual). O `--finalize` usa isto para
+ * avisar o revisor; a decisão de consolidar é humana.
+ */
+export function nearbyDuplicateGroups(
+	findings: readonly MergedFinding[],
+): MergedFinding[][] {
+	const groups: MergedFinding[][] = [];
+	for (const finding of findings) {
+		const group = groups.find((members) =>
+			members.some((member) => isNearDuplicate(member, finding)),
+		);
+		if (group) group.push(finding);
+		else groups.push([finding]);
+	}
+	return groups.filter((group) => group.length > 1);
+}
+
+/**
+ * Deduplica achados em duas camadas determinísticas, mesclando atribuição de
+ * watchdogs.
+ *
+ * 1. **(arquivo, regra)** — a linha não entra na chave: o mesmo anti-padrão
+ *    apontado em N trechos do mesmo arquivo é UM achado com N ocorrências.
+ * 2. **trecho ancorado** — mesmo código, ambos os achados emergentes. Dois
+ *    achados de regra no mesmo trecho são regras diferentes, não duplicata.
+ *
+ * Paráfrases entre watchdogs (regex diferentes para o mesmo defeito) NÃO são
+ * mescladas: o mesmo trecho pode ter assuntos distintos. Ver
+ * `nearbyDuplicateGroups`.
+ */
+export function dedupeFindingsWithStats(
+	reports: readonly WatchdogReport[],
+	options: DedupeOptions = {},
+): DedupeResult {
+	const stats: DedupeStats = { collapsedByRule: 0, collapsedByAnchor: 0 };
+
+	const byRule = new Map<string, MergedFinding>();
+	for (const report of reports) {
+		for (const finding of report.findings) {
+			const key = occurrenceKey(finding);
+			const current: MergedFinding = { ...finding, watchdogs: [report.watchdogId] };
+			const existing = byRule.get(key);
+			if (!existing) {
+				byRule.set(key, current);
+				continue;
+			}
+			byRule.set(key, mergeDuplicate(existing, current));
+			stats.collapsedByRule++;
+		}
+	}
+
+	const readFile = options.readFile;
+	if (!readFile) return { findings: sortFindings([...byRule.values()]), stats };
+
+	const grouped: MergedFinding[] = [];
+	const byAnchor = new Map<string, number>();
+	for (const finding of byRule.values()) {
+		const key = anchoredKey(finding, readFile);
+		const index = key === null ? undefined : byAnchor.get(key);
+		if (key === null || index === undefined) {
+			if (key !== null) byAnchor.set(key, grouped.length);
+			grouped.push(finding);
+			continue;
+		}
+		const existing = grouped[index];
+		if (!existing) {
+			grouped.push(finding);
+			continue;
+		}
+		// Dois achados com regra declarada no mesmo trecho: regras diferentes.
+		if (isDeclaredRule(existing.rule) || isDeclaredRule(finding.rule)) {
+			grouped.push(finding);
+			continue;
+		}
+		grouped[index] = mergeDuplicate(existing, finding);
+		stats.collapsedByAnchor++;
+	}
+
+	return { findings: sortFindings(grouped), stats };
+}
+
+/** Deduplica achados e devolve só a lista (sem as contagens). */
+export function dedupeFindings(
+	reports: readonly WatchdogReport[],
+	options: DedupeOptions = {},
+): MergedFinding[] {
+	return dedupeFindingsWithStats(reports, options).findings;
 }

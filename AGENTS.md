@@ -90,6 +90,7 @@ src/
 │   ├── concurrency.ts       # mapPool (paralelismo limitado; prepare + hunt)
 │   ├── prepare-report.ts    # durações por etapa do prepare (`prepare-report.json`)
 │   ├── finding-anchor.ts    # âncora/fingerprint de conteúdo + reancoragem
+│   ├── finding-identity.ts  # chave de dedupe: (arquivo, regra) normalizada + âncora
 │   ├── findings-state.ts    # Finding/FindingsState + funções puras de triagem
 │   ├── storage/             # StorageProvider (SQLite default + file) + staging por review
 │   ├── hunt/                # harness local opcional (maki): install, runner e relatório
@@ -214,8 +215,17 @@ local; `skill/` = markdown embarcado; `tests/` = suíte.
   `logger` (chalk/ora), usada por `cli/` e `server/`. Módulos de negócio do
   `core/` continuam sem log.
 - **A linha de um finding nunca é a identidade.** A identidade é o `fingerprint`
-  (arquivo + regra + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é cache,
-  recalculada por `syncState`. Não volte a chavear por `(file, line)`.
+  (arquivo + regra normalizada + âncora de conteúdo) em `core/finding-anchor.ts`; a linha é
+  cache, recalculada por `syncState`. Não volte a chavear por `(file, line)`.
+- **Dedupe tem uma só chave.** `core/finding-identity.ts` é a única implementação de
+  `occurrenceKey` (arquivo + texto de regra normalizado, **sem a linha**) e
+  `ruleIdentityKey`; `dedupeFindings`, `mergeFindings` (hunt) e `mergeCarryover` delegam a
+  ela. Não recrie a chave local — foi assim que três cópias divergentes deixaram passar a
+  mesma regra violada em N trechos do mesmo arquivo.
+- **Paráfrase entre watchdogs não é mesclada automaticamente.** O mesmo trecho pode abrigar
+  assuntos distintos (um achado de testabilidade e um bug na mesma linha colapsam sob
+  qualquer limiar de similaridade textual). `nearbyDuplicateGroups` só **avisa** no
+  `--finalize`; a consolidação é decisão humana na triagem.
 - **Revisão nunca lê `process.cwd()` implicitamente.** A raiz operacional vem do
   `HoundsmanEngine` (`root` = worktree ou clone principal) e é propagada por
   `ReviewContext`/`ReviewSession`. Módulos de negócio usam `ctx.root` e `ctx.git`.

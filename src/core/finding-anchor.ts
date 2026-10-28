@@ -56,6 +56,16 @@ function anchorKey(anchor: FindingAnchor): string {
 	].join("\u0000");
 }
 
+/**
+ * Chave do conteúdo da âncora (sem a linha e sem a regra).
+ *
+ * Usada como segunda identidade no dedupe: dois watchdogs que apontam o mesmo
+ * trecho descrevem o mesmo problema, mesmo com o texto da regra reescrito.
+ */
+export function anchorContentKey(anchor: FindingAnchor): string {
+	return anchorKey(anchor);
+}
+
 /** Hash estável (sha256 truncado) — base das identidades do motor. */
 export function hashKey(input: string): string {
 	return createHash("sha256").update(input).digest("hex").slice(0, 16);

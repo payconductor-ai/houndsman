@@ -130,6 +130,36 @@ function reportJson(watchdogId: string, findings = 1): string {
 	});
 }
 
+/**
+ * Relatório de uma passada extra: repete o achado da passada base (mesma regra,
+ * outro trecho) e traz um achado novo — a união deve colapsar a repetição.
+ */
+function reportJsonWithRepeat(watchdogId: string): string {
+	return JSON.stringify({
+		watchdogId,
+		reviewedFiles: [`src/${watchdogId}/a.ts`],
+		skipped: [],
+		findings: [
+			{
+				rule: "Evitar any",
+				severity: "attention",
+				file: `src/${watchdogId}/a.ts`,
+				line: 1,
+				message: "any detectado",
+				action: "tipar",
+			},
+			{
+				rule: "Promover: tipagem explícita",
+				severity: "suggestion",
+				file: `src/${watchdogId}/a.ts`,
+				line: 2,
+				message: "tipo inferido",
+				action: "tipar",
+			},
+		],
+	});
+}
+
 describe("maki — contrato de execução", () => {
 	test("args são headless e negam escrita/bash/rede sem yolo/trust", () => {
 		const args = makiArgs("deepseek/deepseek-v4-pro");
@@ -784,7 +814,9 @@ describe("harness — checklist de intenção", () => {
 										checks: [],
 										findings: [],
 									})
-								: reportJson("general", calls === 1 ? 1 : 2);
+								: calls === 1
+									? reportJson("general", 1)
+									: reportJsonWithRepeat("general");
 						return {
 							ok: true,
 							text,
@@ -1011,7 +1043,7 @@ describe("harness — checklist de intenção", () => {
 								],
 								findings: [
 									{
-										rule: "Evitar any",
+										rule: "Promover: enviar split",
 										severity: "attention",
 										file: "src/alpha/a.ts",
 										line: 2,

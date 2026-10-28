@@ -18,6 +18,7 @@ import {
 	locateAnchor,
 	reanchor,
 } from "./finding-anchor";
+import { normalizeFindingPath, ruleIdentityKey } from "./finding-identity";
 import { type FindingBasis, type MergedFinding, sanitizeBranch } from "./report-builder";
 import { systemClock } from "./services/clock";
 import { type FileReader, ProjectFiles } from "./services/project-files";
@@ -342,6 +343,24 @@ export function buildStateFromFindings(
 	}
 
 	// 2. Findings atuais, agrupados por fingerprint.
+	//
+	// A regra entra normalizada (sem acento/caixa/pontuação e sem o prefixo
+	// reservado): `Lógica: Falta validação` e `logica falta validacao` são o mesmo
+	// achado, e o modelo reescreve o texto entre reviews.
+	const previousIndex = new Map<string, FindingState>();
+	for (const prev of Object.values(previous?.findings ?? {})) {
+		previousIndex.set(prev.fingerprint, prev);
+		// Ponte com o estado gravado antes da normalização: o fingerprint antigo
+		// não casa mais, mas os ids triados não podem se perder.
+		const recomputed = fingerprintOf(
+			normalizeFindingPath(prev.file),
+			ruleIdentityKey(prev.rule),
+			prev.anchor,
+			prev.message,
+		);
+		if (!previousIndex.has(recomputed)) previousIndex.set(recomputed, prev);
+	}
+
 	const byFingerprint = new Map<string, FindingState>();
 	for (const finding of merged) {
 		const content = options.readFile(finding.file);
@@ -350,7 +369,7 @@ export function buildStateFromFindings(
 			: null;
 		const fingerprint = fingerprintOf(
 			finding.file,
-			finding.rule,
+			ruleIdentityKey(finding.rule),
 			anchor,
 			finding.message,
 		);
@@ -365,9 +384,7 @@ export function buildStateFromFindings(
 			continue;
 		}
 
-		const prev = previous
-			? Object.values(previous.findings).find((f) => f.fingerprint === fingerprint)
-			: undefined;
+		const prev = previous ? previousIndex.get(fingerprint) : undefined;
 		// Emergente sem `impactClass` (relatório legado) mantém a severidade já triada
 		// para o mesmo fingerprint: o código é o mesmo, então o valor não pode oscilar
 		// entre reviews. Regra e `impactClass` produzem valor determinístico e vencem.
@@ -393,7 +410,8 @@ export function buildStateFromFindings(
 			anchor,
 			// Carry-over preserva o `foundAtSha` original; novos/re-reportados usam o head atual.
 			foundAtSha: finding.foundAtSha ?? options.headSha ?? prev?.foundAtSha,
-			count: 1,
+			// Ocorrências colapsadas no dedupe (mesma regra no mesmo arquivo).
+			count: Math.max(1, finding.occurrences ?? 1),
 			present: true,
 			decision: prev?.decision ?? "pending",
 			comment: prev?.comment,

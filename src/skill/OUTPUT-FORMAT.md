@@ -96,6 +96,10 @@ A severidade é **derivada**, não escolhida pelo watchdog:
 
 - Sem achados → `"findings": []` (arquivo **obrigatório**).
 - Um achado por regra violada; não agrupar regras diferentes.
+- **Uma entrada por (arquivo, regra).** A mesma regra violada em vários trechos do **mesmo
+  arquivo** continua sendo **um** achado: use a `line` da primeira ocorrência e descreva as
+  demais no `message`. O motor colapsa repetições por `(arquivo, regra)` e por trecho
+  ancorado — emitir uma por linha só infla o relatório antes de ser colapsado.
 - **Teto de 20 achados por watchdog.** Se houver mais, mantenha os de maior severidade e
   agrupe ocorrências idênticas (mesmo trecho + mesma regra) em um único item. O JSON precisa
   caber inteiro — relatório cortado perde achados.

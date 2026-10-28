@@ -128,7 +128,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | **`impactClass`** | Classe de impacto de um finding emergente (`flow-break`/`contract-drift`/`degradation`/`cosmetic`) — define a severidade fora de regra. |
 | **`PROCEDURE`** | Os 6 passos do watchdog: RECONSTRUCT → SCOPE → TRACE → GREP → PROVE → CONCLUDE. |
 | **escopo do diff** | Faixas revisáveis de cada arquivo alterado: menor símbolo folha (AST) que contém cada âncora do diff + âncoras soltas (imports/topo). Sem AST, caem para os hunks. Só findings com `line` nessas faixas são válidos. |
-| **dedupe** | Achados iguais por `(file, line, rule)` são unidos, somando os watchdogs que os apontaram. |
+| **dedupe** | Duas camadas determinísticas em `core/finding-identity.ts` + `core/report-builder.ts`: (1) mesma **regra** no mesmo **arquivo** (a linha é cache) vira um achado com N ocorrências; (2) mesmo **trecho ancorado** entre dois achados **emergentes** vira um achado — regra declarada nunca é absorvida por emergente. Paráfrases entre watchdogs não são mescladas: `nearbyDuplicateGroups` só emite aviso no `--finalize`. |
 | **cobertura (coverage)** | Tabela `revisados / esperados` por watchdog — mostra o que faltou. |
 | **`registry-check` / `doctor`** | Validações anti-drift da config (ids, `classify`, specs Jev, polaridade). |
 
@@ -210,7 +210,7 @@ staging dos subagentes fica em `<HOUNDSMAN_HOME>/work/<reviewId>/` (ou em
 | Termo | Significado |
 | --- | --- |
 | **finding id** | Id curto aleatório de um finding (aceita prefixo único no CLI), persistido no storage e exibido na UI de triagem. |
-| **fingerprint** | Hash de `arquivo + regra + âncora` — identidade **estável** entre re-execuções do `--finalize`. |
+| **fingerprint** | Hash de `arquivo + regra normalizada + âncora` — identidade **estável** entre re-execuções do `--finalize`. A normalização da regra (sem acento/caixa/pontuação e sem `Lógica:`/`Domínio:`) evita fatiar o mesmo achado quando o modelo reescreve o texto. |
 | **âncora (anchor)** | Linha ofensora normalizada + contexto (linha anterior/seguinte). A `line` é **cache**, não identidade. |
 | **line drift** | Deslocamento de linhas após um auto-fix; resolvido reancorando por conteúdo (`findings sync`). |
 | **decision** | O que fazer: `pending` \| `execute` \| `ignore` (+ `comment` opcional). |

@@ -81,7 +81,7 @@ src/alpha/**
 3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
 4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado. Trecho com o marcador de truncamento só sustenta achado depois de abrir o arquivo para ver o restante.
-6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios) e o que ficou de fora entra em \`skipped\` ("budget", "truncated" ou "fora do fluxo"). Máximo de 20 achados: priorize severidade e agrupe ocorrências idênticas. \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
+6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios) e o que ficou de fora entra em \`skipped\` ("budget", "truncated" ou "fora do fluxo"). Máximo de 20 achados: priorize severidade e **uma entrada por (arquivo, regra)** — a mesma regra violada em vários trechos do mesmo arquivo é UM achado (\`line\` = primeira ocorrência; as demais vão na \`message\`). \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre."
 `;
 
 exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 1`] = `
@@ -633,7 +633,7 @@ exports[`baseline — camada gerada setup gera os mesmos arquivos e conteúdos 3
   },
   {
     "file": ".houndsman/core/skill/OUTPUT-FORMAT.md",
-    "sha256": "8754e8faaf66c4f9",
+    "sha256": "7f9a1127a8c47cf3",
   },
   {
     "file": ".houndsman/core/skill/README.md",
@@ -938,7 +938,7 @@ index 0000000..f4082f0
 3. **TRACE** — siga cada símbolo alterado até seus chamadores, adapters e tipos compartilhados **dentro do seu domínio** (use os importadores do AST), **dentro do orçamento de exploração** (seção acima). Priorize os arquivos de maior churn.
 4. **GREP** — use as regras críticas/anti-padrões como heurística para localizar violações nas faixas alteradas, **dentro do orçamento**. Pare quando tiver a prova: repetir busca não aumenta certeza.
 5. **PROVE** — para cada suspeita, descreva gatilho → comportamento observado → invariante/regra violada. Sem prova, não é achado. Trecho com o marcador de truncamento só sustenta achado depois de abrir o arquivo para ver o restante.
-6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios) e o que ficou de fora entra em \`skipped\` ("budget", "truncated" ou "fora do fluxo"). Máximo de 20 achados: priorize severidade e agrupe ocorrências idênticas. \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
+6. **CONCLUDE** — grave o JSON no caminho de output. \`reviewedFiles\` é um subconjunto de \`## Arquivos do seu domínio\` (só o que você revisou; **não** liste chamadores/importadores nem arquivos de outros domínios) e o que ficou de fora entra em \`skipped\` ("budget", "truncated" ou "fora do fluxo"). Máximo de 20 achados: priorize severidade e **uma entrada por (arquivo, regra)** — a mesma regra violada em vários trechos do mesmo arquivo é UM achado (\`line\` = primeira ocorrência; as demais vão na \`message\`). \`line\` dentro das faixas alteradas. Sem achados → \`"findings": []\` (arquivo obrigatório). Não escreva markdown livre.
 "
 `;
 

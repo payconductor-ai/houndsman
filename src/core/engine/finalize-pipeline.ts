@@ -20,7 +20,12 @@ import {
 	ManifestWriter,
 } from "../renderers/manifest-writer";
 import { type ResumeDomain, renderReviewResume } from "../renderers/resume-renderer";
-import { dedupeFindings, type WatchdogReport } from "../report-builder";
+import {
+	dedupeFindings,
+	dedupeFindingsWithStats,
+	nearbyDuplicateGroups,
+	type WatchdogReport,
+} from "../report-builder";
 import { writeRunStatus } from "../run-status";
 import { systemClock } from "../services/clock";
 import { anchorReports, severityAnchoringMessages } from "../severity";
@@ -197,10 +202,36 @@ export class FinalizePipeline {
 
 		const now = systemClock();
 		// Findings re-reportados neste ciclo + carry-over (arquivos inalterados).
-		const merged = mergeCarryover(
-			dedupeFindings(reports),
-			classification.carryover ?? [],
-		);
+		// O dedupe recebe o leitor: a camada por âncora precisa do conteúdo para
+		// reconhecer dois achados emergentes apontando o mesmo trecho.
+		const deduped = dedupeFindingsWithStats(reports, {
+			readFile: ctx.files.reader(),
+		});
+		const merged = mergeCarryover(deduped.findings, classification.carryover ?? []);
+		const emitted = reports.reduce((sum, report) => sum + report.findings.length, 0);
+		const collapsed = emitted - deduped.findings.length;
+		if (collapsed > 0) {
+			messages.push(
+				`Dedupe: ${emitted} achado(s) emitido(s) → ${deduped.findings.length} único(s) ` +
+					`(${deduped.stats.collapsedByRule} por regra+arquivo, ` +
+					`${deduped.stats.collapsedByAnchor} por trecho).`,
+			);
+		}
+		// Paráfrases entre watchdogs NÃO são mescladas automaticamente: o mesmo
+		// trecho pode abrigar assuntos distintos. O aviso evita que o revisor
+		// trate como achados independentes o que é um defeito só.
+		for (const group of nearbyDuplicateGroups(deduped.findings)) {
+			const lines = group
+				.map((finding) => finding.line)
+				.filter((line): line is number => typeof line === "number");
+			const span =
+				lines.length > 0 ? `:${Math.min(...lines)}-${Math.max(...lines)}` : "";
+			const watchdogs = [...new Set(group.flatMap((finding) => finding.watchdogs))];
+			messages.push(
+				`Possíveis duplicatas: ${group.length} achados em ${group[0].file}${span} ` +
+					`(${watchdogs.join(", ")}) com descrições sobrepostas — confira se são o mesmo defeito.`,
+			);
+		}
 		if (classification.mode === "incremental") {
 			messages.push(
 				`Carry-over: ${classification.carryover?.length ?? 0} finding(s) preservado(s) de ${shortSha(classification.reviewedFrom ?? "")}.`,

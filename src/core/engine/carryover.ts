@@ -5,13 +5,17 @@
  * finalize o mescla aos findings re-reportados.
  */
 
+import { occurrenceKey } from "../finding-identity";
 import type { FindingsStateFile } from "../findings-state";
 import type { MergedFinding } from "../report-builder";
 import { severityRank } from "../types";
 
-/** Chave de dedupe de finding: `(file, line, rule)`. */
-function findingKey(finding: Pick<MergedFinding, "file" | "line" | "rule">): string {
-	return `${finding.file}|${finding.line ?? ""}|${finding.rule}`;
+/**
+ * Chave de dedupe: `(arquivo, regra)` sem a linha — a mesma regra violada em
+ * outro trecho do arquivo continua sendo o mesmo achado.
+ */
+function findingKey(finding: Pick<MergedFinding, "file" | "rule">): string {
+	return occurrenceKey(finding);
 }
 
 /**
@@ -40,6 +44,7 @@ export function buildCarryover(
 			basis: finding.basis,
 			foundAtSha: finding.foundAtSha,
 			watchdogs: [...finding.watchdogIds],
+			occurrences: finding.count,
 		}));
 }
 

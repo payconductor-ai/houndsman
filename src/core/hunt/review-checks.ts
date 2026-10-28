@@ -12,8 +12,8 @@
 
 import { GENERAL_WATCHDOG_ID } from "../builtins";
 import type { BusinessSummary } from "../business-summary";
+import { normalizeFindingPath, occurrenceKey, outweighs } from "../finding-identity";
 import type { Finding, WatchdogReport } from "../report-builder";
-import { severityRank } from "../types";
 
 /** Resultado declarado de uma verificação. */
 export type CheckVerdict = "ok" | "gap" | "n/a";
@@ -101,7 +101,7 @@ export function isCheckVerified(
 
 /** Normaliza caminho de arquivo (`.\a\b` → `a/b`). */
 export function normalizePath(value: string): string {
-	return value.replace(/\\/g, "/").replace(/^\.\//, "").trim();
+	return normalizeFindingPath(value);
 }
 
 /** Normaliza um item para comparação (sem acento, caixa e pontuação). */
@@ -391,9 +391,14 @@ export function withInferredRule(report: WatchdogReport): WatchdogReport {
 	return { ...report, findings };
 }
 
-/** Chave de dedupe de findings entre passadas do mesmo watchdog. */
+/**
+ * Chave de dedupe de findings entre passadas do mesmo watchdog.
+ *
+ * Mesma identidade da triagem: `(arquivo, regra)`, sem a linha — a passada 2
+ * costuma citar outro trecho do MESMO problema.
+ */
 function findingKey(finding: Finding): string {
-	return `${normalizePath(finding.file)}|${finding.line ?? 0}|${normalizeItem(finding.rule)}`;
+	return occurrenceKey(finding);
 }
 
 /** Une findings de duas passadas, preservando o de maior severidade. */
@@ -414,7 +419,7 @@ export function mergeFindings(
 			continue;
 		}
 		const current = merged[position];
-		if (severityRank(finding.severity) < severityRank(current.severity)) {
+		if (outweighs(finding, current)) {
 			merged[position] = finding;
 		}
 	}

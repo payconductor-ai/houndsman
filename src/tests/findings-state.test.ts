@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { buildAnchor, fingerprintOf } from "../core/finding-anchor";
 import {
 	applyFindingUpdate,
 	buildStateFromFindings,
@@ -108,6 +109,83 @@ describe("buildStateFromFindings", () => {
 			);
 			expect(Object.keys(second.findings)).toEqual([id]);
 			expect(second.findings[id].decision).toBe("ignore");
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("regra reescrita (caixa/pontuação) preserva o id", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const first = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "Evitar console.log", line: 2 })],
+				{ branch: "main", readFile: reader },
+			);
+			const id = Object.keys(first.findings)[0];
+			const second = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "evitar console log.", line: 2 })],
+				{ branch: "main", readFile: reader, previous: first },
+			);
+			expect(Object.keys(second.findings)).toEqual([id]);
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("estado gravado com fingerprint antigo (regra crua) mantém o id", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const reader = fileReader(project.cwd);
+			const first = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "Evitar console.log", line: 2 })],
+				{ branch: "main", readFile: reader },
+			);
+			const id = Object.keys(first.findings)[0];
+			const anchor = buildAnchor(DUPLICATED, 2);
+			const legacy = {
+				...first,
+				findings: {
+					[id]: {
+						...first.findings[id],
+						// Fingerprint como era calculado antes da normalização da regra.
+						fingerprint: fingerprintOf(
+							"src/f.ts",
+							"Evitar console.log",
+							anchor,
+							"msg",
+						),
+					},
+				},
+			};
+
+			const second = buildStateFromFindings(
+				[merged({ file: "src/f.ts", rule: "Evitar console.log", line: 2 })],
+				{ branch: "main", readFile: reader, previous: legacy },
+			);
+			expect(Object.keys(second.findings)).toEqual([id]);
+			expect(second.findings[id].present).toBe(true);
+		} finally {
+			project.cleanup();
+		}
+	});
+
+	test("ocorrências colapsadas no dedupe viram count", () => {
+		const project = makeProject({ "src/f.ts": DUPLICATED });
+		try {
+			const state = buildStateFromFindings(
+				[
+					merged({
+						file: "src/f.ts",
+						rule: "Evitar console.log",
+						line: 2,
+						occurrences: 3,
+					}),
+				],
+				{ branch: "main", readFile: fileReader(project.cwd) },
+			);
+			const [finding] = Object.values(state.findings);
+			expect(finding.count).toBe(3);
 		} finally {
 			project.cleanup();
 		}
