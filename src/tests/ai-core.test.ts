@@ -11,6 +11,7 @@ import {
 	formatSdkWarning,
 	formatSdkWarnings,
 } from "../core/ai/ai-sdk-model-provider";
+import { errorDetail } from "../core/ai/errors";
 import { temperatureApplies } from "../core/ai/provider-capabilities";
 import { defineHoundsmanConfig } from "../core/config";
 import { DEFAULT_AI_MODEL } from "../core/defaults";
@@ -200,6 +201,56 @@ describe("temperature e providerOptions", () => {
 		expect(client.recorder.total.calls).toBe(0);
 		expect(client.recorder.failures[0]?.finishReason).toBe("length");
 		expect(client.recorder.summary.attempts).toBe(1);
+	});
+
+	test("falha do provider persiste o detalhe diagnóstico", async () => {
+		const boom = Object.assign(new Error("boom"), {
+			cause: new Error("campo ausente"),
+		});
+		const provider = new FakeModelProvider(() => {
+			throw boom;
+		});
+		const client = new AiClient({ project, provider });
+		const result = await client.generateObject("brief:alpha", {
+			prompt: "oi",
+			outputSchema: z.object({ ok: z.boolean() }),
+		});
+		expect(result.ok).toBe(false);
+		const failure = client.recorder.failures[0];
+		expect(failure?.feature).toBe("brief:alpha");
+		expect(failure?.error).toBe("boom");
+		expect(failure?.detail).toBe("campo ausente");
+		expect(client.recorder.toJSON().failures[0]?.detail).toBe("campo ausente");
+	});
+});
+
+describe("diagnóstico de falha de IA", () => {
+	test("errorDetail expõe causa, issues e resposta, sem repetir a raiz", () => {
+		const cause = Object.assign(new Error("Type validation failed"), {
+			issues: [{ path: ["flows", 0, "name"], message: "Required" }],
+			cause: new Error("JSON inválido"),
+		});
+		const error = Object.assign(
+			new Error("No object generated: response did not match schema."),
+			{ text: '{"flows":', cause },
+		);
+		const detail = errorDetail(error);
+		expect(detail).toContain("Type validation failed");
+		expect(detail).toContain("flows.0.name: Required");
+		expect(detail).toContain("JSON inválido");
+		expect(detail).toContain('resposta: {"flows":');
+		expect(detail).not.toContain("No object generated");
+	});
+
+	test("errorDetail devolve undefined quando só há a mensagem raiz", () => {
+		expect(errorDetail(new Error("falhou"))).toBeUndefined();
+	});
+
+	test("errorDetail trunca o detalhe", () => {
+		const error = Object.assign(new Error("raiz"), {
+			cause: new Error("x".repeat(50)),
+		});
+		expect(errorDetail(error, 10)).toBe(`${"x".repeat(10)}…`);
 	});
 });
 

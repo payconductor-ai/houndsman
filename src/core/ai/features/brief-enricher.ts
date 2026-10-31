@@ -21,8 +21,9 @@ export class AiBriefEnricher {
 	/** Plano de um watchdog; `null` em falha. */
 	async enrich(input: BriefPromptInput): Promise<BriefPlan | null> {
 		if (!this.enabled) return null;
+		// A feature carrega o watchdog: sem isso a falha não diz qual plano caiu.
 		const result = await this.client.generateObject<BriefPlan>(
-			"brief",
+			`brief:${input.watchdogId}`,
 			{
 				instructions: briefInstructions(),
 				prompt: briefPrompt(input),

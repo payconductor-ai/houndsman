@@ -43,6 +43,24 @@ describe("AiBriefEnricher", () => {
 		expect(plan?.focus[0]).toBe("checar any");
 	});
 
+	test("registra a feature com o watchdog (brief:<id>)", async () => {
+		const provider = new FakeModelProvider(() => ({
+			focus: [],
+			questions: [],
+			risks: [],
+		}));
+		const client = new AiClient({ project, provider });
+		await new AiBriefEnricher(client).enrich({
+			watchdogId: "alpha",
+			name: "Alpha",
+			description: "x",
+			scope: "src/alpha",
+			rules: alpha.rules,
+			files: [],
+		});
+		expect(client.recorder.toJSON().entries[0]?.feature).toBe("brief:alpha");
+	});
+
 	test("sem IA → null (brief inalterado)", async () => {
 		const enricher = new AiBriefEnricher(new AiClient({ project, provider: null }));
 		expect(enricher.enabled).toBe(false);

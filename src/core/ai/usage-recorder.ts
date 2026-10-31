@@ -25,6 +25,8 @@ export type AiFailureEntry = {
 	durationMs: number;
 	finishReason?: string;
 	error: string;
+	/** Causa encadeada/issues/texto bruto (truncado), quando disponível. */
+	detail?: string;
 };
 
 /** Uso agregado + tentativas/falhas (vai para `prepare-report.json`). */
@@ -64,7 +66,12 @@ export class AiUsageRecorder {
 	recordFailure(
 		feature: string,
 		model: string,
-		detail: { durationMs: number; error: string; finishReason?: string },
+		detail: {
+			durationMs: number;
+			error: string;
+			finishReason?: string;
+			diagnostic?: string;
+		},
 	): void {
 		this.failed.push({
 			feature,
@@ -73,6 +80,7 @@ export class AiUsageRecorder {
 			durationMs: detail.durationMs,
 			error: detail.error,
 			...(detail.finishReason ? { finishReason: detail.finishReason } : {}),
+			...(detail.diagnostic ? { detail: detail.diagnostic } : {}),
 		});
 	}
 

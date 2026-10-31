@@ -8,7 +8,7 @@
 import type { ZodType } from "zod";
 import type { AiProviderOptions } from "../config";
 import type { ProjectConfig } from "../project-config";
-import { AiConfigurationError, errorMessage } from "./errors";
+import { AiConfigurationError, errorDetail, errorMessage } from "./errors";
 import { ModelFactory } from "./model-factory";
 import { LEAN_PROVIDER_OPTIONS } from "./provider-capabilities";
 import type { AiResult, AiUsage, ModelProvider, ModelRequest } from "./types";
@@ -225,6 +225,7 @@ export class AiClient {
 			this.recorder.recordFailure(feature, model ?? this.modelId, {
 				durationMs: Date.now() - startedAt,
 				error: message,
+				diagnostic: errorDetail(error),
 			});
 			return { ok: false, error: message };
 		}

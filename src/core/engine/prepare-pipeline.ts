@@ -293,12 +293,13 @@ function jevSummary(jev: JevCandidatesFile): string[] {
 
 /** Lista curta das features que falharam (para a mensagem do CLI). */
 function summarizeFailures(
-	failures: readonly { feature: string; error: string }[],
+	failures: readonly { feature: string; error: string; detail?: string }[],
 ): string {
 	const byFeature = new Map<string, string>();
 	for (const failure of failures) {
 		if (!byFeature.has(failure.feature)) {
-			byFeature.set(failure.feature, failure.error.slice(0, 120));
+			const detail = failure.detail ? ` — ${failure.detail.slice(0, 120)}` : "";
+			byFeature.set(failure.feature, `${failure.error.slice(0, 120)}${detail}`);
 		}
 	}
 	return [...byFeature].map(([feature, error]) => `${feature} (${error})`).join("; ");

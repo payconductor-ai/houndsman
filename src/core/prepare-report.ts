@@ -21,6 +21,8 @@ export type PrepareAiFailure = {
 	durationMs: number;
 	error: string;
 	finishReason?: string;
+	/** Causa encadeada/issues/texto bruto (truncado), quando disponível. */
+	detail?: string;
 };
 
 /** Uso de IA do prepare: tokens das chamadas boas + tentativas/falhas. */
